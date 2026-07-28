@@ -1,0 +1,113 @@
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: viraldy
+      POSTGRES_PASSWORD: viraldy
+      POSTGRES_DB: viraldy
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viraldy -d viraldy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [viraldy]
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [viraldy]
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [viraldy]
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "mc alias set local http://minio:9000 minioadmin minioadmin &&
+       mc mb --ignore-existing local/viraldy-local &&
+       mc anonymous set none local/viraldy-local"
+    networks: [viraldy]
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+      target: runtime
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://viraldy:viraldy@postgres:5432/viraldy
+      DATABASE_SYNC_URL: postgresql+psycopg://viraldy:viraldy@postgres:5432/viraldy
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      S3_ENDPOINT_URL: http://minio:9000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    command: ["uvicorn", "viraldy.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks: [viraldy]
+
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+      target: runtime
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://viraldy:viraldy@postgres:5432/viraldy
+      DATABASE_SYNC_URL: postgresql+psycopg://viraldy:viraldy@postgres:5432/viraldy
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    command: ["celery", "-A", "viraldy.worker.celery_app", "worker", "--loglevel=INFO", "--queues=default"]
+    networks: [viraldy]
+
+networks:
+  viraldy:
+
+volumes:
+  postgres-data:
+  minio-data:

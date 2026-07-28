@@ -1,0 +1,77 @@
+import type { AngleConcept } from "@/features/campaigns/types/campaign";
+
+// Template pool used by the mock AI to synthesise angle concepts.
+// Values are combined with product context to feel differentiated.
+
+export const angleTemplates: Omit<AngleConcept, "id">[] = [
+    {
+        name: "Problem–Solution",
+        buyerProblem: "The buyer has one recurring frustration they've stopped trying to fix.",
+        emotionalTrigger: "Relief and validation",
+        creatorPersona: "A believable owner mid-20s to mid-30s speaking to camera",
+        productProof: "Live before-and-after in the exact environment where the problem happens",
+        recommendedFormat: "22–30s handheld, single take with early product reveal",
+        fit: "Strong fit",
+        reason: "Matches the source pattern and directly ties the demo to a specific pain",
+    },
+    {
+        name: "Before-and-After Transformation",
+        buyerProblem: "Buyer has a visible mess or unfinished space they feel embarrassed about",
+        emotionalTrigger: "Aspiration and control",
+        creatorPersona: "Home creator, warm lighting, real space",
+        productProof: "Same frame, timelapse or hard cut between before and after",
+        recommendedFormat: "18–25s vertical with on-screen text callouts",
+        fit: "Strong fit",
+        reason: "Transformation reveals convert well on organic discovery",
+    },
+    {
+        name: "I Didn't Know I Needed This",
+        buyerProblem: "Buyer doesn't know a category exists yet",
+        emotionalTrigger: "Surprise and delight",
+        creatorPersona: "Curious lifestyle creator",
+        productProof: "Show three ways it slots into an existing routine",
+        recommendedFormat: "30–35s POV walkthrough",
+        fit: "Good test",
+        reason: "Category-education hook, needs strong demo to convert",
+    },
+    {
+        name: "Creator Testimonial",
+        buyerProblem: "Buyer distrusts marketing and wants owner proof",
+        emotionalTrigger: "Trust",
+        creatorPersona: "Established creator with matching niche audience",
+        productProof: "Show product after weeks of use, honest tradeoffs",
+        recommendedFormat: "35–45s talking head plus b-roll",
+        fit: "Good test",
+        reason: "Strong for retargeting and affiliate — slower on cold audiences",
+    },
+    {
+        name: "Comparison",
+        buyerProblem: "Buyer is deciding between viral options",
+        emotionalTrigger: "Confidence in choice",
+        creatorPersona: "Reviewer or comparison creator",
+        productProof: "Side-by-side test with the same task on 2–3 alternatives",
+        recommendedFormat: "40–55s with visible test",
+        fit: "Experimental",
+        reason: "Higher production, best when this product wins the demo cleanly",
+    },
+    {
+        name: "Gift Reaction",
+        buyerProblem: "Gifter can't find something personal enough",
+        emotionalTrigger: "Sentimental surprise",
+        creatorPersona: "Family or partner setup with authentic recipient",
+        productProof: "Real unwrapping with unscripted reaction",
+        recommendedFormat: "25–35s vertical, unedited feel",
+        fit: "Strong fit",
+        reason: "Reaction moments dominate POD gift performance",
+    },
+    {
+        name: "Identity / Personalization",
+        buyerProblem: "Buyer wants to express a specific identity or bond",
+        emotionalTrigger: "Belonging",
+        creatorPersona: "Identity-aligned creator (dog mom, new parent, teacher, etc.)",
+        productProof: "Show personalization moment on-camera",
+        recommendedFormat: "28–35s vertical with reveal",
+        fit: "Good test",
+        reason: "Works when the product's personalization is genuinely visible on screen",
+    },
+];
