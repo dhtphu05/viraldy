@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from viraldy.platform.database.base import Base
+
+
+class TikTokScoreRunModel(Base):
+    __tablename__ = "tiktok_score_runs"
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workspace_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True
+    )
+    asset_version_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("asset_versions.id"), nullable=False, index=True
+    )
+    creative_dna_version_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("creative_dna_versions.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    structural_score: Mapped[Decimal] = mapped_column(Numeric, nullable=False, default=0)
+    confidence: Mapped[str] = mapped_column(String(50), nullable=False, default="low")
+    action_label: Mapped[str] = mapped_column(String(100), nullable=False, default="pending")
+    dimension_scores_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    strengths_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
+    blockers_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
+    fixes_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
+    evidence_ids_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
+    analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
+    rubric_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -13,11 +13,19 @@ from viraldy.api.middleware.request_id import RequestIdMiddleware
 from viraldy.api.middleware.security_headers import SecurityHeadersMiddleware
 from viraldy.api.responses.envelope import Envelope, success
 from viraldy.api.routers.system import router as system_router
+from viraldy.modules.adaptations.router import router as adaptations_router
 from viraldy.modules.assets.router import router as assets_router
+from viraldy.modules.campaign_packs.router import router as campaign_packs_router
+from viraldy.modules.creative_dna.router import router as creative_dna_router
 from viraldy.modules.identity.router import router as identity_router
 from viraldy.modules.jobs.router import router as jobs_router
+from viraldy.modules.media_analysis.router import router as media_analysis_router
+from viraldy.modules.preflight.router import router as preflight_router
 from viraldy.modules.products.router import router as products_router
 from viraldy.modules.recommendations.router import router as recommendations_router
+from viraldy.modules.reference_boards.router import router as reference_boards_router
+from viraldy.modules.references.router import router as references_router
+from viraldy.modules.tiktok_scorer.router import router as tiktok_scorer_router
 from viraldy.modules.workspaces.router import router as workspaces_router
 from viraldy.platform.config.settings import get_settings
 from viraldy.platform.observability.logging import configure_logging
@@ -52,6 +60,14 @@ def create_app() -> FastAPI:
     app.include_router(assets_router, prefix=api_v1)
     app.include_router(jobs_router, prefix=api_v1)
     app.include_router(recommendations_router, prefix=api_v1)
+    app.include_router(media_analysis_router, prefix=api_v1)
+    app.include_router(reference_boards_router, prefix=api_v1)
+    app.include_router(references_router, prefix=api_v1)
+    app.include_router(creative_dna_router, prefix=api_v1)
+    app.include_router(tiktok_scorer_router, prefix=api_v1)
+    app.include_router(adaptations_router, prefix=api_v1)
+    app.include_router(campaign_packs_router, prefix=api_v1)
+    app.include_router(preflight_router, prefix=api_v1)
 
     @app.get("/health", response_model=Envelope)
     async def health(request: Request) -> Envelope:

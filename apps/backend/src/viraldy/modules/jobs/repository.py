@@ -41,6 +41,32 @@ class JobRepository:
         await self._session.flush()
         return job
 
+    async def create_mvp_job(
+        self,
+        workspace_id: UUID,
+        subject_type: str,
+        subject_id: UUID,
+        job_type: str,
+        input_json: dict[str, object],
+        idempotency_key: str | None,
+    ) -> ProcessingJobModel:
+        job = ProcessingJobModel(
+            workspace_id=workspace_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            job_type=job_type,
+            queue_name="default",
+            status="queued",
+            progress=0,
+            stage="queued",
+            max_attempts=3,
+            idempotency_key=idempotency_key,
+            input_json=input_json,
+        )
+        self._session.add(job)
+        await self._session.flush()
+        return job
+
     async def get_existing_idempotent(
         self, workspace_id: UUID, job_type: str, idempotency_key: str | None
     ) -> ProcessingJobModel | None:
@@ -100,6 +126,7 @@ class WorkerJobRepository:
 
     def mark_failed(self, job: ProcessingJobModel, code: str, message: str) -> None:
         job.status = "failed"
+        job.stage = "failed"
         job.error_code = code
         job.error_message = message
         job.completed_at = utc_now()

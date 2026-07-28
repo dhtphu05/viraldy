@@ -33,5 +33,11 @@ class StoragePort(Protocol):
     def get_object_metadata(self, key: str) -> ObjectMetadata:
         raise NotImplementedError
 
+    def download_object(self, key: str, destination_path: str) -> None:
+        raise NotImplementedError
+
+    def upload_file(self, source_path: str, key: str, content_type: str) -> None:
+        raise NotImplementedError
+
     def delete_object(self, key: str) -> None:
         raise NotImplementedError

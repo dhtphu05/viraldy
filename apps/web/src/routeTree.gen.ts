@@ -13,6 +13,7 @@ import { Route as UgcReviewRouteImport } from './routes/ugc-review'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PerformanceRouteImport } from './routes/performance'
+import { Route as MvpRouteImport } from './routes/mvp'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CreativeLibraryRouteImport } from './routes/creative-library'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
@@ -44,6 +45,11 @@ const ProductsRoute = ProductsRouteImport.update({
 const PerformanceRoute = PerformanceRouteImport.update({
   id: '/performance',
   path: '/performance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MvpRoute = MvpRouteImport.update({
+  id: '/mvp',
+  path: '/mvp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/campaigns': typeof CampaignsRouteWithChildren
   '/creative-library': typeof CreativeLibraryRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/campaigns': typeof CampaignsRouteWithChildren
   '/creative-library': typeof CreativeLibraryRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/creative-library'
     | '/dashboard'
+    | '/mvp'
     | '/performance'
     | '/products'
     | '/settings'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/mvp'
     | '/performance'
     | '/products'
     | '/settings'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/creative-library'
     | '/dashboard'
+    | '/mvp'
     | '/performance'
     | '/products'
     | '/settings'
@@ -219,6 +231,7 @@ export interface RootRouteChildren {
   CampaignsRoute: typeof CampaignsRouteWithChildren
   CreativeLibraryRoute: typeof CreativeLibraryRouteWithChildren
   DashboardRoute: typeof DashboardRoute
+  MvpRoute: typeof MvpRoute
   PerformanceRoute: typeof PerformanceRouteWithChildren
   ProductsRoute: typeof ProductsRoute
   SettingsRoute: typeof SettingsRoute
@@ -253,6 +266,13 @@ declare module '@tanstack/react-router' {
       path: '/performance'
       fullPath: '/performance'
       preLoaderRoute: typeof PerformanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mvp': {
+      id: '/mvp'
+      path: '/mvp'
+      fullPath: '/mvp'
+      preLoaderRoute: typeof MvpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -403,6 +423,7 @@ const rootRouteChildren: RootRouteChildren = {
   CampaignsRoute: CampaignsRouteWithChildren,
   CreativeLibraryRoute: CreativeLibraryRouteWithChildren,
   DashboardRoute: DashboardRoute,
+  MvpRoute: MvpRoute,
   PerformanceRoute: PerformanceRouteWithChildren,
   ProductsRoute: ProductsRoute,
   SettingsRoute: SettingsRoute,

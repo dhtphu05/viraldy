@@ -1,6 +1,8 @@
 # Viraldy Web
 
-TanStack Start + Vite frontend prototype for Viraldy. This app currently runs from mock data only; backend/API integration is intentionally out of scope for this phase.
+TanStack Start + Vite frontend prototype for Viraldy. Most legacy feature screens still use
+seeded mock data, while `/mvp` is wired to the backend MVP APIs for fixture/live Creative
+Intelligence flows.
 
 ## Commands
 
@@ -9,6 +11,13 @@ pnpm install
 pnpm dev
 pnpm lint
 pnpm build
+```
+
+Local API configuration:
+
+```bash
+VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_LOCAL_AUTH_TOKEN=local-test
 ```
 
 Root shortcuts:

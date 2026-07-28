@@ -23,7 +23,5 @@ celery_app.conf.update(
     result_serializer="json",
     accept_content=["json"],
     task_default_queue="default",
-    task_routes={
-        "viraldy.worker.tasks.process_asset.process_asset_placeholder": {"queue": "default"}
-    },
+    task_routes={"viraldy.worker.tasks.process_asset.process_mvp_job": {"queue": "default"}},
 )

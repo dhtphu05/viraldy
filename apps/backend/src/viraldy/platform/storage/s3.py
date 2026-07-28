@@ -69,5 +69,16 @@ class S3StorageAdapter:
             checksum_sha256=metadata.get("checksum_sha256"),
         )
 
+    def download_object(self, key: str, destination_path: str) -> None:
+        self._client.download_file(self._settings.s3_bucket, key, destination_path)
+
+    def upload_file(self, source_path: str, key: str, content_type: str) -> None:
+        self._client.upload_file(
+            source_path,
+            self._settings.s3_bucket,
+            key,
+            ExtraArgs={"ContentType": content_type},
+        )
+
     def delete_object(self, key: str) -> None:
         self._client.delete_object(Bucket=self._settings.s3_bucket, Key=key)
