@@ -6,6 +6,12 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from viraldy.modules.jobs.public import JobResponse
+from viraldy.modules.tiktok_scorer.contracts import (
+    BlockerV2,
+    DimensionScoreV2,
+    FixV2,
+    StrengthV2,
+)
 
 
 class CreateTikTokScoreRequest(BaseModel):
@@ -24,11 +30,11 @@ class TikTokScoreRunResponse(BaseModel):
     structural_score: float
     confidence: str
     action_label: str
-    dimension_scores_json: dict[str, object]
-    strengths_json: list[object]
-    blockers_json: list[object]
-    fixes_json: list[object]
-    evidence_ids_json: list[object]
+    dimension_scores_json: dict[str, DimensionScoreV2]
+    strengths_json: list[StrengthV2]
+    blockers_json: list[BlockerV2]
+    fixes_json: list[FixV2]
+    evidence_ids_json: list[UUID]
     analysis_mode: str
     rubric_version: str
     rule_version: str

@@ -105,6 +105,8 @@ class CtaSignalEvidenceValueV1(EvidenceValueBaseV1):
     modality: str
     cta_type: str
     text: str | None = None
+    spoken_text: str | None = None
+    overlay_text: str | None = None
     product_tag_visible: bool
     confidence: float = Field(ge=0, le=1)
     start_ms: int = Field(ge=0)
@@ -117,6 +119,8 @@ class OfferSignalEvidenceValueV1(EvidenceValueBaseV1):
     offer_type: str
     text: str | None = None
     price_text: str | None = None
+    discount_text: str | None = None
+    urgency_present: bool = False
     confidence: float = Field(ge=0, le=1)
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=0)
@@ -141,6 +145,8 @@ class EditingSignalEvidenceValueV1(EvidenceValueBaseV1):
     cut_count: int | None = Field(default=None, ge=0)
     average_shot_duration_ms: int | None = Field(default=None, ge=0)
     first_three_second_cut_count: int | None = Field(default=None, ge=0)
+    pattern_interrupts: list[dict[str, int]] = Field(default_factory=list)
+    dead_air_ranges: list[dict[str, int]] = Field(default_factory=list)
     caption_density: str
     visual_pacing: str
     transition_types: list[str]

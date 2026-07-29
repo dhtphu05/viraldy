@@ -68,6 +68,70 @@ def test_high_risk_claim_hard_blocks_score_action() -> None:
     assert any(blocker["code"] == "HIGH_RISK_UNSUPPORTED_CLAIM" for blocker in result["blockers"])
 
 
+def test_offer_after_cta_loses_timing_credit() -> None:
+    evidence = _evidence(first_product_ms=1200, include_cta=True, include_offer=True)
+    result = score_tiktok_structure(evidence)
+
+    offer_timing = next(
+        signal
+        for signal in result["dimensions"]["offer_clarity"]["signals"]
+        if signal["code"] == "offer_timing_before_cta"
+    )
+    assert offer_timing["contribution"] == 0
+
+
+def test_cta_too_late_loses_timing_credit() -> None:
+    result = score_tiktok_structure(
+        _evidence(first_product_ms=1200, include_cta=True, cta_start_ms=9500),
+        media_duration_ms=10000,
+    )
+
+    cta_timing = next(
+        signal
+        for signal in result["dimensions"]["cta_readiness"]["signals"]
+        if signal["code"] == "cta_timing"
+    )
+    assert cta_timing["contribution"] == 0
+    assert "cta_timing" in result["dimensions"]["cta_readiness"]["missing_signals"]
+
+
+def test_no_risky_claim_with_incomplete_evidence_lowers_confidence() -> None:
+    result = score_tiktok_structure(
+        cast(
+            list[EvidenceItemModel],
+            [
+                FakeEvidence(
+                    "hook_signal",
+                    {
+                        "hook_type": "problem_first",
+                        "spoken_text": "Quick demo",
+                        "visual_description": "product context",
+                        "confidence": 0.8,
+                    },
+                    start_ms=0,
+                    end_ms=1000,
+                )
+            ],
+        )
+    )
+
+    assert result["dimensions"]["claim_safety"]["confidence"] != "high"
+    assert result["dimensions"]["claim_safety"]["missing_signals"]
+
+
+def test_product_mismatch_requires_product_context() -> None:
+    generic = score_tiktok_structure(
+        _evidence(first_product_ms=1200, include_cta=True, product_match_confidence=0.2)
+    )
+    contextual = score_tiktok_structure(
+        _evidence(first_product_ms=1200, include_cta=True, product_match_confidence=0.2),
+        product_context_present=True,
+    )
+
+    assert not any(blocker["code"] == "PRODUCT_MISMATCH" for blocker in generic["blockers"])
+    assert any(blocker["code"] == "PRODUCT_MISMATCH" for blocker in contextual["blockers"])
+
+
 def test_preflight_scores_actual_requirement_satisfaction() -> None:
     structural = score_tiktok_structure(_evidence(first_product_ms=None, include_cta=True))
     result = calculate_preflight_result(structural, {"must_show": ["product close-up"]})
@@ -85,6 +149,9 @@ def _evidence(
     first_product_ms: int | None,
     include_cta: bool,
     claim_risk: str | None = None,
+    product_match_confidence: float = 0.82,
+    cta_start_ms: int = 3200,
+    include_offer: bool = False,
 ) -> list[EvidenceItemModel]:
     items: list[FakeEvidence] = [
         FakeEvidence(
@@ -205,7 +272,7 @@ def _evidence(
                     "visibility": "clear",
                     "shot_type": "close_up",
                     "usage_visible": True,
-                    "product_match_confidence": 0.82,
+                    "product_match_confidence": product_match_confidence,
                     "confidence": 0.88,
                     "start_ms": first_product_ms,
                     "end_ms": first_product_ms + 900,
@@ -224,11 +291,28 @@ def _evidence(
                     "text": "Linked in my TikTok Shop",
                     "product_tag_visible": True,
                     "confidence": 0.86,
-                    "start_ms": 3200,
-                    "end_ms": 3900,
+                    "start_ms": cta_start_ms,
+                    "end_ms": cta_start_ms + 700,
                 },
-                start_ms=3200,
-                end_ms=3900,
+                start_ms=cta_start_ms,
+                end_ms=cta_start_ms + 700,
+            )
+        )
+    if include_offer:
+        items.append(
+            FakeEvidence(
+                "offer_signal",
+                {
+                    "offer_type": "discount",
+                    "text": "Today only",
+                    "price_text": None,
+                    "urgency_present": True,
+                    "confidence": 0.8,
+                    "start_ms": cta_start_ms + 1000,
+                    "end_ms": cta_start_ms + 1500,
+                },
+                start_ms=cta_start_ms + 1000,
+                end_ms=cta_start_ms + 1500,
             )
         )
     if claim_risk is not None:

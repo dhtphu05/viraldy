@@ -160,6 +160,7 @@ class SyncMediaEvidencePipeline:
 
             metadata = self.probe_local_file(source_path)
             self._update_version_metadata(snapshot.asset_version_id, metadata)
+            has_audio = int(metadata.get("audio_stream_count") or 0) > 0
 
             thumbnail_path = work_dir / "thumbnail.jpg"
             audio_path = work_dir / "audio.wav"
@@ -168,19 +169,20 @@ class SyncMediaEvidencePipeline:
             _run_ffmpeg(
                 ["-ss", "0.5", "-i", str(source_path), "-frames:v", "1", str(thumbnail_path)]
             )
-            _run_ffmpeg(
-                [
-                    "-i",
-                    str(source_path),
-                    "-vn",
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "16000",
-                    "-y",
-                    str(audio_path),
-                ]
-            )
+            if has_audio:
+                _run_ffmpeg(
+                    [
+                        "-i",
+                        str(source_path),
+                        "-vn",
+                        "-ac",
+                        "1",
+                        "-ar",
+                        "16000",
+                        "-y",
+                        str(audio_path),
+                    ]
+                )
             frame_paths = _sample_frames(
                 source_path,
                 frame_dir,
@@ -195,27 +197,32 @@ class SyncMediaEvidencePipeline:
                 f"/versions/{snapshot.asset_version_id}/artifacts"
             )
             thumbnail_key = f"{base_key}/thumbnail.jpg"
-            audio_key = f"{base_key}/audio.wav"
+            audio_key = f"{base_key}/audio.wav" if has_audio else None
             self._storage.upload_file(str(thumbnail_path), thumbnail_key, "image/jpeg")
-            self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
+            if has_audio and audio_key is not None:
+                self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
             uploaded_frames: list[tuple[int, Path, str]] = []
             for timestamp_ms, path, storage_key in frame_paths:
                 self._storage.upload_file(str(path), storage_key, "image/jpeg")
                 uploaded_frames.append((timestamp_ms, path, storage_key))
 
             provider = LiveAnalysisProvider(self._settings)
-            transcript, transcript_run_id = self._tracked_provider_call(
-                snapshot,
-                processing_job_id,
-                "audio_transcription",
-                self._settings.asr_model or "asr",
-                {
-                    "asset_version_id": str(snapshot.asset_version_id),
-                    "audio_artifact": "audio.wav",
-                    "run_type": run_type,
-                },
-                lambda: provider.transcribe_audio_with_response(audio_path),
-            )
+            if has_audio:
+                transcript, transcript_run_id = self._tracked_provider_call(
+                    snapshot,
+                    processing_job_id,
+                    "audio_transcription",
+                    self._settings.asr_model or "asr",
+                    {
+                        "asset_version_id": str(snapshot.asset_version_id),
+                        "audio_artifact": "audio.wav",
+                        "run_type": run_type,
+                    },
+                    lambda: provider.transcribe_audio_with_response(audio_path),
+                )
+            else:
+                transcript = TranscriptContract(segments=[], full_text="")
+                transcript_run_id = None
             if self._settings.ocr_provider == "vision":
                 product_context = self._product_context_json(snapshot)
                 ocr, ocr_run_id = self._tracked_provider_call(
@@ -414,12 +421,11 @@ class SyncMediaEvidencePipeline:
                 contract.get("thumbnail_storage_key", "fixtures/opening.jpg"),
                 {"timestamp_ms": 500},
             ),
-            (
-                "audio",
-                contract.get("audio_storage_key", "fixtures/audio.wav"),
-                {"fixture": mode == "fixture"},
-            ),
         ]
+        default_audio_key = "fixtures/audio.wav" if mode == "fixture" else None
+        audio_key = contract.get("audio_storage_key", default_audio_key)
+        if audio_key is not None:
+            rows.append(("audio", audio_key, {"fixture": mode == "fixture"}))
         return [
             {
                 "workspace_id": workspace_id,
@@ -630,6 +636,8 @@ class SyncMediaEvidencePipeline:
                         "modality": cta.modality,
                         "cta_type": cta.cta_type,
                         "text": cta.text,
+                        "spoken_text": cta.spoken_text,
+                        "overlay_text": cta.overlay_text,
                         "product_tag_visible": cta.product_tag_visible,
                         "confidence": cta.confidence,
                         **_time_fields(cta.time_range),
@@ -653,6 +661,8 @@ class SyncMediaEvidencePipeline:
                         "offer_type": offer.offer_type,
                         "text": offer.text,
                         "price_text": offer.price_text,
+                        "discount_text": offer.discount_text,
+                        "urgency_present": offer.urgency_present,
                         "confidence": offer.confidence,
                         **_time_fields(offer.time_range),
                         "frame_storage_keys": offer.frame_storage_keys,
@@ -687,9 +697,7 @@ class SyncMediaEvidencePipeline:
                     "schema_version": EVIDENCE_SCHEMA_VERSION,
                     "evidence_type": "editing_signal",
                     "observation_id": None,
-                    **observations.editing.model_dump(
-                        mode="json", exclude={"pattern_interrupts", "dead_air_ranges"}
-                    ),
+                    **observations.editing.model_dump(mode="json"),
                 },
             )
         )
@@ -899,7 +907,7 @@ def _detect_scenes(duration_ms: int) -> SceneContract:
 def _live_contract(
     metadata: dict[str, object],
     thumbnail_key: str,
-    audio_key: str,
+    audio_key: str | None,
     frames: list[tuple[int, Path, str]],
     transcript: TranscriptContract,
     ocr: OcrContract,

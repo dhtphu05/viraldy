@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from viraldy.modules.creative_dna.contracts import CreativeDnaV1
+
 
 class CreativeDnaVersionResponse(BaseModel):
     id: UUID
@@ -14,7 +16,7 @@ class CreativeDnaVersionResponse(BaseModel):
     version_number: int
     status: str
     schema_version: str
-    dna_json: dict[str, object]
+    dna_json: CreativeDnaV1
     confidence: str
     analysis_mode: str
     taxonomy_version: str

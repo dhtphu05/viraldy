@@ -49,6 +49,7 @@ class AdaptationConceptV2(AdaptationContractBase):
     strategic_axis: str
     angle: str
     buyer_persona_id: str | None = None
+    buyer_persona_label: str
     buyer_pain: str
     desired_outcome: str
     creator_persona: str

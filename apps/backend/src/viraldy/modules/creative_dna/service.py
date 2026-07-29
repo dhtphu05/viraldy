@@ -13,7 +13,6 @@ from viraldy.modules.creative_dna.contracts import (
     CtaDnaV1,
     DemoDnaV1,
     EditingDnaV1,
-    ObservedValueV1,
     OfferDnaV1,
     OpeningDnaV1,
     PlatformDnaV1,
@@ -198,7 +197,7 @@ def _narrative_dna(
     structure = "hook_demo_result" if hook and demo else None
     return {
         "structure": _observed(hook or demo, structure),
-        "angle": _observed(hook, value.get("hook_type")),
+        "angle": _unknown(),
         "buyer_pain": _observed(hook, value.get("buyer_pain")),
         "desired_outcome": _unknown(),
         "emotional_drivers": _unknown(),
@@ -261,13 +260,23 @@ def _creator_dna(item: EvidenceItemModel | None) -> CreatorDnaV1:
 
 def _editing_dna(item: EvidenceItemModel | None) -> EditingDnaV1:
     value = item.value_json if item else {}
+    pattern_interrupts = value.get("pattern_interrupts")
+    dead_air_ranges = value.get("dead_air_ranges")
     return EditingDnaV1(
         cut_count=_observed(item, value.get("cut_count")),
         average_shot_duration_ms=_observed(item, value.get("average_shot_duration_ms")),
         first_three_second_cut_count=_observed(item, value.get("first_three_second_cut_count")),
         pacing=_observed(item, value.get("visual_pacing")),
         caption_density=_observed(item, value.get("caption_density")),
-        dead_air_present=_unknown(),
+        pattern_interrupts=_observed(
+            item, pattern_interrupts if isinstance(pattern_interrupts, list) else []
+        ),
+        dead_air_ranges=_observed(
+            item, dead_air_ranges if isinstance(dead_air_ranges, list) else []
+        ),
+        dead_air_present=_observed(
+            item, bool(dead_air_ranges) if isinstance(dead_air_ranges, list) else None
+        ),
         transition_types=_observed(item, value.get("transition_types")),
     )
 
@@ -279,20 +288,26 @@ def _offer_dna(items: list[EvidenceItemModel]) -> OfferDnaV1:
         present=_observed(first, bool(items) if items else None),
         offer_types=_observed(first, offer_types if offer_types else None),
         price_text=_observed(first, _value(first, "price_text")),
-        discount_text=_observed(first, _value(first, "text")),
-        urgency_present=_unknown(),
+        discount_text=_observed(first, _value(first, "discount_text") or _value(first, "text")),
+        urgency_present=_observed(first, _value(first, "urgency_present")),
     )
 
 
 def _cta_dna(items: list[EvidenceItemModel]) -> CtaDnaV1:
     first = _first_item(items)
     cta_types = [str(item.value_json.get("cta_type")) for item in items]
+    spoken_text = _value(first, "spoken_text")
+    if spoken_text is None and first and first.value_json.get("modality") in {"spoken", "mixed"}:
+        spoken_text = _value(first, "text")
+    overlay_text = _value(first, "overlay_text")
+    if overlay_text is None and first and first.value_json.get("modality") in {"overlay", "mixed"}:
+        overlay_text = _value(first, "text")
     return CtaDnaV1(
         present=_observed(first, bool(items) if items else None),
         cta_types=_observed(first, cta_types if cta_types else None),
         first_appearance_ms=_observed(first, first.start_ms if first else None),
-        spoken_text=_observed(first, _value(first, "text")),
-        overlay_text=_unknown(),
+        spoken_text=_observed(first, spoken_text),
+        overlay_text=_observed(first, overlay_text),
         product_tag_visible=_observed(first, _value(first, "product_tag_visible")),
     )
 
@@ -374,23 +389,26 @@ def _reusable_mechanisms(
     return mechanisms
 
 
-def _observed(item: EvidenceItemModel | None, value: object) -> ObservedValueV1:
+def _observed(item: EvidenceItemModel | None, value: object) -> dict[str, object]:
     if item is None:
         return _unknown()
     if value is None or value == "unknown":
-        return ObservedValueV1(
-            value=None, confidence=_confidence(item), evidence_ids=[item.id], status="unknown"
-        )
-    return ObservedValueV1(
-        value=value,
-        confidence=_confidence(item),
-        evidence_ids=[item.id],
-        status="observed",
-    )
+        return {
+            "value": None,
+            "confidence": _confidence(item),
+            "evidence_ids": [item.id],
+            "status": "unknown",
+        }
+    return {
+        "value": value,
+        "confidence": _confidence(item),
+        "evidence_ids": [item.id],
+        "status": "observed",
+    }
 
 
-def _unknown() -> ObservedValueV1:
-    return ObservedValueV1(value=None, confidence=0, evidence_ids=[], status="unknown")
+def _unknown() -> dict[str, object]:
+    return {"value": None, "confidence": 0, "evidence_ids": [], "status": "unknown"}
 
 
 def _confidence(item: EvidenceItemModel) -> float:

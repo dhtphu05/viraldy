@@ -23,10 +23,16 @@ DISCLAIMER = "This is a structural readiness score, not a guarantee of viral rea
 class EvidenceFacts:
     grouped: dict[str, list[EvidenceItemModel]]
     evidence_ids: list[UUID]
+    media_duration_ms: int | None = None
 
 
-def score_tiktok_structure(evidence: list[EvidenceItemModel]) -> dict[str, Any]:
-    facts = EvidenceFacts(_group(evidence), [item.id for item in evidence])
+def score_tiktok_structure(
+    evidence: list[EvidenceItemModel],
+    *,
+    media_duration_ms: int | None = None,
+    product_context_present: bool = False,
+) -> dict[str, Any]:
+    facts = EvidenceFacts(_group(evidence), [item.id for item in evidence], media_duration_ms)
     dimensions = {
         "hook_clarity": _hook_clarity(facts),
         "product_visibility": _product_visibility(facts),
@@ -44,7 +50,7 @@ def score_tiktok_structure(evidence: list[EvidenceItemModel]) -> dict[str, Any]:
             for name, weight in TIKTOK_STRUCTURE_RUBRIC.weights.items()
         )
     )
-    blockers = _blockers(facts, dimensions)
+    blockers = _blockers(facts, dimensions, product_context_present)
     action = _action(score, blockers)
     fixes = _fixes(facts, dimensions, blockers)
     strengths = _strengths(dimensions)
@@ -341,6 +347,14 @@ def _offer_clarity(facts: EvidenceFacts) -> DimensionScoreV2:
     value = item.value_json
     specific = bool(value.get("price_text") or value.get("text"))
     confidence = _confidence(item, value)
+    first_offer_ms = _first_start_ms(items)
+    first_cta_ms = _first_start_ms(_items(facts, "cta_signal"))
+    timing_ok = (
+        first_offer_ms is not None
+        and first_cta_ms is not None
+        and first_offer_ms <= first_cta_ms
+    )
+    timing_known = first_offer_ms is not None and first_cta_ms is not None
     signals = [
         _signal("offer_present", True, 30, item),
         _signal("offer_specificity", specific, 25 if specific else 0, item),
@@ -349,8 +363,8 @@ def _offer_clarity(facts: EvidenceFacts) -> DimensionScoreV2:
         ),
         _signal(
             "offer_timing_before_cta",
-            item.start_ms is not None,
-            15 if item.start_ms is not None else 0,
+            first_offer_ms,
+            15 if timing_ok else 0,
             item,
         ),
         _signal("commercial_context_match", "unknown", 5, item),
@@ -361,7 +375,7 @@ def _offer_clarity(facts: EvidenceFacts) -> DimensionScoreV2:
         _score(signals),
         "Offer clarity is derived from observed offer specificity and timing.",
         signals,
-        [],
+        [] if timing_known else ["cta_or_offer_timing"],
     )
 
 
@@ -374,12 +388,16 @@ def _cta_readiness(facts: EvidenceFacts) -> DimensionScoreV2:
     cta_type = str(value.get("cta_type") or "unknown")
     text_present = bool(value.get("text"))
     product_tag = bool(value.get("product_tag_visible"))
-    timing_present = item.start_ms is not None
+    duration_ms = facts.media_duration_ms or _duration_from_evidence(facts)
+    first_cta_ms = item.start_ms
+    timing_ok = first_cta_ms is not None and (
+        duration_ms is None or first_cta_ms <= round(duration_ms * 0.9)
+    )
     signals = [
         _signal("cta_present", True, 30, item),
         _signal("cta_clarity", cta_type, 25 if cta_type != "unknown" or text_present else 0, item),
         _signal("product_tag_or_shop_cue", product_tag, 20 if product_tag else 0, item),
-        _signal("cta_timing", item.start_ms, 15 if timing_present else 0, item),
+        _signal("cta_timing", first_cta_ms, 15 if timing_ok else 0, item),
         _signal(
             "spoken_overlay_consistency",
             value.get("modality"),
@@ -392,7 +410,7 @@ def _cta_readiness(facts: EvidenceFacts) -> DimensionScoreV2:
         _score(signals),
         "CTA readiness is derived from observed CTA type, timing, and product-tag cues.",
         signals,
-        [],
+        [] if timing_ok else ["cta_timing"],
     )
 
 
@@ -443,7 +461,54 @@ def _tiktok_native_fit(facts: EvidenceFacts) -> DimensionScoreV2:
 def _claim_safety(facts: EvidenceFacts) -> DimensionScoreV2:
     items = _items(facts, "claim_signal")
     if not items:
-        return _dimension("claim_safety", 100, "No risky claims were detected.", [], [])
+        coverage_items = _claim_coverage_items(facts)
+        signals = [
+            _signal(
+                "transcript_coverage",
+                bool(_items(facts, "transcript_segment")),
+                35 if _items(facts, "transcript_segment") else 0,
+                item,
+            )
+            for item in coverage_items[:1]
+        ]
+        if len(coverage_items) >= 2:
+            signals.append(
+                _signal(
+                    "ocr_coverage",
+                    bool(_items(facts, "on_screen_text")),
+                    30 if _items(facts, "on_screen_text") else 0,
+                    coverage_items[1],
+                )
+            )
+        if len(coverage_items) >= 3:
+            vision_present = bool(_items(facts, "platform_signal", "hook_signal", "proof_signal"))
+            signals.append(
+                _signal(
+                    "vision_claim_coverage",
+                    vision_present,
+                    35 if vision_present else 0,
+                    coverage_items[2],
+                )
+            )
+        missing = [
+            code
+            for code, present in {
+                "transcript_coverage": bool(_items(facts, "transcript_segment")),
+                "ocr_coverage": bool(_items(facts, "on_screen_text")),
+                "vision_claim_coverage": bool(
+                    _items(facts, "platform_signal", "hook_signal", "proof_signal")
+                ),
+            }.items()
+            if not present
+        ]
+        score = 100 if not missing else 85
+        return _dimension(
+            "claim_safety",
+            score,
+            "No risky claims were detected; confidence is based on text and visual coverage.",
+            signals,
+            missing,
+        )
     worst = _max_claim_risk(facts)
     penalty = {"critical": 100, "high": 80, "medium": 40, "low": 15}.get(worst or "none", 0)
     score = max(0, 100 - penalty)
@@ -522,6 +587,7 @@ def _timing_score(first_ms: int) -> int:
 def _blockers(
     facts: EvidenceFacts,
     dimensions: dict[str, DimensionScoreV2],
+    product_context_present: bool,
 ) -> list[BlockerV2]:
     blockers: list[BlockerV2] = []
     if _first_product_ms(facts) is None:
@@ -535,7 +601,7 @@ def _blockers(
             )
         )
     product_match = _product_match_confidence(facts)
-    if product_match is not None and product_match < 0.4:
+    if product_context_present and product_match is not None and product_match < 0.4:
         blockers.append(
             BlockerV2(
                 code="PRODUCT_MISMATCH",
@@ -704,6 +770,45 @@ def _items(facts: EvidenceFacts, *evidence_types: str) -> list[EvidenceItemModel
 def _first_item(facts: EvidenceFacts, *evidence_types: str) -> EvidenceItemModel | None:
     items = _items(facts, *evidence_types)
     return items[0] if items else None
+
+
+def _first_start_ms(items: list[EvidenceItemModel]) -> int | None:
+    starts = [item.start_ms for item in items if item.start_ms is not None]
+    return min(starts) if starts else None
+
+
+def _duration_from_evidence(facts: EvidenceFacts) -> int | None:
+    item_ends = [
+        item.end_ms
+        for item in _items(
+            facts,
+            "transcript_segment",
+            "on_screen_text",
+            "hook_signal",
+            "product_appearance",
+            "demo_step",
+            "proof_signal",
+            "cta_signal",
+            "offer_signal",
+        )
+        if item.end_ms is not None
+    ]
+    return max(item_ends) if item_ends else None
+
+
+def _claim_coverage_items(facts: EvidenceFacts) -> list[EvidenceItemModel]:
+    selected: list[EvidenceItemModel] = []
+    for evidence_type in (
+        "transcript_segment",
+        "on_screen_text",
+        "platform_signal",
+        "hook_signal",
+        "proof_signal",
+    ):
+        item = _first_item(facts, evidence_type)
+        if item is not None:
+            selected.append(item)
+    return selected
 
 
 def _first_product_ms(facts: EvidenceFacts) -> int | None:

@@ -35,9 +35,9 @@ class ProductService:
         product_context = _context_for_create(data)
         product = await self._repository.create(
             workspace_id=workspace_id,
-            name=data.name,
+            name=product_context.identity.name,
             description=data.description,
-            market=data.market,
+            market=product_context.identity.market,
             external_source=data.external_source,
             external_id=data.external_id,
             metadata_json=data.metadata_json,
@@ -70,7 +70,9 @@ class ProductService:
 
         values = data.model_dump(exclude={"product_context"}, exclude_unset=True, exclude_none=True)
         if data.product_context is not None:
-            _validate_projection(data.product_context, data.name)
+            _validate_projection(data.product_context, data.name, data.market)
+            values["name"] = data.product_context.identity.name
+            values["market"] = data.product_context.identity.market
             values["product_context_json"] = product_context_to_json(data.product_context)
             values["context_schema_version"] = data.product_context.schema_version
         elif "name" in values or "market" in values:
@@ -119,15 +121,22 @@ def _context_for_create(data: CreateProductRequest) -> ProductContextV1:
             market=data.market,
             metadata_json=data.metadata_json,
         )
-    _validate_projection(data.product_context, data.name)
+    _validate_projection(data.product_context, data.name, data.market)
     return data.product_context
 
 
-def _validate_projection(context: ProductContextV1, name: str | None) -> None:
+def _validate_projection(
+    context: ProductContextV1, name: str | None, market: str | None
+) -> None:
     if name is not None and context.identity.name != name:
         raise AppError(
             "PRODUCT_CONTEXT_INVALID",
             "Product context identity.name must match the product name projection.",
+        )
+    if market is not None and context.identity.market != market:
+        raise AppError(
+            "PRODUCT_CONTEXT_INVALID",
+            "Product context identity.market must match the product market projection.",
         )
 
 

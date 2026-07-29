@@ -175,7 +175,11 @@ def _score_tiktok_asset(
     dna = SyncCreativeDnaBuilder(session).build(
         job.workspace_id, loaded.asset_version_id, None, evidence, get_settings().ai_mode
     )
-    result = score_tiktok_structure(evidence)
+    result = score_tiktok_structure(
+        evidence,
+        media_duration_ms=_media_duration_ms(loaded.metadata_json),
+        product_context_present=loaded.product_id is not None,
+    )
     run = SyncTikTokScoreRepository(session).get(job.workspace_id, score_run_id)
     if run is None:
         raise RuntimeError("score_run_not_found")
@@ -213,7 +217,11 @@ def _run_ugc_preflight(
     preflight_run_id = UUID(str(job.input_json["preflight_run_id"]))
     pack_version_id = UUID(str(job.input_json["campaign_pack_version_id"]))
     repo.update_progress(job, 65, "calculating_score")
-    structural_result = score_tiktok_structure(evidence)
+    structural_result = score_tiktok_structure(
+        evidence,
+        media_duration_ms=_media_duration_ms(loaded.metadata_json),
+        product_context_present=True,
+    )
     structural_run = TikTokScoreRunModel(
         workspace_id=job.workspace_id,
         asset_version_id=loaded.asset_version_id,
@@ -248,6 +256,9 @@ def _run_ugc_preflight(
         structural_result,
         pack_version.brief_json,
         pack_version.compiled_requirements_json,
+        evidence,
+        pack_version.product_snapshot_json,
+        _media_duration_ms(loaded.metadata_json),
     )
     run = SyncPreflightRepository(session).get(job.workspace_id, preflight_run_id)
     if run is None:
@@ -305,6 +316,7 @@ def _record_recommendation(
         rule_version=str(result["rule_version"]),
         source_run_id=subject_id,
     )
+
     session.add(
         RecommendationModel(
             workspace_id=workspace_id,
@@ -324,6 +336,14 @@ def _record_recommendation(
             source_run_id=payload.source_run_id,
         )
     )
+
+
+def _media_duration_ms(metadata_json: dict[str, object]) -> int | None:
+    media = metadata_json.get("media")
+    if not isinstance(media, dict):
+        return None
+    duration = media.get("duration_ms")
+    return int(duration) if isinstance(duration, int | float) else None
 
 
 def _product_context_schema_version(product_snapshot_json: dict[str, object] | None) -> str | None:

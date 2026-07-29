@@ -187,7 +187,9 @@ def _fixture_adaptation(
 ) -> dict[str, object]:
     context = product_snapshot.product_context
     product_name = context.identity.name
-    persona = _persona_label(context, target_buyer)
+    buyer_persona_id = _selected_persona_id(target_buyer)
+    buyer_persona_label = _persona_label(context, target_buyer)
+    creator_persona = _creator_persona(context)
     pain = _buyer_pain(context, target_buyer)
     desired_outcome = _desired_outcome(context, target_buyer)
     angle = _primary_angle(context)
@@ -201,10 +203,11 @@ def _fixture_adaptation(
             name=f"{product_name} result opener",
             strategic_axis="result_first",
             angle=angle,
-            buyer_persona_id=None,
+            buyer_persona_id=buyer_persona_id,
+            buyer_persona_label=buyer_persona_label,
             buyer_pain=pain,
             desired_outcome=desired_outcome,
-            creator_persona=persona,
+            creator_persona=creator_persona,
             delivery_style="authentic_review",
             hook_options=[f"Here is what changed after I tried {product_name}"],
             opening_visual="show the observed result first",
@@ -224,10 +227,11 @@ def _fixture_adaptation(
             name=f"{product_name} pain-to-demo",
             strategic_axis="problem_first",
             angle=angle,
-            buyer_persona_id=None,
+            buyer_persona_id=buyer_persona_id,
+            buyer_persona_label=buyer_persona_label,
             buyer_pain=pain,
             desired_outcome=desired_outcome,
-            creator_persona=persona,
+            creator_persona=creator_persona,
             delivery_style="demonstration",
             hook_options=[f"If {pain} is familiar, watch the {product_name} demo"],
             opening_visual="show the buyer problem without exaggeration",
@@ -247,10 +251,11 @@ def _fixture_adaptation(
             name=f"{product_name} proof-led review",
             strategic_axis="proof_first",
             angle=angle,
-            buyer_persona_id=None,
+            buyer_persona_id=buyer_persona_id,
+            buyer_persona_label=buyer_persona_label,
             buyer_pain=pain,
             desired_outcome=desired_outcome,
-            creator_persona=persona,
+            creator_persona=creator_persona,
             delivery_style="testimonial",
             hook_options=[f"I would only mention {product_name} after showing the proof"],
             opening_visual="show proof context before the claim",
@@ -306,6 +311,12 @@ def _persona_label(context: ProductContextV1, target_buyer: dict[str, object]) -
     return str(target_buyer.get("persona") or "unspecified buyer")
 
 
+def _creator_persona(context: ProductContextV1) -> str:
+    if context.creative.creator_personas:
+        return context.creative.creator_personas[0]
+    return "unspecified creator"
+
+
 def _buyer_pain(context: ProductContextV1, target_buyer: dict[str, object]) -> str:
     if context.personas and context.personas[0].pain_points:
         return context.personas[0].pain_points[0]
@@ -346,7 +357,6 @@ def _proof_mechanism(context: ProductContextV1) -> str:
 def _claim_guardrails(context: ProductContextV1) -> list[str]:
     guardrails = [rule.text for rule in context.governance.claims if rule.rule_type == "prohibited"]
     guardrails.extend(context.governance.prohibited_content)
-    guardrails.extend(context.governance.required_disclosures)
     return guardrails or ["avoid unsupported claims"]
 
 

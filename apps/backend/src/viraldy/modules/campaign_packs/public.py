@@ -6,18 +6,30 @@ from viraldy.modules.campaign_packs.repository import (
     CampaignPackRepository,
     SyncCampaignPackRepository,
 )
-from viraldy.modules.preflight.requirements import CompiledRequirementV1
+from viraldy.modules.campaign_packs.requirements import (
+    CompiledRequirementsSnapshotV2,
+    CompiledRequirementV2,
+    compile_campaign_requirements,
+    compiled_requirements_to_json,
+    parse_compiled_requirements_snapshot,
+)
 from viraldy.shared.errors.base import AppError
 
 
-def get_compiled_requirements(pack_version: Any) -> list[CompiledRequirementV1]:
+def get_compiled_requirements(pack_version: Any) -> list[CompiledRequirementV2]:
     payload = getattr(pack_version, "compiled_requirements_json", None)
     if not isinstance(payload, dict) or not isinstance(payload.get("requirements"), list):
         raise AppError(
             "CAMPAIGN_PACK_REQUIREMENTS_INVALID",
             "Campaign Pack version does not contain compiled requirements.",
         )
-    return [CompiledRequirementV1.model_validate(item) for item in payload["requirements"]]
+    try:
+        return parse_compiled_requirements_snapshot(payload)
+    except Exception as exc:
+        raise AppError(
+            "CAMPAIGN_PACK_REQUIREMENTS_INVALID",
+            "Campaign Pack version does not contain valid compiled requirements.",
+        ) from exc
 
 
 def get_pack_version_snapshot(pack_version: Any) -> dict[str, object]:
@@ -33,7 +45,12 @@ def get_pack_version_snapshot(pack_version: Any) -> dict[str, object]:
 
 __all__ = [
     "CampaignPackRepository",
+    "CompiledRequirementV2",
+    "CompiledRequirementsSnapshotV2",
     "SyncCampaignPackRepository",
+    "compile_campaign_requirements",
+    "compiled_requirements_to_json",
     "get_compiled_requirements",
     "get_pack_version_snapshot",
+    "parse_compiled_requirements_snapshot",
 ]

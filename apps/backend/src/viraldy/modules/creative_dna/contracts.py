@@ -22,26 +22,50 @@ class ObservedValueV1(CreativeDnaContractBase):
     status: ObservedStatusV1
 
 
+class ObservedStringV1(ObservedValueV1):
+    value: str | None
+
+
+class ObservedBoolV1(ObservedValueV1):
+    value: bool | None
+
+
+class ObservedIntV1(ObservedValueV1):
+    value: int | None
+
+
+class ObservedFloatV1(ObservedValueV1):
+    value: float | None
+
+
+class ObservedStringListV1(ObservedValueV1):
+    value: list[str] | None
+
+
+class ObservedObjectListV1(ObservedValueV1):
+    value: list[dict[str, object]] | None
+
+
 class OpeningDnaV1(CreativeDnaContractBase):
-    primary_hook_type: ObservedValueV1
-    hook_text: ObservedValueV1
-    opening_visual: ObservedValueV1
-    buyer_pain: ObservedValueV1
-    face_present: ObservedValueV1
-    product_present: ObservedValueV1
-    first_three_second_structure: ObservedValueV1
-    pattern_interrupts: ObservedValueV1
+    primary_hook_type: ObservedStringV1
+    hook_text: ObservedStringV1
+    opening_visual: ObservedStringV1
+    buyer_pain: ObservedStringV1
+    face_present: ObservedBoolV1
+    product_present: ObservedBoolV1
+    first_three_second_structure: ObservedStringV1
+    pattern_interrupts: ObservedObjectListV1
 
 
 class ProductDnaV1(CreativeDnaContractBase):
-    first_appearance_ms: ObservedValueV1
-    total_visible_ms: ObservedValueV1
-    screen_time_ratio: ObservedValueV1
-    close_up_present: ObservedValueV1
-    hero_shot_present: ObservedValueV1
-    usage_present: ObservedValueV1
-    product_match: ObservedValueV1
-    appearance_sequence: ObservedValueV1
+    first_appearance_ms: ObservedIntV1
+    total_visible_ms: ObservedIntV1
+    screen_time_ratio: ObservedFloatV1
+    close_up_present: ObservedBoolV1
+    hero_shot_present: ObservedBoolV1
+    usage_present: ObservedBoolV1
+    product_match: ObservedFloatV1
+    appearance_sequence: ObservedObjectListV1
 
 
 class NarrativeDnaV1(CreativeDnaContractBase):
@@ -54,7 +78,7 @@ class NarrativeDnaV1(CreativeDnaContractBase):
 
 
 class DemoDnaV1(CreativeDnaContractBase):
-    detected: ObservedValueV1
+    detected: ObservedBoolV1
     demo_type: ObservedValueV1
     mechanism_clarity: ObservedValueV1
     before_state_visible: ObservedValueV1
@@ -71,7 +95,7 @@ class ProofDnaV1(CreativeDnaContractBase):
 
 
 class CreatorDnaV1(CreativeDnaContractBase):
-    face_present: ObservedValueV1
+    face_present: ObservedBoolV1
     delivery_style: ObservedValueV1
     creator_persona: ObservedValueV1
     emotion: ObservedValueV1
@@ -81,30 +105,32 @@ class CreatorDnaV1(CreativeDnaContractBase):
 
 
 class EditingDnaV1(CreativeDnaContractBase):
-    cut_count: ObservedValueV1
-    average_shot_duration_ms: ObservedValueV1
-    first_three_second_cut_count: ObservedValueV1
+    cut_count: ObservedIntV1
+    average_shot_duration_ms: ObservedIntV1
+    first_three_second_cut_count: ObservedIntV1
     pacing: ObservedValueV1
     caption_density: ObservedValueV1
-    dead_air_present: ObservedValueV1
+    pattern_interrupts: ObservedObjectListV1
+    dead_air_ranges: ObservedObjectListV1
+    dead_air_present: ObservedBoolV1
     transition_types: ObservedValueV1
 
 
 class OfferDnaV1(CreativeDnaContractBase):
-    present: ObservedValueV1
+    present: ObservedBoolV1
     offer_types: ObservedValueV1
     price_text: ObservedValueV1
     discount_text: ObservedValueV1
-    urgency_present: ObservedValueV1
+    urgency_present: ObservedBoolV1
 
 
 class CtaDnaV1(CreativeDnaContractBase):
-    present: ObservedValueV1
+    present: ObservedBoolV1
     cta_types: ObservedValueV1
-    first_appearance_ms: ObservedValueV1
-    spoken_text: ObservedValueV1
-    overlay_text: ObservedValueV1
-    product_tag_visible: ObservedValueV1
+    first_appearance_ms: ObservedIntV1
+    spoken_text: ObservedStringV1
+    overlay_text: ObservedStringV1
+    product_tag_visible: ObservedBoolV1
 
 
 class PlatformDnaV1(CreativeDnaContractBase):

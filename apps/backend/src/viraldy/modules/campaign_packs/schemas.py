@@ -7,6 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from viraldy.modules.campaign_packs.contracts import CampaignPackBriefV1
+from viraldy.modules.campaign_packs.requirements import CompiledRequirementsSnapshotV2
+from viraldy.modules.products.contracts import ProductContextV1
 
 
 class CreateCampaignPackRequest(BaseModel):
@@ -27,10 +29,10 @@ class CampaignPackVersionResponse(BaseModel):
     id: UUID
     campaign_pack_id: UUID
     version_number: int
-    brief_json: dict[str, object]
+    brief_json: CampaignPackBriefV1
     brief_schema_version: str
-    product_snapshot_json: dict[str, object] | None = None
-    compiled_requirements_json: dict[str, object]
+    product_snapshot_json: ProductContextV1 | None = None
+    compiled_requirements_json: CompiledRequirementsSnapshotV2
     requirements_schema_version: str | None = None
     change_note: str | None
     source_adaptation_run_id: UUID | None = None

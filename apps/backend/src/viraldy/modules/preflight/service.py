@@ -6,15 +6,21 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.assets.public import AssetRepository
-from viraldy.modules.campaign_packs.public import CampaignPackRepository
+from viraldy.modules.campaign_packs.public import (
+    CampaignPackRepository,
+    CompiledRequirementV2,
+    compile_campaign_requirements,
+    parse_compiled_requirements_snapshot,
+)
 from viraldy.modules.creative_domain.schema_versions import (
     PREFLIGHT_RUBRIC_VERSION,
     PREFLIGHT_RULE_VERSION,
 )
 from viraldy.modules.jobs.public import get_existing_idempotent_job, request_mvp_job
+from viraldy.modules.media_analysis.public import EvidenceItemModel
 from viraldy.modules.preflight.contracts import BriefAlignmentResultV2, RequirementEvaluationV2
+from viraldy.modules.preflight.matchers import RequirementMatcherContext, evaluate_requirement
 from viraldy.modules.preflight.repository import PreflightRepository
-from viraldy.modules.preflight.requirements import CompiledRequirementV1, compile_requirements
 from viraldy.modules.preflight.schemas import (
     CreatePreflightRunRequest,
     CreatePreflightRunResponse,
@@ -108,11 +114,20 @@ def calculate_preflight_result(
     structural_result: dict[str, Any],
     brief_json: dict[str, object],
     compiled_requirements_json: dict[str, object] | None = None,
+    evidence: list[EvidenceItemModel] | None = None,
+    product_snapshot_json: dict[str, object] | None = None,
+    media_duration_ms: int | None = None,
 ) -> dict[str, Any]:
     requirements = _requirements_from_snapshot(compiled_requirements_json)
     if not requirements:
-        requirements = compile_requirements(brief_json)
-    alignment = _brief_alignment(requirements, structural_result)
+        requirements = compile_campaign_requirements(brief_json)
+    alignment = _brief_alignment(
+        requirements,
+        structural_result,
+        evidence or [],
+        product_snapshot_json or _product_snapshot_from_brief(brief_json),
+        media_duration_ms,
+    )
     structural_score = int(structural_result["structural_score"])
     brief_score = int(alignment["score"])
     final_score = round((0.8 * structural_score) + (0.2 * brief_score))
@@ -138,11 +153,25 @@ def calculate_preflight_result(
 
 
 def _brief_alignment(
-    requirements: list[CompiledRequirementV1], structural_result: dict[str, Any]
+    requirements: list[CompiledRequirementV2],
+    structural_result: dict[str, Any],
+    evidence: list[EvidenceItemModel],
+    product_snapshot_json: dict[str, object] | None,
+    media_duration_ms: int | None,
 ) -> dict[str, Any]:
     evaluations = [
-        _evaluate_requirement(requirement, structural_result) for requirement in requirements
+        evaluate_requirement(
+            RequirementMatcherContext(
+                requirement=requirement,
+                evidence=evidence,
+                structural_result=structural_result,
+                product_snapshot=product_snapshot_json,
+                media_duration_ms=media_duration_ms,
+            )
+        )
+        for requirement in requirements
     ]
+    evaluations = _apply_group_minimums(requirements, evaluations)
     score = _alignment_score(requirements, evaluations)
     blockers = _alignment_blockers(requirements, evaluations)
     fixes = _alignment_fixes(requirements, evaluations)
@@ -157,6 +186,9 @@ def _brief_alignment(
             "missing": sum(1 for item in evaluations if item.status == "missing"),
             "violated": sum(1 for item in evaluations if item.status == "violated"),
             "unknown": sum(1 for item in evaluations if item.status == "unknown"),
+            "not_applicable": sum(
+                1 for item in evaluations if item.status == "not_applicable"
+            ),
         },
         blockers=blockers,
         fixes=fixes,
@@ -166,7 +198,7 @@ def _brief_alignment(
 
 def _requirements_from_snapshot(
     compiled_requirements_json: dict[str, object] | None,
-) -> list[CompiledRequirementV1]:
+) -> list[CompiledRequirementV2]:
     if not compiled_requirements_json:
         return []
     raw_requirements = compiled_requirements_json.get("requirements")
@@ -176,12 +208,59 @@ def _requirements_from_snapshot(
             "Campaign Pack compiled requirements snapshot is invalid.",
         )
     try:
-        return [CompiledRequirementV1.model_validate(item) for item in raw_requirements]
+        return parse_compiled_requirements_snapshot(compiled_requirements_json)
     except Exception as exc:
         raise AppError(
             "CAMPAIGN_PACK_REQUIREMENTS_INVALID",
             "Campaign Pack compiled requirements snapshot is invalid.",
         ) from exc
+
+
+def _product_snapshot_from_brief(brief_json: dict[str, object]) -> dict[str, object] | None:
+    product_snapshot = brief_json.get("product_snapshot")
+    return product_snapshot if isinstance(product_snapshot, dict) else None
+
+
+def _apply_group_minimums(
+    requirements: list[CompiledRequirementV2],
+    evaluations: list[RequirementEvaluationV2],
+) -> list[RequirementEvaluationV2]:
+    by_group: dict[str, list[tuple[CompiledRequirementV2, RequirementEvaluationV2]]] = {}
+    for requirement, evaluation in zip(requirements, evaluations, strict=True):
+        if requirement.requirement_group_id and requirement.minimum_satisfied:
+            by_group.setdefault(requirement.requirement_group_id, []).append(
+                (requirement, evaluation)
+            )
+    if not by_group:
+        return evaluations
+    updated = list(evaluations)
+    for group_items in by_group.values():
+        minimum = group_items[0][0].minimum_satisfied or 1
+        satisfied_count = sum(
+            1 for _, evaluation in group_items if evaluation.status == "satisfied"
+        )
+        if satisfied_count < minimum:
+            continue
+        for requirement, evaluation in group_items:
+            if evaluation.status == "satisfied":
+                continue
+            index = requirements.index(requirement)
+            updated[index] = RequirementEvaluationV2(
+                requirement_id=evaluation.requirement_id,
+                status="not_applicable",
+                score=100,
+                confidence=evaluation.confidence,
+                reason="Optional requirement group minimum was satisfied by another alternative.",
+                evidence_ids=evaluation.evidence_ids,
+                expected=evaluation.expected,
+                observed={
+                    **evaluation.observed,
+                    "requirement_group_id": requirement.requirement_group_id,
+                    "minimum_satisfied": minimum,
+                    "satisfied_count": satisfied_count,
+                },
+            )
+    return updated
 
 
 def _preflight_action(score: int, blockers: list[dict[str, Any]]) -> str:
@@ -226,118 +305,9 @@ def _revision_message(fixes: list[dict[str, Any]], action: str) -> str:
     return "The demonstration is clear. Could you " + "; and ".join(instructions) + "?"
 
 
-def _evaluate_requirement(
-    requirement: CompiledRequirementV1,
-    structural_result: dict[str, Any],
-) -> RequirementEvaluationV2:
-    if requirement.matcher_type == "product_visibility":
-        return _dimension_requirement(
-            requirement,
-            structural_result,
-            "product_visibility",
-            "Product visibility must satisfy the Campaign Pack requirement.",
-        )
-    if requirement.matcher_type == "demo_presence":
-        return _dimension_requirement(
-            requirement,
-            structural_result,
-            "demo_clarity",
-            "Demo clarity must satisfy the Campaign Pack requirement.",
-        )
-    if requirement.matcher_type == "proof_presence":
-        return _dimension_requirement(
-            requirement,
-            structural_result,
-            "proof_strength",
-            "Proof must satisfy the Campaign Pack requirement.",
-        )
-    if requirement.matcher_type == "cta_presence":
-        return _cta_requirement(requirement, structural_result)
-    if requirement.matcher_type == "claim_safety":
-        return _claim_requirement(requirement, structural_result)
-    return RequirementEvaluationV2(
-        requirement_id=requirement.id,
-        status="unknown",
-        score=40,
-        confidence="low",
-        reason="No deterministic matcher exists yet for this semantic scene requirement.",
-        evidence_ids=[],
-        expected=requirement.model_dump(mode="json"),
-        observed={},
-    )
-
-
-def _dimension_requirement(
-    requirement: CompiledRequirementV1,
-    structural_result: dict[str, Any],
-    dimension_name: str,
-    reason: str,
-) -> RequirementEvaluationV2:
-    dimension = _dimension(structural_result, dimension_name)
-    score = int(dimension.get("score", 0))
-    status = _status_from_score(score)
-    return RequirementEvaluationV2(
-        requirement_id=requirement.id,
-        status=status,
-        score=score,
-        confidence=str(dimension.get("confidence", "low")),  # type: ignore[arg-type]
-        reason=reason,
-        evidence_ids=[UUID(str(item)) for item in dimension.get("evidence_ids", [])],
-        expected=requirement.model_dump(mode="json"),
-        observed={"dimension": dimension_name, "score": score},
-    )
-
-
-def _cta_requirement(
-    requirement: CompiledRequirementV1,
-    structural_result: dict[str, Any],
-) -> RequirementEvaluationV2:
-    dimension = _dimension(structural_result, "cta_readiness")
-    score = int(dimension.get("score", 0))
-    product_tag_required = bool(requirement.matcher_config.get("product_tag_required"))
-    product_tag_present = _signal_contribution(dimension, "product_tag_or_shop_cue") > 0
-    if product_tag_required and not product_tag_present:
-        status = "missing"
-        score = min(score, 50)
-    else:
-        status = _status_from_score(score)
-    return RequirementEvaluationV2(
-        requirement_id=requirement.id,
-        status=status,
-        score=score,
-        confidence=str(dimension.get("confidence", "low")),  # type: ignore[arg-type]
-        reason="CTA requirement is evaluated from observed CTA type, timing, and shop cue signals.",
-        evidence_ids=[UUID(str(item)) for item in dimension.get("evidence_ids", [])],
-        expected=requirement.model_dump(mode="json"),
-        observed={
-            "dimension": "cta_readiness",
-            "score": score,
-            "product_tag_present": product_tag_present,
-        },
-    )
-
-
-def _claim_requirement(
-    requirement: CompiledRequirementV1,
-    structural_result: dict[str, Any],
-) -> RequirementEvaluationV2:
-    dimension = _dimension(structural_result, "claim_safety")
-    score = int(dimension.get("score", 0))
-    status = "violated" if score < 80 else "satisfied"
-    return RequirementEvaluationV2(
-        requirement_id=requirement.id,
-        status=status,
-        score=score,
-        confidence=str(dimension.get("confidence", "low")),  # type: ignore[arg-type]
-        reason="Claim guardrail is evaluated from deterministic claim-safety penalties.",
-        evidence_ids=[UUID(str(item)) for item in dimension.get("evidence_ids", [])],
-        expected=requirement.model_dump(mode="json"),
-        observed={"dimension": "claim_safety", "score": score},
-    )
-
 
 def _alignment_score(
-    requirements: list[CompiledRequirementV1],
+    requirements: list[CompiledRequirementV2],
     evaluations: list[RequirementEvaluationV2],
 ) -> int:
     total_weight = sum(_requirement_weight(requirement) for requirement in requirements)
@@ -349,12 +319,14 @@ def _alignment_score(
 
 
 def _alignment_blockers(
-    requirements: list[CompiledRequirementV1],
+    requirements: list[CompiledRequirementV2],
     evaluations: list[RequirementEvaluationV2],
 ) -> list[dict[str, Any]]:
     blockers: list[dict[str, Any]] = []
     for requirement, evaluation in zip(requirements, evaluations, strict=True):
-        if evaluation.status not in {"missing", "violated"}:
+        if evaluation.status not in {"missing", "violated", "unknown"}:
+            continue
+        if evaluation.status == "unknown" and requirement.severity != "hard":
             continue
         code = (
             "BRIEF_HARD_REQUIREMENT_MISSING"
@@ -374,7 +346,7 @@ def _alignment_blockers(
 
 
 def _alignment_fixes(
-    requirements: list[CompiledRequirementV1],
+    requirements: list[CompiledRequirementV2],
     evaluations: list[RequirementEvaluationV2],
 ) -> list[dict[str, Any]]:
     fixes: list[dict[str, Any]] = []
@@ -402,30 +374,5 @@ def _alignment_confidence(evaluations: list[RequirementEvaluationV2]) -> str:
     return "high"
 
 
-def _status_from_score(score: int) -> str:
-    if score >= 75:
-        return "satisfied"
-    if score >= 50:
-        return "partial"
-    return "missing"
-
-
-def _requirement_weight(requirement: CompiledRequirementV1) -> float:
+def _requirement_weight(requirement: CompiledRequirementV2) -> float:
     return {"hard": 4.0, "high": 3.0, "medium": 2.0, "low": 1.0}[requirement.severity]
-
-
-def _dimension(structural_result: dict[str, Any], name: str) -> dict[str, Any]:
-    dimensions = structural_result.get("dimensions", {})
-    value = dimensions.get(name, {}) if isinstance(dimensions, dict) else {}
-    return value if isinstance(value, dict) else {}
-
-
-def _signal_contribution(dimension: dict[str, Any], code: str) -> float:
-    signals = dimension.get("signals", [])
-    if not isinstance(signals, list):
-        return 0
-    for signal in signals:
-        if isinstance(signal, dict) and signal.get("code") == code:
-            contribution = signal.get("contribution")
-            return float(contribution) if isinstance(contribution, int | float) else 0
-    return 0

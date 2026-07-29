@@ -331,6 +331,8 @@ def _fixture_observation_bundle(scenario: dict[str, object]) -> MediaObservation
                 "modality": "mixed",
                 "cta_type": "link_in_shop",
                 "text": scenario["cta_line"],
+                "spoken_text": scenario["cta_line"],
+                "overlay_text": scenario["cta_overlay"],
                 "product_tag_visible": True,
                 "confidence": 0.9,
                 "frame_storage_keys": ["fixtures/cta.jpg"],

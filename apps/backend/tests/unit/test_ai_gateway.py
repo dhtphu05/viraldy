@@ -65,6 +65,18 @@ def test_mock_provider_missing_field_breaks_adaptation_contract(
     assert "concepts" not in content
 
 
+def test_mock_provider_adaptation_payload_matches_current_contract() -> None:
+    client = TestClient(mock_openai_provider.app)
+
+    response = client.post("/v1/chat/completions", headers=_headers(), json=_adaptation_payload())
+    content = response.json()["choices"][0]["message"]["content"]
+    output = adaptation_provider_module._validate(json.loads(content))
+
+    assert len(output.concepts) == 3
+    assert all(concept.buyer_persona_label for concept in output.concepts)
+    assert all(concept.creator_persona for concept in output.concepts)
+
+
 def test_gateway_maps_rate_limit_server_error_invalid_json_and_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -154,6 +154,8 @@ class CtaObservationV1(ObservationRefV1):
         "unknown",
     ] = "unknown"
     text: str | None = None
+    spoken_text: str | None = None
+    overlay_text: str | None = None
     product_tag_visible: bool = False
 
 
@@ -171,6 +173,8 @@ class OfferObservationV1(ObservationRefV1):
     ] = "unknown"
     text: str | None = None
     price_text: str | None = None
+    discount_text: str | None = None
+    urgency_present: bool = False
 
 
 class CreatorObservationV1(MediaObservationBase):

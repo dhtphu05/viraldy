@@ -688,6 +688,7 @@ def _concept(
         "strategic_axis": strategic_axis,
         "angle": "product-specific observed use case",
         "buyer_persona_id": None,
+        "buyer_persona_label": "documented buyer persona",
         "buyer_pain": "documented buyer pain",
         "desired_outcome": "documented product outcome",
         "creator_persona": "category creator",

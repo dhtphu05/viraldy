@@ -21,6 +21,10 @@ from viraldy.modules.campaign_packs.contracts import (
     StoryboardSceneV1,
 )
 from viraldy.modules.campaign_packs.repository import CampaignPackRepository
+from viraldy.modules.campaign_packs.requirements import (
+    compile_campaign_requirements,
+    compiled_requirements_to_json,
+)
 from viraldy.modules.campaign_packs.schemas import (
     CampaignPackResponse,
     CampaignPackVersionResponse,
@@ -28,10 +32,7 @@ from viraldy.modules.campaign_packs.schemas import (
     CreateCampaignPackVersionRequest,
     UpdateCampaignPackRequest,
 )
-from viraldy.modules.preflight.requirements import (
-    compile_requirements,
-    compiled_requirements_to_json,
-)
+from viraldy.modules.creative_domain.schema_versions import COMPILED_REQUIREMENTS_SCHEMA_VERSION
 from viraldy.modules.products.contracts import ProductContextV1
 from viraldy.shared.errors.base import AppError, NotFoundError
 
@@ -63,7 +64,7 @@ class CampaignPackService:
             adaptation.id,
             data.concept_id,
         )
-        compiled = compile_requirements(brief.model_dump(mode="json"))
+        compiled = compile_campaign_requirements(brief.model_dump(mode="json"))
         pack, version = await self._repository.create(
             workspace_id,
             user_id,
@@ -75,7 +76,7 @@ class CampaignPackService:
             ADAPTATION_SCHEMA_VERSION,
             brief.product_snapshot.model_dump(mode="json"),
             compiled_requirements_to_json(compiled),
-            "compiled_requirements_v1",
+            COMPILED_REQUIREMENTS_SCHEMA_VERSION,
         )
         await self._session.commit()
         await self._session.refresh(pack)
@@ -136,7 +137,7 @@ class CampaignPackService:
         if pack is None:
             raise NotFoundError("CAMPAIGN_PACK_NOT_FOUND", "Campaign Pack was not found.")
         brief = data.brief
-        compiled = compile_requirements(brief.model_dump(mode="json"))
+        compiled = compile_campaign_requirements(brief.model_dump(mode="json"))
         version = await self._repository.create_version(
             pack,
             user_id,
@@ -144,7 +145,7 @@ class CampaignPackService:
             data.change_note,
             brief.product_snapshot.model_dump(mode="json"),
             compiled_requirements_to_json(compiled),
-            "compiled_requirements_v1",
+            COMPILED_REQUIREMENTS_SCHEMA_VERSION,
         )
         await self._session.commit()
         await self._session.refresh(version)
@@ -207,7 +208,9 @@ def _brief_from_concept(
     must_show = _list_of_text(concept.get("must_show"))
     demo_sequence = _list_of_text(concept.get("demo_sequence"))
     claim_guardrails = _list_of_text(concept.get("claim_guardrails"))
-    persona = str(concept.get("creator_persona") or target_buyer.get("persona") or "creator")
+    buyer_persona_id = _buyer_persona_id(product_snapshot, target_buyer, concept)
+    buyer_persona_label = _buyer_persona_label(product_snapshot, target_buyer, concept)
+    creator_persona = _creator_persona(product_snapshot, concept)
     pain = str(concept.get("buyer_pain") or target_buyer.get("pain") or "documented buyer pain")
     outcome = str(
         concept.get("desired_outcome")
@@ -222,7 +225,8 @@ def _brief_from_concept(
             channel="tiktok_shop" if "shop" in objective.lower() else "unknown",
         ),
         audience=CampaignAudienceV1(
-            persona_label=persona,
+            persona_id=buyer_persona_id,
+            persona_label=buyer_persona_label,
             pain_points=[pain],
             desired_outcomes=[outcome],
             objections=[],
@@ -235,7 +239,7 @@ def _brief_from_concept(
             emotional_driver=pain,
         ),
         creator_direction=CreatorDirectionV1(
-            persona=persona,
+            persona=creator_persona,
             delivery_style=str(concept.get("delivery_style") or "authentic_review"),
             tone=["clear", "evidence-led"],
             avoid_tones=["overclaiming"],
@@ -289,7 +293,9 @@ def _brief_from_concept(
         talking_points=[pain, outcome],
         text_overlays=hook_options[:2],
         proof_direction=[str(concept.get("proof_mechanism") or "show observable result")],
-        offer_direction=[],
+        offer_direction=[text]
+        if (text := str(concept.get("offer_framing") or "").strip())
+        else [],
         cta=CtaDirectionV1(
             spoken="Check the product tag if this campaign is for TikTok Shop.",
             overlay="Product tag",
@@ -345,3 +351,37 @@ def _requirement_type(text: str) -> str:
     if "product" in lowered or "close-up" in lowered or "close up" in lowered:
         return "product"
     return "scene"
+
+
+def _buyer_persona_id(
+    product_snapshot: ProductContextV1,
+    target_buyer: dict[str, object],
+    concept: dict[str, object],
+) -> str | None:
+    concept_id = concept.get("buyer_persona_id")
+    if concept_id:
+        return str(concept_id)
+    if product_snapshot.personas:
+        return product_snapshot.personas[0].id
+    target_id = target_buyer.get("persona_id")
+    return str(target_id) if target_id else None
+
+
+def _buyer_persona_label(
+    product_snapshot: ProductContextV1,
+    target_buyer: dict[str, object],
+    concept: dict[str, object],
+) -> str:
+    if label := str(concept.get("buyer_persona_label") or "").strip():
+        return label
+    if product_snapshot.personas:
+        return product_snapshot.personas[0].label
+    return str(target_buyer.get("persona") or "unspecified buyer")
+
+
+def _creator_persona(product_snapshot: ProductContextV1, concept: dict[str, object]) -> str:
+    if persona := str(concept.get("creator_persona") or "").strip():
+        return persona
+    if product_snapshot.creative.creator_personas:
+        return product_snapshot.creative.creator_personas[0]
+    return "unspecified creator"
