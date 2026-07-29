@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Session, sessionmaker
 
 from viraldy.platform.config.settings import get_settings
+from viraldy.platform.database import models as _models  # noqa: F401
 
 settings = get_settings()
 

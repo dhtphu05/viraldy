@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
+from viraldy.modules.ai_gateway.readiness import ai_readiness
 from viraldy.platform.config.settings import Settings, get_settings
 from viraldy.platform.database.session import get_async_session
 
@@ -74,3 +75,12 @@ async def ready(
     checks = await readiness(db, settings)
     status = "ok" if all(value == "ok" for value in checks.values()) else "degraded"
     return success({"status": status, "checks": checks}, request_id)
+
+
+@router.get("/system/ai-readiness", response_model=Envelope)
+async def system_ai_readiness(
+    settings: SettingsDep,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    readiness_result = ai_readiness(settings)
+    return success(readiness_result.model_dump(mode="json"), request_id)

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import base64
-import json
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+from viraldy.modules.ai_gateway.public import OpenAICompatibleClient, extract_message_json
+from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
@@ -67,32 +68,29 @@ class VisualObservationsContract(BaseModel):
 class LiveAnalysisProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._base_url = (settings.ai_base_url or "").rstrip("/")
-        self._api_key = settings.ai_api_key.get_secret_value() if settings.ai_api_key else ""
+        self._client = OpenAICompatibleClient(settings)
 
     def transcribe_audio(self, audio_path: Path) -> TranscriptContract:
+        return self.transcribe_audio_with_response(audio_path)[0]
+
+    def transcribe_audio_with_response(
+        self, audio_path: Path
+    ) -> tuple[TranscriptContract, ProviderResponse | None]:
         if self._settings.asr_provider != "openai_compatible":
-            return TranscriptContract(segments=[], full_text="")
+            return TranscriptContract(segments=[], full_text=""), None
         if not self._settings.asr_model:
             raise AppError(
-                "ASR_MODEL_NOT_CONFIGURED", "Live ASR requires ASR_MODEL.", status_code=503
+                "AI_PROVIDER_NOT_CONFIGURED", "Live ASR requires ASR_MODEL.", status_code=503
             )
-        import httpx
-
-        with audio_path.open("rb") as audio_file:
-            response = httpx.post(
-                f"{self._base_url}/audio/transcriptions",
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                files={"file": (audio_path.name, audio_file, "audio/wav")},
-                data={
-                    "model": self._settings.asr_model,
-                    "response_format": "verbose_json",
-                    "timestamp_granularities[]": "segment",
-                },
-                timeout=self._settings.ai_request_timeout_seconds,
-            )
-        response.raise_for_status()
-        payload = response.json()
+        response = self._client.transcribe(
+            audio_path,
+            {
+                "model": self._settings.asr_model,
+                "response_format": "verbose_json",
+                "timestamp_granularities[]": "segment",
+            },
+        )
+        payload = response.payload
         segments = [
             {
                 "start_ms": round(float(segment.get("start", 0)) * 1000),
@@ -102,19 +100,26 @@ class LiveAnalysisProvider:
             for segment in payload.get("segments", [])
             if str(segment.get("text", "")).strip()
         ]
-        return TranscriptContract(
+        contract = TranscriptContract(
             language=str(payload.get("language") or "en"),
             segments=segments,
             full_text=str(payload.get("text") or " ".join(item["text"] for item in segments)),
         )
+        return contract, response
 
     def extract_ocr(
         self,
         frame_paths: list[tuple[int, Path, str]],
     ) -> OcrContract:
+        return self.extract_ocr_with_response(frame_paths)[0]
+
+    def extract_ocr_with_response(
+        self,
+        frame_paths: list[tuple[int, Path, str]],
+    ) -> tuple[OcrContract, ProviderResponse | None]:
         if self._settings.ocr_provider != "vision":
-            return OcrContract()
-        payload = self._vision_json(
+            return OcrContract(), None
+        payload, response = self._vision_json_with_response(
             prompt=(
                 "Extract readable on-screen text from these TikTok/UGC frames. "
                 'Return JSON: {"segments":[{"start_ms":number,"end_ms":number,'
@@ -123,7 +128,7 @@ class LiveAnalysisProvider:
             ),
             frame_paths=frame_paths[:8],
         )
-        return _validate_contract(OcrContract, payload, "OCR_OUTPUT_INVALID")
+        return _validate_contract(OcrContract, payload, "OCR_OUTPUT_INVALID"), response
 
     def extract_visual_observations(
         self,
@@ -132,7 +137,18 @@ class LiveAnalysisProvider:
         ocr: OcrContract,
         product_context: dict[str, object] | None,
     ) -> VisualObservationsContract:
-        payload = self._vision_json(
+        return self.extract_visual_observations_with_response(
+            frame_paths, transcript, ocr, product_context
+        )[0]
+
+    def extract_visual_observations_with_response(
+        self,
+        frame_paths: list[tuple[int, Path, str]],
+        transcript: TranscriptContract,
+        ocr: OcrContract,
+        product_context: dict[str, object] | None,
+    ) -> tuple[VisualObservationsContract, ProviderResponse]:
+        payload, response = self._vision_json_with_response(
             prompt=(
                 "Analyze the creative structure from frames, transcript, OCR, and product context. "
                 "Return only JSON with keys: product_first_appearance_ms, face_present_opening, "
@@ -144,23 +160,29 @@ class LiveAnalysisProvider:
             ),
             frame_paths=frame_paths[:12],
         )
-        return _validate_contract(
+        contract = _validate_contract(
             VisualObservationsContract, payload, "VISUAL_OBSERVATIONS_INVALID"
         )
+        return contract, response
 
     def _vision_json(
         self,
         prompt: str,
         frame_paths: list[tuple[int, Path, str]],
     ) -> dict[str, Any]:
+        return self._vision_json_with_response(prompt, frame_paths)[0]
+
+    def _vision_json_with_response(
+        self,
+        prompt: str,
+        frame_paths: list[tuple[int, Path, str]],
+    ) -> tuple[dict[str, Any], ProviderResponse]:
         if not self._settings.ai_vision_model:
             raise AppError(
-                "AI_VISION_MODEL_NOT_CONFIGURED",
+                "AI_PROVIDER_NOT_CONFIGURED",
                 "Live vision extraction requires AI_VISION_MODEL.",
                 status_code=503,
             )
-        import httpx
-
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for timestamp_ms, path, storage_key in frame_paths:
             content.append(
@@ -175,22 +197,15 @@ class LiveAnalysisProvider:
                     "image_url": {"url": f"data:image/jpeg;base64,{_b64(path)}"},
                 }
             )
-        response = httpx.post(
-            f"{self._base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self._settings.ai_vision_model,
-                "messages": [{"role": "user", "content": content}],
-                "response_format": {"type": "json_object"},
-            },
-            timeout=self._settings.ai_request_timeout_seconds,
-        )
-        response.raise_for_status()
-        text = response.json()["choices"][0]["message"]["content"]
-        return json.loads(text)
+        payload: dict[str, Any] = {
+            "model": self._settings.ai_vision_model,
+            "messages": [{"role": "user", "content": content}],
+            "response_format": {"type": "json_object"},
+        }
+        if self._settings.ai_max_output_tokens is not None:
+            payload["max_tokens"] = self._settings.ai_max_output_tokens
+        response = self._client.chat_json(payload)
+        return extract_message_json(response), response
 
 
 def _validate_contract[T: BaseModel](model: type[T], payload: dict[str, Any], code: str) -> T:

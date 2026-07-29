@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from viraldy.modules.tiktok_scorer.models import TikTokScoreRunModel
+from viraldy.modules.tiktok_scorer.rubric import TIKTOK_STRUCTURE_RUBRIC
 
-RUBRIC_VERSION = "tiktok_structure_rubric_v1"
-RULE_VERSION = "tiktok_structure_rules_v1"
+RUBRIC_VERSION = TIKTOK_STRUCTURE_RUBRIC.version
+RULE_VERSION = TIKTOK_STRUCTURE_RUBRIC.rule_version
 
 
 class TikTokScoreRepository:

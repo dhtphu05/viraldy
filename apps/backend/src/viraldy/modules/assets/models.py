@@ -35,7 +35,9 @@ class AssetModel(Base):
     )
     asset_type: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    current_version_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
+    current_version_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("asset_versions.id"), nullable=True
+    )
     created_by_user_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

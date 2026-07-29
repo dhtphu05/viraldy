@@ -20,6 +20,9 @@ class CampaignPackRepository:
         product_id: UUID,
         adaptation_run_id: UUID,
         brief_json: dict[str, object],
+        source_model_run_id: UUID | None,
+        source_prompt_version: str | None,
+        source_schema_version: str | None,
     ) -> tuple[CampaignPackModel, CampaignPackVersionModel]:
         pack = CampaignPackModel(
             workspace_id=workspace_id,
@@ -34,6 +37,10 @@ class CampaignPackRepository:
             version_number=1,
             brief_json=brief_json,
             change_note="Initial generated brief",
+            source_adaptation_run_id=adaptation_run_id,
+            source_model_run_id=source_model_run_id,
+            source_prompt_version=source_prompt_version,
+            source_schema_version=source_schema_version,
             created_by_user_id=user_id,
         )
         self._session.add(version)
@@ -105,11 +112,20 @@ class CampaignPackRepository:
             )
             or 0
         ) + 1
+        base_version = (
+            await self.get_version(pack.current_version_id) if pack.current_version_id else None
+        )
         version = CampaignPackVersionModel(
             campaign_pack_id=pack.id,
             version_number=next_version,
             brief_json=brief_json,
             change_note=change_note,
+            source_adaptation_run_id=base_version.source_adaptation_run_id
+            if base_version
+            else None,
+            source_model_run_id=base_version.source_model_run_id if base_version else None,
+            source_prompt_version=base_version.source_prompt_version if base_version else None,
+            source_schema_version=base_version.source_schema_version if base_version else None,
             created_by_user_id=user_id,
         )
         self._session.add(version)
@@ -117,6 +133,13 @@ class CampaignPackRepository:
         pack.current_version_id = version.id
         await self._session.flush()
         return version
+
+    async def get_current_version_for_update(
+        self, pack: CampaignPackModel
+    ) -> CampaignPackVersionModel | None:
+        if pack.current_version_id is None:
+            return None
+        return await self.get_version(pack.current_version_id)
 
 
 class SyncCampaignPackRepository:

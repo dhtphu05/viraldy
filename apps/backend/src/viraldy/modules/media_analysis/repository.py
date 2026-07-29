@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from viraldy.modules.media_analysis.evidence_bundle import validate_evidence_payload
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
 
 
@@ -48,10 +49,37 @@ class SyncMediaAnalysisRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list_reusable_evidence(
+        self,
+        workspace_id: UUID,
+        asset_version_id: UUID,
+        provider: str,
+        model_version: str | None,
+        pipeline_version: str,
+    ) -> list[EvidenceItemModel]:
+        return list(
+            self._session.execute(
+                select(EvidenceItemModel)
+                .where(
+                    EvidenceItemModel.workspace_id == workspace_id,
+                    EvidenceItemModel.asset_version_id == asset_version_id,
+                    EvidenceItemModel.provider == provider,
+                    EvidenceItemModel.model_version == model_version,
+                    EvidenceItemModel.pipeline_version == pipeline_version,
+                )
+                .order_by(
+                    EvidenceItemModel.start_ms.asc().nulls_last(),
+                    EvidenceItemModel.created_at.asc(),
+                )
+            ).scalars()
+        )
+
     def replace_artifacts_and_evidence(
         self,
         workspace_id: UUID,
         asset_version_id: UUID,
+        processing_job_id: UUID | None,
+        pipeline_version: str,
         artifacts: list[dict[str, Any]],
         evidence: list[dict[str, Any]],
     ) -> list[EvidenceItemModel]:
@@ -71,12 +99,17 @@ class SyncMediaAnalysisRepository:
             MediaArtifactModel(
                 workspace_id=workspace_id,
                 asset_version_id=asset_version_id,
+                processing_job_id=processing_job_id,
+                stage=item.get("stage"),
+                ordinal=item.get("ordinal"),
                 artifact_type=item["artifact_type"],
                 storage_key=item.get("storage_key"),
+                sha256=item.get("sha256"),
                 payload_json=item.get("payload_json"),
                 provider=item["provider"],
                 model_version=item.get("model_version"),
                 analysis_mode=item["analysis_mode"],
+                pipeline_version=pipeline_version,
             )
             for item in artifacts
         ]
@@ -84,9 +117,12 @@ class SyncMediaAnalysisRepository:
             EvidenceItemModel(
                 workspace_id=workspace_id,
                 asset_version_id=asset_version_id,
+                processing_job_id=processing_job_id,
+                stage=item.get("stage"),
                 analysis_run_type=item["analysis_run_type"],
                 analysis_run_id=item.get("analysis_run_id"),
                 evidence_type=item["evidence_type"],
+                identity_hash=item.get("identity_hash"),
                 start_ms=item.get("start_ms"),
                 end_ms=item.get("end_ms"),
                 frame_storage_key=item.get("frame_storage_key"),
@@ -97,8 +133,9 @@ class SyncMediaAnalysisRepository:
                 source=item["source"],
                 provider=item.get("provider"),
                 model_version=item.get("model_version"),
+                pipeline_version=pipeline_version,
             )
-            for item in evidence
+            for item in _validated_evidence(asset_version_id, evidence)
         ]
         self._session.add_all([*artifact_models, *evidence_models])
         self._session.flush()
@@ -118,3 +155,11 @@ class SyncMediaAnalysisRepository:
                 )
             ).scalars()
         )
+
+
+def _validated_evidence(
+    asset_version_id: UUID, evidence: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    for item in evidence:
+        validate_evidence_payload(asset_version_id, item)
+    return evidence

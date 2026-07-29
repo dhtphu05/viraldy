@@ -32,7 +32,7 @@ class TikTokScoreService:
         asset = await self._assets.get(workspace_id, data.asset_id)
         if asset is None:
             raise NotFoundError("ASSET_NOT_FOUND", "Asset was not found.")
-        version = await self._assets.get_current_version(data.asset_id)
+        version = await self._assets.get_current_version_in_workspace(workspace_id, data.asset_id)
         if version is None:
             raise AppError("ASSET_VERSION_NOT_FOUND", "Asset version was not found.")
         existing_job = await get_existing_idempotent_job(
@@ -67,6 +67,14 @@ class TikTokScoreService:
             },
             idempotency_key,
         )
+        if job.subject_id != run.id:
+            existing_run = await self._repository.get(workspace_id, job.subject_id)
+            if existing_run is None:
+                raise AppError(
+                    "IDEMPOTENT_SCORE_RUN_NOT_FOUND",
+                    "Existing idempotent score run was not found.",
+                )
+            run = existing_run
         return CreateTikTokScoreResponse(
             score_run=TikTokScoreRunResponse.model_validate(run),
             job=job,

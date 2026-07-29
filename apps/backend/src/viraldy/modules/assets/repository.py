@@ -31,10 +31,13 @@ class AssetRepository:
             product_id=product_id,
             asset_type=asset_type,
             status="pending_upload",
-            current_version_id=version_id,
+            current_version_id=None,
             created_by_user_id=created_by_user_id,
             metadata_json={},
         )
+        self._session.add(asset)
+        await self._session.flush()
+
         version = AssetVersionModel(
             id=version_id,
             asset_id=asset_id,
@@ -46,7 +49,10 @@ class AssetRepository:
             metadata_json={},
             validation_status="pending",
         )
-        self._session.add_all([asset, version])
+        self._session.add(version)
+        await self._session.flush()
+
+        asset.current_version_id = version_id
         await self._session.flush()
         return asset, version
 
@@ -73,6 +79,20 @@ class AssetRepository:
             select(AssetVersionModel)
             .join(AssetModel, AssetModel.current_version_id == AssetVersionModel.id)
             .where(AssetModel.id == asset_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_current_version_in_workspace(
+        self, workspace_id: UUID, asset_id: UUID
+    ) -> AssetVersionModel | None:
+        result = await self._session.execute(
+            select(AssetVersionModel)
+            .join(AssetModel, AssetModel.current_version_id == AssetVersionModel.id)
+            .where(
+                AssetModel.workspace_id == workspace_id,
+                AssetModel.id == asset_id,
+                AssetModel.deleted_at.is_(None),
+            )
         )
         return result.scalar_one_or_none()
 

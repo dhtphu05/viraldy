@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.jobs.dispatcher import JobDispatcher
@@ -28,16 +29,25 @@ class JobService:
         )
         created = job is None
         if job is None:
-            job = await self._repository.create_process_asset_job(
-                workspace_id=workspace_id,
-                asset_id=asset_id,
-                asset_version_id=asset_version_id,
-                idempotency_key=idempotency_key,
-            )
+            try:
+                job = await self._repository.create_process_asset_job(
+                    workspace_id=workspace_id,
+                    asset_id=asset_id,
+                    asset_version_id=asset_version_id,
+                    idempotency_key=idempotency_key,
+                )
+            except IntegrityError:
+                await self._session.rollback()
+                job = await self._repository.get_existing_idempotent(
+                    workspace_id, "process_asset", idempotency_key
+                )
+                created = False
+                if job is None:
+                    raise
 
         await self._session.commit()
         if created and self._dispatcher is not None:
-            self._dispatcher.dispatch_process_asset(job.id)
+            await self._dispatch_created_job(job, "process_asset")
 
         return JobResponse.model_validate(job)
 
@@ -55,17 +65,26 @@ class JobService:
         )
         created = job is None
         if job is None:
-            job = await self._repository.create_mvp_job(
-                workspace_id=workspace_id,
-                subject_type=subject_type,
-                subject_id=subject_id,
-                job_type=job_type,
-                input_json=input_json,
-                idempotency_key=idempotency_key,
-            )
+            try:
+                job = await self._repository.create_mvp_job(
+                    workspace_id=workspace_id,
+                    subject_type=subject_type,
+                    subject_id=subject_id,
+                    job_type=job_type,
+                    input_json=input_json,
+                    idempotency_key=idempotency_key,
+                )
+            except IntegrityError:
+                await self._session.rollback()
+                job = await self._repository.get_existing_idempotent(
+                    workspace_id, job_type, idempotency_key
+                )
+                created = False
+                if job is None:
+                    raise
         await self._session.commit()
         if created and self._dispatcher is not None:
-            self._dispatcher.dispatch_mvp_job(job.id)
+            await self._dispatch_created_job(job, "mvp")
         return JobResponse.model_validate(job)
 
     async def list_jobs(self, workspace_id: UUID) -> list[JobResponse]:
@@ -77,3 +96,18 @@ class JobService:
         if job is None:
             raise NotFoundError("JOB_NOT_FOUND", "Processing job was not found.")
         return JobResponse.model_validate(job)
+
+    async def _dispatch_created_job(self, job, dispatch_kind: str) -> None:
+        await self._repository.record_dispatch_requested(job)
+        await self._session.commit()
+        try:
+            if dispatch_kind == "process_asset":
+                result = self._dispatcher.dispatch_process_asset(job.id)
+            else:
+                result = self._dispatcher.dispatch_mvp_job(job.id)
+        except Exception as exc:
+            await self._repository.record_dispatch_failed(job, str(exc))
+            await self._session.commit()
+            raise
+        await self._repository.record_dispatch_succeeded(job, result.task_id)
+        await self._session.commit()

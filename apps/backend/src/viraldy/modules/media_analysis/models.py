@@ -30,12 +30,21 @@ class MediaArtifactModel(Base):
     asset_version_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("asset_versions.id"), nullable=False, index=True
     )
+    processing_job_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("processing_jobs.id"), nullable=True, index=True
+    )
+    stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ordinal: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     artifact_type: Mapped[str] = mapped_column(String(100), nullable=False)
     storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload_json: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="media_pipeline_v1"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -57,9 +66,14 @@ class EvidenceItemModel(Base):
     asset_version_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("asset_versions.id"), nullable=False, index=True
     )
+    processing_job_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("processing_jobs.id"), nullable=True, index=True
+    )
+    stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
     analysis_run_type: Mapped[str] = mapped_column(String(100), nullable=False)
     analysis_run_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     evidence_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    identity_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     start_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     end_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     frame_storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -68,4 +82,7 @@ class EvidenceItemModel(Base):
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pipeline_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="media_pipeline_v1"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

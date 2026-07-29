@@ -59,16 +59,22 @@ class Settings(BaseSettings):
     max_media_duration_seconds: int = 180
 
     ai_mode: str = "fixture"
+    ai_provider: str = "openai_compatible"
     ai_base_url: str | None = None
     ai_api_key: SecretStr | None = None
     ai_text_model: str | None = None
     ai_vision_model: str | None = None
     asr_provider: str = "fixture"
+    asr_base_url: str | None = None
+    asr_api_key: SecretStr | None = None
     asr_model: str | None = None
     ocr_provider: str = "fixture"
     ocr_model: str | None = None
+    ai_supports_json_schema: bool = True
+    ai_supports_image_url: bool = True
     ai_request_timeout_seconds: int = 120
     ai_max_retries: int = 2
+    ai_max_output_tokens: int | None = None
 
     sentry_dsn: SecretStr | None = None
     otel_exporter_otlp_endpoint: str | None = None

@@ -26,6 +26,10 @@ class CampaignPackVersionResponse(BaseModel):
     version_number: int
     brief_json: dict[str, object]
     change_note: str | None
+    source_adaptation_run_id: UUID | None = None
+    source_model_run_id: UUID | None = None
+    source_prompt_version: str | None = None
+    source_schema_version: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

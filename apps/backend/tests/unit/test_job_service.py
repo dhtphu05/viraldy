@@ -40,6 +40,7 @@ class FakeJobRepository:
         self.created = False
         self.job_id = uuid4()
         self.existing_job: ProcessingJobModel | None = None
+        self.events: list[str] = []
 
     async def get_existing_idempotent(
         self, workspace_id: UUID, job_type: str, idempotency_key: str | None
@@ -119,6 +120,16 @@ class FakeJobRepository:
             updated_at=now,
         )
 
+    async def record_dispatch_requested(self, job: ProcessingJobModel) -> None:
+        self.events.append(f"dispatch_requested:{job.id}")
+
+    async def record_dispatch_succeeded(self, job: ProcessingJobModel, task_id: str | None) -> None:
+        job.task_id = task_id
+        self.events.append(f"dispatch_succeeded:{task_id}")
+
+    async def record_dispatch_failed(self, job: ProcessingJobModel, message: str) -> None:
+        self.events.append(f"dispatch_failed:{message}")
+
 
 @pytest.mark.asyncio
 async def test_job_service_commits_before_dispatching_process_asset(
@@ -139,8 +150,13 @@ async def test_job_service_commits_before_dispatching_process_asset(
     )
 
     assert repository.created
-    assert session.commits == 1
+    assert session.commits == 3
     assert dispatcher.dispatched == [job.id]
+    assert repository.events == [
+        f"dispatch_requested:{job.id}",
+        "dispatch_succeeded:task-1",
+    ]
+    assert job.task_id == "task-1"
 
 
 @pytest.mark.asyncio

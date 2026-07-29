@@ -24,6 +24,12 @@ class AdaptationRunModel(Base):
     creative_dna_version_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("creative_dna_versions.id"), nullable=False, index=True
     )
+    processing_job_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("processing_jobs.id"), nullable=True, index=True
+    )
+    primary_model_run_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("ai_model_runs.id"), nullable=True, index=True
+    )
     objective: Mapped[str] = mapped_column(String(255), nullable=False)
     target_market: Mapped[str] = mapped_column(String(100), nullable=False)
     target_buyer_json: Mapped[dict[str, object]] = mapped_column(
@@ -31,7 +37,11 @@ class AdaptationRunModel(Base):
     )
     constraints_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     result_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="completed")
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="media_pipeline_v1"
+    )
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(

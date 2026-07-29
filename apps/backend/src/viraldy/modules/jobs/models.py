@@ -61,3 +61,34 @@ class ProcessingJobModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ProcessingJobEventModel(Base):
+    __tablename__ = "processing_job_events"
+    __table_args__ = (
+        Index(
+            "ix_processing_job_events_job_created",
+            "processing_job_id",
+            "created_at",
+        ),
+        Index(
+            "ix_processing_job_events_workspace_created",
+            "workspace_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workspace_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True
+    )
+    processing_job_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("processing_jobs.id"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    progress: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    details_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

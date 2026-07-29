@@ -1,0 +1,11 @@
+CREATIVE_DNA_PROMPT_NAME = "creative_dna_extraction"
+CREATIVE_DNA_PROMPT_VERSION = "creative_dna_extraction_v1"
+ADAPTATION_PROMPT_NAME = "adaptation_generation"
+ADAPTATION_PROMPT_VERSION = "adaptation_generation_v1"
+CAMPAIGN_PACK_PROMPT_NAME = "campaign_pack_generation"
+CAMPAIGN_PACK_PROMPT_VERSION = "campaign_pack_generation_v1"
+REVISION_MESSAGE_PROMPT_NAME = "revision_message"
+REVISION_MESSAGE_PROMPT_VERSION = "revision_message_v1"
+
+MEDIA_ANALYSIS_SCHEMA_VERSION = "media_analysis_contract_v1"
+ADAPTATION_SCHEMA_VERSION = "adaptation_contract_v1"

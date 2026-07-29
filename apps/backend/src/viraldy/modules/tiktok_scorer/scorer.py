@@ -4,18 +4,7 @@ from typing import Any
 
 from viraldy.modules.media_analysis.public import EvidenceItemModel
 from viraldy.modules.tiktok_scorer.repository import RUBRIC_VERSION, RULE_VERSION
-
-WEIGHTS = {
-    "hook_clarity": 0.20,
-    "product_visibility": 0.15,
-    "demo_clarity": 0.15,
-    "proof_strength": 0.10,
-    "creator_authenticity": 0.10,
-    "offer_clarity": 0.10,
-    "cta_readiness": 0.10,
-    "tiktok_native_fit": 0.05,
-    "claim_safety": 0.05,
-}
+from viraldy.modules.tiktok_scorer.rubric import TIKTOK_STRUCTURE_RUBRIC
 
 
 def score_tiktok_structure(evidence: list[EvidenceItemModel]) -> dict[str, Any]:
@@ -23,29 +12,55 @@ def score_tiktok_structure(evidence: list[EvidenceItemModel]) -> dict[str, Any]:
     first_product_ms = _first_product_ms(grouped)
     claim_risk = _max_claim_risk(grouped)
     dimensions = {
-        "hook_clarity": _dimension(
-            85, "Problem-first hook is visible in the opening.", _ids(grouped, "hook_signal")
+        "hook_clarity": _evidence_dimension(
+            85,
+            "Problem-first hook is visible in the opening.",
+            _ids(grouped, "hook_signal"),
+            "No opening hook signal was detected.",
         ),
         "product_visibility": _product_visibility(
             first_product_ms, _ids(grouped, "product_first_appearance")
         ),
-        "demo_clarity": _dimension(
-            78, "Before/after demonstration is understandable.", _ids(grouped, "demo_signal")
+        "demo_clarity": _evidence_dimension(
+            78,
+            "Before/after demonstration is understandable.",
+            _ids(grouped, "demo_signal"),
+            "No product demonstration signal was detected.",
         ),
-        "proof_strength": _dimension(
-            70, "Visual before/after proof is present.", _ids(grouped, "proof_signal")
+        "proof_strength": _evidence_dimension(
+            70,
+            "Visual before/after proof is present.",
+            _ids(grouped, "proof_signal"),
+            "No visual proof signal was detected.",
         ),
-        "creator_authenticity": _dimension(
-            76, "Creator-led review style reads native.", _ids(grouped, "hook_signal")
+        "creator_authenticity": _evidence_dimension(
+            76,
+            "Creator-led review style reads native.",
+            _ids(grouped, "hook_signal"),
+            "No creator-led opening signal was detected.",
         ),
         "offer_clarity": _dimension(45, "No explicit offer is present.", []),
-        "cta_readiness": _dimension(74, "TikTok Shop CTA is present.", _ids(grouped, "cta_signal")),
-        "tiktok_native_fit": _dimension(
-            80, "Vertical demo and native phrasing are present.", _ids(grouped, "on_screen_text")
+        "cta_readiness": _evidence_dimension(
+            74,
+            "TikTok Shop CTA is present.",
+            _ids(grouped, "cta_signal"),
+            "No TikTok Shop CTA signal was detected.",
+        ),
+        "tiktok_native_fit": _evidence_dimension(
+            80,
+            "Vertical demo and native phrasing are present.",
+            _ids(grouped, "on_screen_text"),
+            "No TikTok-native text or visual signal was detected.",
+            missing_score=50,
         ),
         "claim_safety": _claim_safety(claim_risk, _ids(grouped, "claim_signal")),
     }
-    score = round(sum(dimensions[k]["score"] * WEIGHTS[k] for k in WEIGHTS))
+    score = round(
+        sum(
+            dimensions[name]["score"] * weight
+            for name, weight in TIKTOK_STRUCTURE_RUBRIC.weights.items()
+        )
+    )
     blockers = _blockers(first_product_ms, claim_risk, dimensions)
     action = _action(score, blockers)
     fixes = _fixes(first_product_ms, claim_risk, dimensions, blockers)
@@ -71,6 +86,8 @@ def score_tiktok_structure(evidence: list[EvidenceItemModel]) -> dict[str, Any]:
 
 
 def _dimension(score: int, reason: str, evidence_ids: list[str]) -> dict[str, Any]:
+    if score < 0 or score > 100:
+        raise ValueError("Dimension score must be between 0 and 100.")
     return {
         "score": score,
         "confidence": "high",
@@ -80,16 +97,34 @@ def _dimension(score: int, reason: str, evidence_ids: list[str]) -> dict[str, An
     }
 
 
+def _evidence_dimension(
+    score: int,
+    reason: str,
+    evidence_ids: list[str],
+    missing_reason: str,
+    missing_score: int = 35,
+) -> dict[str, Any]:
+    if evidence_ids:
+        return _dimension(score, reason, evidence_ids)
+    result = _dimension(missing_score, missing_reason, [])
+    result["confidence"] = "low"
+    result["signals"] = {"missing_evidence": True}
+    return result
+
+
 def _product_visibility(first_product_ms: int | None, evidence_ids: list[str]) -> dict[str, Any]:
     if first_product_ms is None:
-        return _dimension(0, "The product was not detected.", evidence_ids)
-    if first_product_ms <= 3000:
+        result = _dimension(0, "The product was not detected.", evidence_ids)
+        result["confidence"] = "low"
+        result["signals"] = {"missing_evidence": True}
+        return result
+    if first_product_ms <= TIKTOK_STRUCTURE_RUBRIC.thresholds["early_product_ms"]:
         score = 95
         reason = "The product appears within the first three seconds."
-    elif first_product_ms <= 5000:
+    elif first_product_ms <= TIKTOK_STRUCTURE_RUBRIC.thresholds["acceptable_product_ms"]:
         score = 75
         reason = "The product appears in an acceptable early window."
-    elif first_product_ms <= 8000:
+    elif first_product_ms <= TIKTOK_STRUCTURE_RUBRIC.thresholds["late_product_ms"]:
         score = 45
         reason = f"The product first appears at {first_product_ms / 1000:.1f} seconds."
     else:
@@ -138,11 +173,11 @@ def _blockers(
 def _action(score: int, blockers: list[dict[str, Any]]) -> str:
     if blockers:
         return "reject_or_reshoot"
-    if score < 50:
+    if score < TIKTOK_STRUCTURE_RUBRIC.thresholds["reject"]:
         return "reject_or_reshoot"
-    if score < 70:
+    if score < TIKTOK_STRUCTURE_RUBRIC.thresholds["revise"]:
         return "revise"
-    if score < 85:
+    if score < TIKTOK_STRUCTURE_RUBRIC.thresholds["small_test"]:
         return "organic_ready_or_small_test"
     return "approve_structure"
 
@@ -183,6 +218,16 @@ def _fixes(
                 "instruction": "Add one concrete offer or value cue before the CTA.",
                 "why": "The creative does not make the offer clear.",
                 "evidence_ids": [],
+            }
+        )
+    if dimensions["cta_readiness"]["score"] < 60:
+        fixes.append(
+            {
+                "code": "MISSING_CTA",
+                "priority": len(fixes) + 1,
+                "instruction": "Add a clear TikTok Shop CTA before the final moment.",
+                "why": "The creative does not show a CTA signal.",
+                "evidence_ids": dimensions["cta_readiness"]["evidence_ids"],
             }
         )
     if claim_risk == "medium":

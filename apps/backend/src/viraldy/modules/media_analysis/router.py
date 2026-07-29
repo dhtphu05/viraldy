@@ -8,8 +8,13 @@ from viraldy.api.dependencies.auth import CurrentUserDep, DbSession, require_wor
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
 from viraldy.modules.assets.public import AssetRepository
+from viraldy.modules.media_analysis.evidence_bundle import build_evidence_bundle
 from viraldy.modules.media_analysis.repository import MediaAnalysisRepository
-from viraldy.modules.media_analysis.schemas import EvidenceItemResponse, MediaArtifactResponse
+from viraldy.modules.media_analysis.schemas import (
+    EvidenceItemResponse,
+    MediaAnalysisResponse,
+    MediaArtifactResponse,
+)
 from viraldy.platform.auth.policy import Permission
 from viraldy.shared.errors.base import AppError, NotFoundError
 
@@ -30,23 +35,21 @@ async def get_media_analysis(
     asset = await AssetRepository(db).get(workspace_id, asset_id)
     if asset is None:
         raise NotFoundError("ASSET_NOT_FOUND", "Asset was not found.")
-    version = await AssetRepository(db).get_current_version(asset_id)
+    version = await AssetRepository(db).get_current_version_in_workspace(workspace_id, asset_id)
     if version is None:
         raise AppError("ASSET_VERSION_NOT_FOUND", "Asset version was not found.")
     repository = MediaAnalysisRepository(db)
     artifacts = await repository.list_artifacts(workspace_id, version.id)
     evidence = await repository.list_evidence(workspace_id, version.id)
-    return success(
-        {
-            "asset_version_id": str(version.id),
-            "artifacts": [
-                MediaArtifactResponse.model_validate(artifact).model_dump(mode="json")
-                for artifact in artifacts
-            ],
-            "evidence": [
-                EvidenceItemResponse.model_validate(item).model_dump(mode="json")
-                for item in evidence
-            ],
-        },
-        request_id,
+    response = MediaAnalysisResponse(
+        asset_version_id=version.id,
+        artifacts=[
+            MediaArtifactResponse.model_validate(artifact).model_dump(mode="json")
+            for artifact in artifacts
+        ],
+        evidence=[
+            EvidenceItemResponse.model_validate(item).model_dump(mode="json") for item in evidence
+        ],
+        evidence_bundle=build_evidence_bundle(version.id, evidence),
     )
+    return success(response.model_dump(mode="json"), request_id)

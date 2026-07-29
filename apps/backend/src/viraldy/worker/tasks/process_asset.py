@@ -28,18 +28,18 @@ from viraldy.worker.celery_app import celery_app
 logger = structlog.get_logger(__name__)
 
 
-@celery_app.task(bind=True, autoretry_for=(RuntimeError,), retry_backoff=True, max_retries=3)  # type: ignore[misc]
+@celery_app.task(bind=True, autoretry_for=(RuntimeError,), retry_backoff=True, max_retries=2)  # type: ignore[misc]
 def process_mvp_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
     job_uuid = UUID(job_id)
     session = create_worker_session()
     repo = WorkerJobRepository(session)
     asset_queries = SyncAssetQueries(session)
     try:
-        job = repo.load_job(job_uuid)
+        job = repo.claim_job(job_uuid)
         if job is None:
-            raise RuntimeError("job_not_found")
+            session.commit()
+            return {"ignored": True, "reason": "job_not_claimable"}
         logger.info("processing_job_started", job_id=job_id, workspace_id=str(job.workspace_id))
-        repo.mark_running(job)
         session.commit()
         output = _execute_job(job, repo, asset_queries, session)
         repo.mark_completed(job, output)
@@ -57,9 +57,13 @@ def process_mvp_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-
     except Exception as exc:
         session.rollback()
         job = repo.load_job(job_uuid)
-        if job is not None and job.attempt_count >= job.max_attempts:
-            repo.mark_failed(job, "PROCESS_ASSET_FAILED", "Asset processing failed.")
-            session.commit()
+        if job is not None:
+            if job.attempt_count >= job.max_attempts:
+                repo.mark_failed(job, "PROCESS_ASSET_FAILED", "Asset processing failed.")
+                session.commit()
+            else:
+                repo.mark_retrying(job, "PROCESS_ASSET_RETRY", "Asset processing retry scheduled.")
+                session.commit()
         logger.exception("processing_job_failed", job_id=job_id)
         raise self.retry(exc=exc) from exc
     finally:
@@ -82,8 +86,8 @@ def _execute_job(
             raise RuntimeError("asset_version_not_found")
         repo.update_progress(job, 40, "probing_media")
         session.commit()
-        evidence = SyncMediaEvidencePipeline(session, get_settings()).process(
-            loaded, "process_asset"
+        pipeline_result = SyncMediaEvidencePipeline(session, get_settings()).process_with_metadata(
+            loaded, "process_asset", job.id
         )
         repo.update_progress(job, 90, "persisting_results")
         session.commit()
@@ -91,7 +95,10 @@ def _execute_job(
             "processor": "media-evidence-pipeline",
             "asset_id": str(asset_id),
             "asset_version_id": str(asset_version_id),
-            "evidence_count": len(evidence),
+            "evidence_count": len(pipeline_result.evidence),
+            "primary_model_run_id": str(pipeline_result.primary_model_run_id)
+            if pipeline_result.primary_model_run_id
+            else None,
             "analysis_mode": get_settings().ai_mode,
         }
     if job.job_type == "analyze_reference":
@@ -117,21 +124,27 @@ def _process_media(
         raise RuntimeError("asset_version_not_found")
     repo.update_progress(job, 35, "probing_media")
     session.commit()
-    evidence = SyncMediaEvidencePipeline(session, get_settings()).process(loaded, run_type)
+    pipeline_result = SyncMediaEvidencePipeline(session, get_settings()).process_with_metadata(
+        loaded, run_type, job.id
+    )
     repo.update_progress(job, 60, "extracting_visual_evidence")
     session.commit()
-    return loaded, evidence
+    return loaded, pipeline_result.evidence, pipeline_result.primary_model_run_id
 
 
 def _analyze_reference(
     job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
 ) -> dict[str, object]:
-    loaded, evidence = _process_media(job, repo, asset_queries, session, "analyze_reference")
+    loaded, evidence, primary_model_run_id = _process_media(
+        job, repo, asset_queries, session, "analyze_reference"
+    )
     reference_id = UUID(str(job.input_json["reference_id"]))
     repo.update_progress(job, 72, "building_creative_dna")
     dna = SyncCreativeDnaBuilder(session).build(
         job.workspace_id, loaded.asset_version_id, reference_id, evidence, get_settings().ai_mode
     )
+    dna.processing_job_id = job.id
+    dna.primary_model_run_id = primary_model_run_id
     reference = SyncReferenceRepository(session).get(job.workspace_id, reference_id)
     if reference is not None:
         reference.status = "analyzed"
@@ -149,7 +162,9 @@ def _analyze_reference(
 def _score_tiktok_asset(
     job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
 ) -> dict[str, object]:
-    loaded, evidence = _process_media(job, repo, asset_queries, session, "score_tiktok_asset")
+    loaded, evidence, primary_model_run_id = _process_media(
+        job, repo, asset_queries, session, "score_tiktok_asset"
+    )
     score_run_id = UUID(str(job.input_json["score_run_id"]))
     repo.update_progress(job, 70, "calculating_score")
     dna = SyncCreativeDnaBuilder(session).build(
@@ -162,6 +177,9 @@ def _score_tiktok_asset(
     SyncTikTokScoreRepository(session).complete(
         run, dna.id, result, "fixture_scoring_v1" if get_settings().ai_mode == "fixture" else None
     )
+    run.processing_job_id = job.id
+    run.primary_model_run_id = primary_model_run_id
+    dna.primary_model_run_id = primary_model_run_id
     _record_recommendation(
         session,
         job.workspace_id,
@@ -184,7 +202,9 @@ def _score_tiktok_asset(
 def _run_ugc_preflight(
     job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
 ) -> dict[str, object]:
-    loaded, evidence = _process_media(job, repo, asset_queries, session, "run_ugc_preflight")
+    loaded, evidence, primary_model_run_id = _process_media(
+        job, repo, asset_queries, session, "run_ugc_preflight"
+    )
     preflight_run_id = UUID(str(job.input_json["preflight_run_id"]))
     pack_version_id = UUID(str(job.input_json["campaign_pack_version_id"]))
     repo.update_progress(job, 65, "calculating_score")
@@ -205,6 +225,9 @@ def _run_ugc_preflight(
         rubric_version=RUBRIC_VERSION,
         rule_version=RULE_VERSION,
         model_version="fixture_scoring_v1" if get_settings().ai_mode == "fixture" else None,
+        processing_job_id=job.id,
+        primary_model_run_id=primary_model_run_id,
+        pipeline_version="media_pipeline_v1",
     )
     session.add(structural_run)
     session.flush()
@@ -225,6 +248,8 @@ def _run_ugc_preflight(
         structural_run.id,
         "fixture_preflight_v1" if get_settings().ai_mode == "fixture" else None,
     )
+    run.processing_job_id = job.id
+    run.primary_model_run_id = primary_model_run_id
     _record_recommendation(
         session,
         job.workspace_id,
