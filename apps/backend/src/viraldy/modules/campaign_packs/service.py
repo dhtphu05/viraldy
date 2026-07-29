@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.adaptations.public import AdaptationRepository
+from viraldy.modules.ai_gateway.public import ADAPTATION_SCHEMA_VERSION
 from viraldy.modules.campaign_packs.repository import CampaignPackRepository
 from viraldy.modules.campaign_packs.schemas import (
     CampaignPackResponse,
@@ -45,8 +46,13 @@ class CampaignPackService:
                 adaptation.target_buyer_json,
                 concept,
             ),
+            adaptation.primary_model_run_id,
+            adaptation.prompt_version,
+            ADAPTATION_SCHEMA_VERSION,
         )
         await self._session.commit()
+        await self._session.refresh(pack)
+        await self._session.refresh(version)
         return _pack_response(pack, version)
 
     async def list(self, workspace_id: UUID) -> list[CampaignPackResponse]:
@@ -84,6 +90,7 @@ class CampaignPackService:
         if data.status is not None:
             pack.status = data.status
         await self._session.commit()
+        await self._session.refresh(pack)
         version = (
             await self._repository.get_version(pack.current_version_id)
             if pack.current_version_id
@@ -105,6 +112,7 @@ class CampaignPackService:
             pack, user_id, data.brief_json, data.change_note
         )
         await self._session.commit()
+        await self._session.refresh(version)
         return CampaignPackVersionResponse.model_validate(version)
 
     async def list_versions(

@@ -35,7 +35,9 @@ class PreflightService:
         asset = await self._assets.get(workspace_id, data.ugc_asset_id)
         if asset is None:
             raise NotFoundError("ASSET_NOT_FOUND", "UGC asset was not found.")
-        version = await self._assets.get_current_version(data.ugc_asset_id)
+        version = await self._assets.get_current_version_in_workspace(
+            workspace_id, data.ugc_asset_id
+        )
         if version is None:
             raise AppError("ASSET_VERSION_NOT_FOUND", "Asset version was not found.")
         pack_version = await self._packs.get_version_in_workspace(
@@ -76,6 +78,14 @@ class PreflightService:
             },
             idempotency_key,
         )
+        if job.subject_id != run.id:
+            existing_run = await self._repository.get(workspace_id, job.subject_id)
+            if existing_run is None:
+                raise AppError(
+                    "IDEMPOTENT_PREFLIGHT_RUN_NOT_FOUND",
+                    "Existing idempotent preflight run was not found.",
+                )
+            run = existing_run
         return CreatePreflightRunResponse(
             preflight_run=PreflightRunResponse.model_validate(run),
             job=job,

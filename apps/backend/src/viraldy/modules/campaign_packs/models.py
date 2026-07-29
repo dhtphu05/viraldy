@@ -25,7 +25,9 @@ class CampaignPackModel(Base):
         PgUUID(as_uuid=True), ForeignKey("adaptation_runs.id"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
-    current_version_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
+    current_version_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("campaign_pack_versions.id"), nullable=True
+    )
     created_by_user_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
@@ -51,6 +53,14 @@ class CampaignPackVersionModel(Base):
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     brief_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     change_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_adaptation_run_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("adaptation_runs.id"), nullable=True, index=True
+    )
+    source_model_run_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("ai_model_runs.id"), nullable=True, index=True
+    )
+    source_prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_schema_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

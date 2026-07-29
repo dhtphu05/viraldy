@@ -25,6 +25,12 @@ class TikTokScoreRunModel(Base):
     creative_dna_version_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("creative_dna_versions.id"), nullable=True
     )
+    processing_job_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("processing_jobs.id"), nullable=True, index=True
+    )
+    primary_model_run_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("ai_model_runs.id"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     structural_score: Mapped[Decimal] = mapped_column(Numeric, nullable=False, default=0)
     confidence: Mapped[str] = mapped_column(String(50), nullable=False, default="low")
@@ -37,6 +43,9 @@ class TikTokScoreRunModel(Base):
     fixes_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     evidence_ids_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="media_pipeline_v1"
+    )
     rubric_version: Mapped[str] = mapped_column(String(100), nullable=False)
     rule_version: Mapped[str] = mapped_column(String(100), nullable=False)
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)

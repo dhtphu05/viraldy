@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,10 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from viraldy.modules.adaptations.provider import LiveAdaptationProvider
 from viraldy.modules.adaptations.repository import AdaptationRepository
 from viraldy.modules.adaptations.schemas import AdaptationRunResponse, CreateAdaptationRequest
+from viraldy.modules.ai_gateway.public import (
+    ADAPTATION_PROMPT_VERSION,
+    ADAPTATION_SCHEMA_VERSION,
+    AiModelRunRepository,
+)
 from viraldy.modules.creative_dna.public import CreativeDnaRepository
 from viraldy.modules.products.public import ProductQueries
 from viraldy.platform.config.settings import Settings
-from viraldy.shared.errors.base import NotFoundError
+from viraldy.shared.errors.base import AppError, NotFoundError
 
 
 class AdaptationService:
@@ -33,10 +40,44 @@ class AdaptationService:
         dna = await self._dna.get(workspace_id, data.creative_dna_version_id)
         if dna is None:
             raise NotFoundError("CREATIVE_DNA_NOT_FOUND", "Creative DNA version was not found.")
-        if self._settings.ai_mode == "live":
-            result = (
-                LiveAdaptationProvider(self._settings)
-                .generate(
+        if self._settings.ai_mode != "fixture":
+            run = await self._repository.create(
+                workspace_id,
+                user_id,
+                data.product_id,
+                data.creative_dna_version_id,
+                data.objective,
+                data.target_market,
+                data.target_buyer,
+                data.constraints,
+                {},
+                self._settings.ai_mode,
+                self._settings.ai_text_model,
+                status="processing",
+            )
+            model_repo = AiModelRunRepository(self._session)
+            input_summary = {
+                "product_id": str(product.id),
+                "creative_dna_version_id": str(dna.id),
+                "objective": data.objective,
+                "target_market": data.target_market,
+            }
+            model_run = await model_repo.create_running(
+                workspace_id=workspace_id,
+                processing_job_id=None,
+                subject_type="adaptation_run",
+                subject_id=run.id,
+                capability="generate_adaptation",
+                analysis_mode=self._settings.ai_mode,
+                provider=self._settings.ai_provider,
+                model=str(self._settings.ai_text_model),
+                prompt_version=ADAPTATION_PROMPT_VERSION,
+                response_schema_version=ADAPTATION_SCHEMA_VERSION,
+                request_hash=_hash_json(input_summary),
+                input_summary=input_summary,
+            )
+            try:
+                output = LiveAdaptationProvider(self._settings).generate(
                     product={"id": str(product.id), "name": product.name, "status": product.status},
                     dna_json=dna.dna_json,
                     objective=data.objective,
@@ -44,8 +85,25 @@ class AdaptationService:
                     target_buyer=data.target_buyer,
                     constraints=data.constraints,
                 )
-                .model_dump(mode="json")
+            except AppError as exc:
+                run.status = "failed"
+                run.primary_model_run_id = model_run.id
+                await model_repo.fail(model_run, exc.code, exc.message)
+                await self._session.commit()
+                raise
+            result = output.model_dump(mode="json")
+            run.result_json = result
+            run.status = "completed"
+            run.primary_model_run_id = model_run.id
+            await model_repo.complete(
+                model_run,
+                {"concept_count": len(output.concepts)},
+                http_status=None,
+                provider_request_id=None,
+                latency_ms=None,
             )
+            await self._session.commit()
+            return AdaptationRunResponse.model_validate(run)
         else:
             result = _fixture_adaptation(product.name, dna.dna_json, data.target_buyer)
         run = await self._repository.create(
@@ -179,3 +237,8 @@ def _fixture_adaptation(
             },
         ],
     }
+
+
+def _hash_json(value: object) -> str:
+    payload = json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()

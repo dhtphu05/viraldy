@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from viraldy.modules.ai_gateway.public import OpenAICompatibleClient, extract_message_json
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
@@ -46,6 +46,7 @@ class AdaptationOutput(BaseModel):
 class LiveAdaptationProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._client = OpenAICompatibleClient(settings)
 
     def generate(
         self,
@@ -56,50 +57,43 @@ class LiveAdaptationProvider:
         target_buyer: dict[str, object],
         constraints: dict[str, object],
     ) -> AdaptationOutput:
-        if (
-            not self._settings.ai_base_url
-            or not self._settings.ai_api_key
-            or not self._settings.ai_text_model
-        ):
+        if not self._settings.ai_base_url or not self._settings.ai_text_model:
             raise AppError(
                 "AI_PROVIDER_NOT_CONFIGURED",
-                "Live adaptation requires AI_BASE_URL, AI_API_KEY, and AI_TEXT_MODEL.",
+                "Provider adaptation requires AI_BASE_URL and AI_TEXT_MODEL.",
                 status_code=503,
             )
-        import httpx
-
-        response = httpx.post(
-            f"{self._settings.ai_base_url.rstrip('/')}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self._settings.ai_api_key.get_secret_value()}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self._settings.ai_text_model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            "Adapt this Creative DNA to the product without copying the original. "
-                            "Return only JSON with keep, change, avoid, and exactly three "
-                            "differentiated concepts. Each concept must differ on persona, pain, "
-                            "mechanism, proof, creator style, or offer framing. "
-                            "Do not predict virality, sales, or GMV.\n"
-                            f"Product: {product}\n"
-                            f"Creative DNA: {dna_json}\n"
-                            f"Objective: {objective}\n"
-                            f"Target market: {target_market}\n"
-                            f"Target buyer: {target_buyer}\n"
-                            f"Constraints: {constraints}"
-                        ),
-                    }
-                ],
-                "response_format": {"type": "json_object"},
-            },
-            timeout=self._settings.ai_request_timeout_seconds,
-        )
-        response.raise_for_status()
-        raw = json.loads(response.json()["choices"][0]["message"]["content"])
+        if self._settings.ai_mode == "live" and not self._settings.ai_api_key:
+            raise AppError(
+                "AI_PROVIDER_NOT_CONFIGURED",
+                "Live adaptation requires AI_API_KEY.",
+                status_code=503,
+            )
+        payload: dict[str, Any] = {
+            "model": self._settings.ai_text_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Adapt this Creative DNA to the product without copying the original. "
+                        "Return only JSON with keep, change, avoid, and exactly three "
+                        "differentiated concepts. Each concept must differ on persona, pain, "
+                        "mechanism, proof, creator style, or offer framing. "
+                        "Do not predict virality, sales, or GMV.\n"
+                        f"Product: {product}\n"
+                        f"Creative DNA: {dna_json}\n"
+                        f"Objective: {objective}\n"
+                        f"Target market: {target_market}\n"
+                        f"Target buyer: {target_buyer}\n"
+                        f"Constraints: {constraints}"
+                    ),
+                }
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        if self._settings.ai_max_output_tokens is not None:
+            payload["max_tokens"] = self._settings.ai_max_output_tokens
+        raw = extract_message_json(self._client.chat_json(payload))
         return _validate(raw)
 
 

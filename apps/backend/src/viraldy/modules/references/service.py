@@ -51,6 +51,7 @@ class ReferenceService:
             data.notes,
         )
         await self._session.commit()
+        await self._session.refresh(reference)
         return ReferenceResponse.model_validate(reference)
 
     async def list(self, workspace_id: UUID) -> list[ReferenceResponse]:
@@ -80,10 +81,12 @@ class ReferenceService:
                 reference=ReferenceResponse.model_validate(reference),
                 job=existing_job,
             )
-        version = await self._assets.get_current_version(reference.asset_id)
+        version = await self._assets.get_current_version_in_workspace(
+            workspace_id, reference.asset_id
+        )
         if version is None:
             raise AppError("ASSET_VERSION_NOT_FOUND", "Asset version was not found.")
-        await self._repository.set_status(reference, "processing")
+        await self._repository.set_status(reference, "analyzing")
         job = await request_mvp_job(
             self._session,
             workspace_id,
@@ -97,6 +100,7 @@ class ReferenceService:
             },
             idempotency_key,
         )
+        await self._session.refresh(reference)
         return AnalyzeReferenceResponse(
             reference=ReferenceResponse.model_validate(reference), job=job
         )

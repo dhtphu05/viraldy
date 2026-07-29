@@ -25,7 +25,9 @@ class AdaptationRunResponse(BaseModel):
     target_buyer_json: dict[str, object]
     constraints_json: dict[str, object]
     result_json: dict[str, object]
+    status: str
     analysis_mode: str
+    primary_model_run_id: UUID | None = None
     model_version: str | None
     prompt_version: str
     created_at: datetime
