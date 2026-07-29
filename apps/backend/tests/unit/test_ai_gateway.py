@@ -62,7 +62,7 @@ def test_mock_provider_missing_field_breaks_adaptation_contract(
         adaptation_provider_module._validate(json.loads(content))
 
     assert exc_info.value.code == "ADAPTATION_OUTPUT_INVALID"
-    assert "keep" not in content
+    assert "concepts" not in content
 
 
 def test_gateway_maps_rate_limit_server_error_invalid_json_and_timeout(

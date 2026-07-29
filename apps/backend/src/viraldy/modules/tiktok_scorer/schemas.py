@@ -20,6 +20,7 @@ class TikTokScoreRunResponse(BaseModel):
     asset_version_id: UUID
     creative_dna_version_id: UUID | None
     status: str
+    schema_version: str
     structural_score: float
     confidence: str
     action_label: str

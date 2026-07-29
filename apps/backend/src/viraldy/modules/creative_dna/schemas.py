@@ -13,6 +13,7 @@ class CreativeDnaVersionResponse(BaseModel):
     asset_version_id: UUID
     version_number: int
     status: str
+    schema_version: str
     dna_json: dict[str, object]
     confidence: str
     analysis_mode: str

@@ -18,6 +18,7 @@ class RecommendationResponse(BaseModel):
     assumptions_json: list[object]
     model_version: str | None
     rule_version: str | None
+    payload_schema_version: str | None = None
     source_run_id: UUID | None
 
     model_config = {"from_attributes": True}

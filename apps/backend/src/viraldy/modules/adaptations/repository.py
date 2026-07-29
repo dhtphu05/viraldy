@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.adaptations.models import AdaptationRunModel
 from viraldy.modules.ai_gateway.public import ADAPTATION_PROMPT_VERSION
+from viraldy.modules.creative_domain.schema_versions import ADAPTATION_SCHEMA_VERSION
 
 
 class AdaptationRepository:
@@ -29,6 +30,7 @@ class AdaptationRepository:
         model_version: str | None,
         status: str = "completed",
         primary_model_run_id: UUID | None = None,
+        product_snapshot_json: dict[str, object] | None = None,
     ) -> AdaptationRunModel:
         run = AdaptationRunModel(
             workspace_id=workspace_id,
@@ -40,6 +42,11 @@ class AdaptationRepository:
             constraints_json=constraints,
             result_json=result,
             status=status,
+            schema_version=ADAPTATION_SCHEMA_VERSION,
+            product_snapshot_json=product_snapshot_json,
+            product_context_schema_version=product_snapshot_json.get("schema_version")
+            if product_snapshot_json
+            else None,
             analysis_mode=analysis_mode,
             primary_model_run_id=primary_model_run_id,
             model_version=model_version,

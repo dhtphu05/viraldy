@@ -5,12 +5,17 @@ from uuid import UUID
 import structlog
 
 from viraldy.modules.assets.public import SyncAssetQueries
-from viraldy.modules.campaign_packs.repository import SyncCampaignPackRepository
+from viraldy.modules.campaign_packs.public import SyncCampaignPackRepository
 from viraldy.modules.creative_dna.service import SyncCreativeDnaBuilder
+from viraldy.modules.creative_domain.schema_versions import TIKTOK_SCORE_SCHEMA_VERSION
 from viraldy.modules.jobs.repository import WorkerJobRepository
 from viraldy.modules.media_analysis.service import SyncMediaEvidencePipeline
 from viraldy.modules.preflight.repository import SyncPreflightRepository
 from viraldy.modules.preflight.service import calculate_preflight_result
+from viraldy.modules.recommendations.contracts import (
+    RecommendationEvidenceV2,
+    RecommendationPayloadV2,
+)
 from viraldy.modules.recommendations.models import RecommendationModel
 from viraldy.modules.references.repository import SyncReferenceRepository
 from viraldy.modules.tiktok_scorer.models import TikTokScoreRunModel
@@ -213,6 +218,7 @@ def _run_ugc_preflight(
         workspace_id=job.workspace_id,
         asset_version_id=loaded.asset_version_id,
         status="completed",
+        schema_version=TIKTOK_SCORE_SCHEMA_VERSION,
         structural_score=structural_result["structural_score"],
         confidence=structural_result["confidence"],
         action_label=structural_result["action"],
@@ -238,7 +244,11 @@ def _run_ugc_preflight(
     if pack_row is None:
         raise RuntimeError("campaign_pack_version_not_found")
     pack_version, _ = pack_row
-    result = calculate_preflight_result(structural_result, pack_version.brief_json)
+    result = calculate_preflight_result(
+        structural_result,
+        pack_version.brief_json,
+        pack_version.compiled_requirements_json,
+    )
     run = SyncPreflightRepository(session).get(job.workspace_id, preflight_run_id)
     if run is None:
         raise RuntimeError("preflight_run_not_found")
@@ -247,6 +257,9 @@ def _run_ugc_preflight(
         result,
         structural_run.id,
         "fixture_preflight_v1" if get_settings().ai_mode == "fixture" else None,
+        pack_version.product_snapshot_json,
+        _product_context_schema_version(pack_version.product_snapshot_json),
+        pack_version.compiled_requirements_json,
     )
     run.processing_job_id = job.id
     run.primary_model_run_id = primary_model_run_id
@@ -277,24 +290,44 @@ def _record_recommendation(
     recommendation_type: str,
     result: dict[str, object],
 ) -> None:
+    payload = RecommendationPayloadV2(
+        subject_type=subject_type,
+        subject_id=subject_id,
+        recommendation_type=recommendation_type,
+        action=str(result["action"]),
+        confidence=str(result["confidence"]),
+        reasoning=str(result.get("summary") or f"Action: {result['action']}"),
+        evidence=RecommendationEvidenceV2(
+            evidence_ids=result.get("evidence_ids", []),
+            blockers=result.get("blockers", []),
+            fixes=result.get("fixes", []),
+        ),
+        rule_version=str(result["rule_version"]),
+        source_run_id=subject_id,
+    )
     session.add(
         RecommendationModel(
             workspace_id=workspace_id,
-            subject_type=subject_type,
-            subject_id=subject_id,
-            recommendation_type=recommendation_type,
-            action=str(result["action"]),
-            confidence=str(result["confidence"]),
-            reasoning=str(result.get("summary") or f"Action: {result['action']}"),
-            evidence_json={
-                "evidence_ids": result.get("evidence_ids", []),
-                "blockers": result.get("blockers", []),
-            },
-            assumptions_json=[],
+            subject_type=payload.subject_type,
+            subject_id=payload.subject_id,
+            recommendation_type=payload.recommendation_type,
+            action=payload.action,
+            confidence=payload.confidence,
+            reasoning=payload.reasoning,
+            evidence_json=payload.evidence.model_dump(mode="json"),
+            assumptions_json=payload.assumptions,
             model_version="fixture_recommendation_v1"
             if get_settings().ai_mode == "fixture"
             else None,
-            rule_version=str(result["rule_version"]),
-            source_run_id=subject_id,
+            rule_version=payload.rule_version,
+            payload_schema_version=payload.schema_version,
+            source_run_id=payload.source_run_id,
         )
     )
+
+
+def _product_context_schema_version(product_snapshot_json: dict[str, object] | None) -> str | None:
+    if not product_snapshot_json:
+        return None
+    schema_version = product_snapshot_json.get("schema_version")
+    return str(schema_version) if schema_version else None

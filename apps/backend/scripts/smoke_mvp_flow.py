@@ -144,6 +144,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=90)
     parser.add_argument("--run-id", default=os.getenv("SMOKE_RUN_ID"))
     parser.add_argument("--verify-db", action="store_true")
+    parser.add_argument("--product-name", default=os.getenv("SMOKE_PRODUCT_NAME"))
+    parser.add_argument(
+        "--reference-fixture-id",
+        default=os.getenv("SMOKE_REFERENCE_FIXTURE_ID", "viraldy-demo-reference-v1"),
+    )
+    parser.add_argument(
+        "--quick-fixture-id",
+        default=os.getenv("SMOKE_QUICK_FIXTURE_ID", "viraldy-demo-quick-v1"),
+    )
+    parser.add_argument(
+        "--ugc-fixture-id",
+        default=os.getenv("SMOKE_UGC_FIXTURE_ID", "viraldy-demo-ugc-fixable-v1"),
+    )
     return parser.parse_args()
 
 
@@ -157,13 +170,17 @@ def load_context(
     references = client.get(f"/workspaces/{workspace_id}/references")
     boards = client.get(f"/workspaces/{workspace_id}/reference-boards")
 
-    product = first(products, "product")
+    product = (
+        find_product(products, args.product_name)
+        if args.product_name
+        else first(products, "product")
+    )
     board = first(boards, "reference board")
     if args.expect_mode == "fixture":
-        reference_asset_id = find_fixture_asset(assets, "viraldy-demo-reference-v1")
+        reference_asset_id = find_fixture_asset(assets, args.reference_fixture_id)
         reference = find_reference_for_asset(references, reference_asset_id)
-        quick_asset_id = find_fixture_asset(assets, "viraldy-demo-quick-v1")
-        ugc_asset_id = find_fixture_asset(assets, "viraldy-demo-ugc-fixable-v1")
+        quick_asset_id = find_fixture_asset(assets, args.quick_fixture_id)
+        ugc_asset_id = find_fixture_asset(assets, args.ugc_fixture_id)
     else:
         if media_path is None:
             raise SmokeFailure("Mock/live smoke requires a media file to upload.")
@@ -307,7 +324,7 @@ def run_adaptation(
                 "pain": "limited counter space",
                 "desired_outcome": "faster organization",
             },
-            "constraints": {"avoid": ["exact script copy", "unsupported claims"]},
+            "constraints": {"must_avoid": ["exact script copy", "unsupported claims"]},
         },
     )
     assert_equal(adaptation["analysis_mode"], args.expect_mode, "Adaptation mode")
@@ -334,7 +351,7 @@ def run_pack_version(
 ) -> str:
     created = client.post(
         f"/workspaces/{ctx.workspace_id}/campaign-packs/{pack_id}/versions",
-        {"brief_json": current_version["brief_json"], "change_note": "Smoke edited version"},
+        {"brief": current_version["brief_json"], "change_note": "Smoke edited version"},
     )
     versions = client.get(f"/workspaces/{ctx.workspace_id}/campaign-packs/{pack_id}/versions")
     if len(versions) < 2:
@@ -422,6 +439,13 @@ def find_fixture_asset(assets: list[dict[str, Any]], fixture_id: str) -> str:
         if (asset.get("metadata_json") or {}).get("fixture_id") == fixture_id:
             return asset["id"]
     raise SmokeFailure(f"Missing seeded fixture asset: {fixture_id}")
+
+
+def find_product(products: list[dict[str, Any]], product_name: str) -> dict[str, Any]:
+    for product in products:
+        if product.get("name") == product_name:
+            return product
+    raise SmokeFailure(f"Missing seeded product: {product_name}")
 
 
 def find_reference_for_asset(references: list[dict[str, Any]], asset_id: str) -> dict[str, Any]:

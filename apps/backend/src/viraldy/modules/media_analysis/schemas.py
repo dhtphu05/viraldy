@@ -34,6 +34,8 @@ class EvidenceItemResponse(BaseModel):
     analysis_run_type: str
     analysis_run_id: UUID | None
     evidence_type: str
+    evidence_schema_version: str
+    observation_id: str | None
     stage: str | None = None
     identity_hash: str | None = None
     start_ms: int | None

@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from viraldy.modules.creative_domain.schema_versions import (
+    TIKTOK_RUBRIC_VERSION,
+    TIKTOK_RULE_VERSION,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TikTokStructureRubric:
@@ -24,8 +29,8 @@ class TikTokStructureRubric:
 
 
 TIKTOK_STRUCTURE_RUBRIC = TikTokStructureRubric(
-    version="tiktok_structure_rubric_v1",
-    rule_version="tiktok_structure_rules_v1",
+    version=TIKTOK_RUBRIC_VERSION,
+    rule_version=TIKTOK_RULE_VERSION,
     weights={
         "hook_clarity": 0.20,
         "product_visibility": 0.15,

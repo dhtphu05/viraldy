@@ -26,6 +26,9 @@ class AdaptationRunResponse(BaseModel):
     constraints_json: dict[str, object]
     result_json: dict[str, object]
     status: str
+    schema_version: str
+    product_snapshot_json: dict[str, object] | None = None
+    product_context_schema_version: str | None = None
     analysis_mode: str
     primary_model_run_id: UUID | None = None
     model_version: str | None

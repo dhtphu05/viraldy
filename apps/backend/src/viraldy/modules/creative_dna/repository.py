@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
+from viraldy.modules.creative_domain.schema_versions import CREATIVE_DNA_SCHEMA_VERSION
 
 
 class CreativeDnaRepository:
@@ -89,6 +90,7 @@ class SyncCreativeDnaRepository:
             asset_version_id=asset_version_id,
             version_number=next_version,
             status="completed",
+            schema_version=CREATIVE_DNA_SCHEMA_VERSION,
             dna_json=dna_json,
             confidence=confidence,
             analysis_mode=analysis_mode,

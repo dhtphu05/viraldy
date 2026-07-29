@@ -22,6 +22,8 @@ class ProductRepository:
         external_source: str | None,
         external_id: str | None,
         metadata_json: dict[str, object],
+        product_context_json: dict[str, object],
+        context_schema_version: str,
         created_by_user_id: UUID,
     ) -> ProductModel:
         product = ProductModel(
@@ -33,6 +35,8 @@ class ProductRepository:
             external_source=external_source,
             external_id=external_id,
             metadata_json=metadata_json,
+            product_context_json=product_context_json,
+            context_schema_version=context_schema_version,
             created_by_user_id=created_by_user_id,
         )
         self._session.add(product)

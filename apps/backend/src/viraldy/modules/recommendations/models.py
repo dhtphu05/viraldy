@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from viraldy.modules.creative_domain.schema_versions import RECOMMENDATION_SCHEMA_VERSION
 from viraldy.platform.database.base import Base
 
 
@@ -29,6 +30,9 @@ class RecommendationModel(Base):
     assumptions_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     rule_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    payload_schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default=RECOMMENDATION_SCHEMA_VERSION
+    )
     source_run_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

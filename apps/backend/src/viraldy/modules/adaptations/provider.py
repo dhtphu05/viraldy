@@ -2,45 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import ValidationError
 
+from viraldy.modules.adaptations.contracts import AdaptationOutputV2
 from viraldy.modules.ai_gateway.public import OpenAICompatibleClient, extract_message_json
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
-
-
-class AdaptationGuidanceItem(BaseModel):
-    element: str
-    reason: str
-    evidence_ids: list[str] = Field(default_factory=list)
-
-
-class AdaptationConcept(BaseModel):
-    id: str
-    name: str
-    angle: str
-    buyer_persona: str
-    creator_persona: str
-    hook: str
-    opening_visual: str
-    demo_sequence: list[str] = Field(min_length=3)
-    proof: str
-    cta: str
-    risks: list[dict[str, object]] = Field(default_factory=list)
-    test_hypothesis: str
-
-
-class AdaptationOutput(BaseModel):
-    keep: list[AdaptationGuidanceItem]
-    change: list[AdaptationGuidanceItem]
-    avoid: list[AdaptationGuidanceItem]
-    concepts: list[AdaptationConcept]
-
-    @model_validator(mode="after")
-    def validate_concept_count(self) -> AdaptationOutput:
-        if len(self.concepts) != 3:
-            raise ValueError("Adaptation output must include exactly three concepts.")
-        return self
 
 
 class LiveAdaptationProvider:
@@ -56,7 +23,7 @@ class LiveAdaptationProvider:
         target_market: str,
         target_buyer: dict[str, object],
         constraints: dict[str, object],
-    ) -> AdaptationOutput:
+    ) -> AdaptationOutputV2:
         if not self._settings.ai_base_url or not self._settings.ai_text_model:
             raise AppError(
                 "AI_PROVIDER_NOT_CONFIGURED",
@@ -76,9 +43,12 @@ class LiveAdaptationProvider:
                     "role": "user",
                     "content": (
                         "Adapt this Creative DNA to the product without copying the original. "
-                        "Return only JSON with keep, change, avoid, and exactly three "
-                        "differentiated concepts. Each concept must differ on persona, pain, "
-                        "mechanism, proof, creator style, or offer framing. "
+                        "Return only JSON matching AdaptationOutputV2. Include schema_version "
+                        "adaptation_v2, guidance, exactly three differentiated concepts, and "
+                        "uncertainties. Each concept must differ on at least two axes across "
+                        "buyer persona/pain, angle, creator style, demo mechanism, proof "
+                        "mechanism, offer framing, or opening mechanism. Use only supplied "
+                        "Creative DNA evidence IDs when setting source_evidence_ids. "
                         "Do not predict virality, sales, or GMV.\n"
                         f"Product: {product}\n"
                         f"Creative DNA: {dna_json}\n"
@@ -89,7 +59,7 @@ class LiveAdaptationProvider:
                     ),
                 }
             ],
-            "response_format": {"type": "json_object"},
+            "response_format": _response_format(self._settings),
         }
         if self._settings.ai_max_output_tokens is not None:
             payload["max_tokens"] = self._settings.ai_max_output_tokens
@@ -97,12 +67,25 @@ class LiveAdaptationProvider:
         return _validate(raw)
 
 
-def _validate(payload: dict[str, Any]) -> AdaptationOutput:
+def _validate(payload: dict[str, Any]) -> AdaptationOutputV2:
     try:
-        return AdaptationOutput.model_validate(payload)
+        return AdaptationOutputV2.model_validate(payload)
     except ValidationError as exc:
         raise AppError(
             "ADAPTATION_OUTPUT_INVALID",
             "Live provider returned invalid adaptation output.",
             details={"errors": exc.errors()},
         ) from exc
+
+
+def _response_format(settings: Settings) -> dict[str, object]:
+    if not settings.ai_supports_json_schema:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "AdaptationOutputV2",
+            "schema": AdaptationOutputV2.model_json_schema(),
+            "strict": True,
+        },
+    }

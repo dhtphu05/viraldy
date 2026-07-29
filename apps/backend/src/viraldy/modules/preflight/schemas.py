@@ -20,6 +20,7 @@ class PreflightRunResponse(BaseModel):
     campaign_pack_version_id: UUID
     structural_score_run_id: UUID | None
     status: str
+    schema_version: str
     structural_score: float
     brief_alignment_score: float
     preflight_score: float
@@ -32,6 +33,9 @@ class PreflightRunResponse(BaseModel):
     fixes_json: list[object]
     revision_message: str
     evidence_ids_json: list[object]
+    product_snapshot_json: dict[str, object] | None
+    product_context_schema_version: str | None
+    requirements_snapshot_json: dict[str, object] | None
     analysis_mode: str
     rubric_version: str
     rule_version: str

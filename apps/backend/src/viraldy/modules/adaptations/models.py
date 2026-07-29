@@ -38,6 +38,11 @@ class AdaptationRunModel(Base):
     constraints_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     result_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="completed")
+    schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="adaptation_legacy_v1"
+    )
+    product_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    product_context_schema_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
     pipeline_version: Mapped[str] = mapped_column(
         String(100), nullable=False, default="media_pipeline_v1"

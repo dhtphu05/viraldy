@@ -8,10 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from viraldy.modules.creative_domain.schema_versions import (
+    PREFLIGHT_RUBRIC_VERSION,
+    PREFLIGHT_RULE_VERSION,
+    PREFLIGHT_SCHEMA_VERSION,
+)
 from viraldy.modules.preflight.models import PreflightRunModel
-
-PREFLIGHT_RUBRIC_VERSION = "ugc_preflight_rubric_v1"
-PREFLIGHT_RULE_VERSION = "ugc_preflight_rules_v1"
 
 
 class PreflightRepository:
@@ -30,6 +32,7 @@ class PreflightRepository:
             ugc_asset_version_id=ugc_asset_version_id,
             campaign_pack_version_id=campaign_pack_version_id,
             status="queued",
+            schema_version=PREFLIGHT_SCHEMA_VERSION,
             analysis_mode=analysis_mode,
             rubric_version=PREFLIGHT_RUBRIC_VERSION,
             rule_version=PREFLIGHT_RULE_VERSION,
@@ -66,8 +69,12 @@ class SyncPreflightRepository:
         result: dict[str, Any],
         structural_score_run_id: UUID | None,
         model_version: str | None,
+        product_snapshot_json: dict[str, object] | None,
+        product_context_schema_version: str | None,
+        requirements_snapshot_json: dict[str, object] | None,
     ) -> PreflightRunModel:
         run.status = "completed"
+        run.schema_version = PREFLIGHT_SCHEMA_VERSION
         run.structural_score_run_id = structural_score_run_id
         run.structural_score = Decimal(str(result["structural_score"]))
         run.brief_alignment_score = Decimal(str(result["brief_alignment_score"]))
@@ -81,6 +88,9 @@ class SyncPreflightRepository:
         run.fixes_json = result["fixes"]
         run.revision_message = str(result["revision_message"])
         run.evidence_ids_json = result["evidence_ids"]
+        run.product_snapshot_json = product_snapshot_json
+        run.product_context_schema_version = product_context_schema_version
+        run.requirements_snapshot_json = requirements_snapshot_json
         run.model_version = model_version
         self._session.flush()
         return run

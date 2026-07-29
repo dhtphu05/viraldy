@@ -32,6 +32,9 @@ class TikTokScoreRunModel(Base):
         PgUUID(as_uuid=True), ForeignKey("ai_model_runs.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="tiktok_score_v1"
+    )
     structural_score: Mapped[Decimal] = mapped_column(Numeric, nullable=False, default=0)
     confidence: Mapped[str] = mapped_column(String(50), nullable=False, default="low")
     action_label: Mapped[str] = mapped_column(String(100), nullable=False, default="pending")

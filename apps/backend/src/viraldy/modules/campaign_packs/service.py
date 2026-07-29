@@ -6,6 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.adaptations.public import AdaptationRepository
 from viraldy.modules.ai_gateway.public import ADAPTATION_SCHEMA_VERSION
+from viraldy.modules.campaign_packs.contracts import (
+    CampaignAngleV1,
+    CampaignAudienceV1,
+    CampaignObjectiveV1,
+    CampaignPackBriefV1,
+    ClaimGuardrailsV1,
+    CreatorDirectionV1,
+    CtaDirectionV1,
+    HookOptionV1,
+    MustShowRequirementV1,
+    RightsNoteV1,
+    ScriptBeatV1,
+    StoryboardSceneV1,
+)
 from viraldy.modules.campaign_packs.repository import CampaignPackRepository
 from viraldy.modules.campaign_packs.schemas import (
     CampaignPackResponse,
@@ -14,7 +28,12 @@ from viraldy.modules.campaign_packs.schemas import (
     CreateCampaignPackVersionRequest,
     UpdateCampaignPackRequest,
 )
-from viraldy.shared.errors.base import NotFoundError
+from viraldy.modules.preflight.requirements import (
+    compile_requirements,
+    compiled_requirements_to_json,
+)
+from viraldy.modules.products.contracts import ProductContextV1
+from viraldy.shared.errors.base import AppError, NotFoundError
 
 
 class CampaignPackService:
@@ -35,20 +54,28 @@ class CampaignPackService:
         concept = _find_concept(adaptation.result_json, data.concept_id)
         if concept is None:
             raise NotFoundError("ADAPTATION_CONCEPT_NOT_FOUND", "Adaptation concept was not found.")
+        brief = _brief_from_concept(
+            adaptation.objective,
+            adaptation.target_market,
+            adaptation.target_buyer_json,
+            adaptation.product_snapshot_json,
+            concept,
+            adaptation.id,
+            data.concept_id,
+        )
+        compiled = compile_requirements(brief.model_dump(mode="json"))
         pack, version = await self._repository.create(
             workspace_id,
             user_id,
             adaptation.product_id,
             adaptation.id,
-            _brief_from_concept(
-                adaptation.objective,
-                adaptation.target_market,
-                adaptation.target_buyer_json,
-                concept,
-            ),
+            brief.model_dump(mode="json"),
             adaptation.primary_model_run_id,
             adaptation.prompt_version,
             ADAPTATION_SCHEMA_VERSION,
+            brief.product_snapshot.model_dump(mode="json"),
+            compiled_requirements_to_json(compiled),
+            "compiled_requirements_v1",
         )
         await self._session.commit()
         await self._session.refresh(pack)
@@ -108,8 +135,16 @@ class CampaignPackService:
         pack = await self._repository.get(workspace_id, pack_id)
         if pack is None:
             raise NotFoundError("CAMPAIGN_PACK_NOT_FOUND", "Campaign Pack was not found.")
+        brief = data.brief
+        compiled = compile_requirements(brief.model_dump(mode="json"))
         version = await self._repository.create_version(
-            pack, user_id, data.brief_json, data.change_note
+            pack,
+            user_id,
+            brief.model_dump(mode="json"),
+            data.change_note,
+            brief.product_snapshot.model_dump(mode="json"),
+            compiled_requirements_to_json(compiled),
+            "compiled_requirements_v1",
         )
         await self._session.commit()
         await self._session.refresh(version)
@@ -157,97 +192,156 @@ def _brief_from_concept(
     objective: str,
     target_market: str,
     target_buyer: dict[str, object],
+    product_snapshot_json: dict[str, object] | None,
     concept: dict[str, object],
-) -> dict[str, object]:
-    hook = str(concept.get("hook") or "This fixed my tiny kitchen problem")
-    angle = str(concept.get("angle") or "small_space_convenience")
-    persona = str(concept.get("buyer_persona") or target_buyer.get("persona") or "US buyer")
-    return {
-        "objective": objective,
-        "target_market": target_market,
-        "target_buyer": {
-            "persona": persona,
-            "pain": str(target_buyer.get("pain") or "limited counter space"),
-            "desired_outcome": str(target_buyer.get("desired_outcome") or "faster organization"),
-        },
-        "core_angle": {"name": angle, "promise": "Create more usable counter space"},
-        "creator_persona": {
-            "type": str(concept.get("creator_persona") or "budget home organizer"),
-            "delivery_style": "authentic_review",
-        },
-        "hooks": [
-            hook,
-            "I did not know this was the missing piece",
-            "A tiny-kitchen fix I would buy again",
-            "This made my counter feel twice as usable",
-            "No-drill storage that actually looks clean",
+    adaptation_run_id: UUID,
+    concept_id: str,
+) -> CampaignPackBriefV1:
+    if not product_snapshot_json:
+        raise AppError(
+            "PRODUCT_CONTEXT_SNAPSHOT_REQUIRED",
+            "Campaign Pack generation requires a typed product context snapshot.",
+        )
+    product_snapshot = ProductContextV1.model_validate(product_snapshot_json)
+    hook_options = _list_of_text(concept.get("hook_options"))
+    must_show = _list_of_text(concept.get("must_show"))
+    demo_sequence = _list_of_text(concept.get("demo_sequence"))
+    claim_guardrails = _list_of_text(concept.get("claim_guardrails"))
+    persona = str(concept.get("creator_persona") or target_buyer.get("persona") or "creator")
+    pain = str(concept.get("buyer_pain") or target_buyer.get("pain") or "documented buyer pain")
+    outcome = str(
+        concept.get("desired_outcome")
+        or target_buyer.get("desired_outcome")
+        or "documented product outcome"
+    )
+    return CampaignPackBriefV1(
+        product_snapshot=product_snapshot,
+        objective=CampaignObjectiveV1(
+            objective_type=objective,
+            primary_action="create_ugc_revision",
+            channel="tiktok_shop" if "shop" in objective.lower() else "unknown",
+        ),
+        audience=CampaignAudienceV1(
+            persona_label=persona,
+            pain_points=[pain],
+            desired_outcomes=[outcome],
+            objections=[],
+            awareness_stage="unknown",
+        ),
+        angle=CampaignAngleV1(
+            name=str(concept.get("angle") or product_snapshot.identity.name),
+            promise=outcome,
+            mechanism=str(concept.get("demo_mechanism") or "show product in use"),
+            emotional_driver=pain,
+        ),
+        creator_direction=CreatorDirectionV1(
+            persona=persona,
+            delivery_style=str(concept.get("delivery_style") or "authentic_review"),
+            tone=["clear", "evidence-led"],
+            avoid_tones=["overclaiming"],
+            authenticity_notes=["show observed use, not performance predictions"],
+        ),
+        hooks=[
+            HookOptionV1(
+                id=f"hook_{index}",
+                spoken_text=hook,
+                opening_visual=str(concept.get("opening_visual") or "show product context"),
+                hook_type=str(concept.get("strategic_axis") or "unknown"),
+                target_time_ms=0,
+                mandatory=index == 1,
+            )
+            for index, hook in enumerate(
+                hook_options or [f"Show {product_snapshot.identity.name}"], start=1
+            )
         ],
-        "scripts": [
-            {
-                "name": "Problem to result",
-                "beats": [
-                    "show clutter",
-                    "introduce product",
-                    "demo setup",
-                    "show result",
-                    "TikTok Shop CTA",
-                ],
-            },
-            {
-                "name": "Morning routine",
-                "beats": [
-                    "show rushed moment",
-                    "use product",
-                    "compare before/after",
-                    "creator reaction",
-                    "CTA",
-                ],
-            },
+        script_beats=[
+            ScriptBeatV1(
+                id=f"beat_{index}",
+                sequence=index,
+                beat_type="demo" if "demo" in beat.lower() else "scene",
+                instruction=beat,
+                required=True,
+            )
+            for index, beat in enumerate(demo_sequence or ["show product in use"], start=1)
         ],
-        "storyboard": [
-            {"scene": 1, "instruction": str(concept.get("opening_visual") or "show the problem")},
-            {"scene": 2, "instruction": "product close-up within first three seconds"},
-            {"scene": 3, "instruction": "hands-on demo"},
-            {"scene": 4, "instruction": "before/after result"},
-            {"scene": 5, "instruction": "TikTok Shop CTA with product tag"},
+        storyboard=[
+            StoryboardSceneV1(
+                id=f"scene_{index}",
+                sequence=index,
+                instruction=scene,
+                shot_type="close_up" if "close" in scene.lower() else "in_use",
+                product_visibility_required="product" in scene.lower() or "use" in scene.lower(),
+                required=True,
+            )
+            for index, scene in enumerate(must_show or demo_sequence or ["product in use"], start=1)
         ],
-        "must_show": [
-            "product close-up",
-            "before state",
-            "demo in use",
-            "after result",
-            "TikTok Shop CTA",
+        must_show=[
+            MustShowRequirementV1(
+                id=f"must_show_{index}",
+                requirement_type=_requirement_type(text),
+                description=text,
+                severity="hard" if "claim" in text.lower() else "high",
+                expected_before_ms=3000 if "product" in text.lower() else None,
+                source_path=f"concepts[{concept_id}].must_show[{index - 1}]",
+            )
+            for index, text in enumerate(must_show or ["product visible", "demo in use"], start=1)
         ],
-        "text_overlays": ["I needed this sooner", "tiny kitchen reset", "linked in my TikTok Shop"],
-        "talking_points": [
-            "show the practical problem",
-            "explain the mechanism",
-            "show the result plainly",
+        talking_points=[pain, outcome],
+        text_overlays=hook_options[:2],
+        proof_direction=[str(concept.get("proof_mechanism") or "show observable result")],
+        offer_direction=[],
+        cta=CtaDirectionV1(
+            spoken="Check the product tag if this campaign is for TikTok Shop.",
+            overlay="Product tag",
+            cta_type="product_tag",
+            product_tag_required=True,
+            required_before_ms=None,
+        ),
+        claim_guardrails=ClaimGuardrailsV1(
+            allowed=[],
+            allowed_with_qualification=[],
+            prohibited=claim_guardrails,
+            required_disclosures=product_snapshot.governance.required_disclosures,
+        ),
+        do=["show product clearly", "show observable use", "keep claims evidence-backed"],
+        dont=["copy the reference script exactly", "add unsupported performance claims"],
+        rights_note=RightsNoteV1(
+            note="Rights/Spark requests are informational and remain pending until authorized."
+        ),
+        revision_checklist=[
+            "Product appears clearly",
+            "Demo shows product in use",
+            "Proof or result is observable",
+            "CTA/product tag is included when required",
+            "No prohibited claim is included",
         ],
-        "cta": {
-            "spoken": "I linked it in my TikTok Shop.",
-            "overlay": "Shop the product tag",
-            "product_tag_required": True,
-        },
-        "claims_allowed": ["helped organize my counter", "made the space easier to use"],
-        "claims_to_avoid": ["best ever", "guaranteed results", "medical or safety claims"],
-        "do": ["show the product early", "keep delivery natural", "show a real before/after"],
-        "dont": [
-            "copy another creator's exact script",
-            "make unsupported claims",
-            "hide the product until the end",
-        ],
-        "rights_request": {
-            "raw_footage_requested": False,
-            "editing_permission_requested": False,
-            "usage_note": "Rights/Spark requests are informational for this MVP.",
-        },
-        "spark_request": {"request_authorization": False, "message": ""},
-        "revision_checklist": [
-            "Product appears within three seconds",
-            "Demo shows the product in use",
-            "Before/after result is clear",
-            "CTA appears before the final moment",
-            "No unsupported claims are included",
-        ],
-    }
+        source_adaptation_run_id=adaptation_run_id,
+        source_concept_id=concept_id,
+    )
+
+
+def _list_of_text(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [text for item in value if (text := str(item).strip())]
+
+
+def _requirement_type(text: str) -> str:
+    lowered = text.lower()
+    if "cta" in lowered or "shop" in lowered or "tag" in lowered:
+        return "cta"
+    if "demo" in lowered or "use" in lowered or "using" in lowered:
+        return "demo"
+    if "before" in lowered or "after" in lowered or "result" in lowered or "proof" in lowered:
+        return "proof"
+    if "offer" in lowered or "discount" in lowered or "price" in lowered:
+        return "offer"
+    if "claim" in lowered or "disclosure" in lowered:
+        return "claim"
+    if "overlay" in lowered or "caption" in lowered or "text" in lowered:
+        return "overlay"
+    if "creator" in lowered or "face" in lowered or "voice" in lowered:
+        return "creator"
+    if "product" in lowered or "close-up" in lowered or "close up" in lowered:
+        return "product"
+    return "scene"

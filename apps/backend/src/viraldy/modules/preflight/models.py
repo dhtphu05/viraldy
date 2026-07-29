@@ -51,6 +51,14 @@ class PreflightRunModel(Base):
     fixes_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     revision_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
     evidence_ids_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
+    schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="ugc_preflight_legacy_v1"
+    )
+    product_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    product_context_schema_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    requirements_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
     pipeline_version: Mapped[str] = mapped_column(
         String(100), nullable=False, default="media_pipeline_v1"

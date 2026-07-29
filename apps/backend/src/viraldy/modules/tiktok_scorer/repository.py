@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from viraldy.modules.creative_domain.schema_versions import TIKTOK_SCORE_SCHEMA_VERSION
 from viraldy.modules.tiktok_scorer.models import TikTokScoreRunModel
 from viraldy.modules.tiktok_scorer.rubric import TIKTOK_STRUCTURE_RUBRIC
 
@@ -29,6 +30,7 @@ class TikTokScoreRepository:
             workspace_id=workspace_id,
             asset_version_id=asset_version_id,
             status="queued",
+            schema_version=TIKTOK_SCORE_SCHEMA_VERSION,
             analysis_mode=analysis_mode,
             rubric_version=RUBRIC_VERSION,
             rule_version=RULE_VERSION,
@@ -67,6 +69,7 @@ class SyncTikTokScoreRepository:
         model_version: str | None,
     ) -> TikTokScoreRunModel:
         run.status = "completed"
+        run.schema_version = TIKTOK_SCORE_SCHEMA_VERSION
         run.creative_dna_version_id = creative_dna_version_id
         run.structural_score = Decimal(str(result["structural_score"]))
         run.confidence = str(result["confidence"])
