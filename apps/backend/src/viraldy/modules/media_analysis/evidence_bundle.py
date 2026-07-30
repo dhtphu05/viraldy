@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from viraldy.modules.creative_domain.schema_versions import EVIDENCE_SCHEMA_VERSION
+from viraldy.modules.media_analysis.evidence_contracts import validate_evidence_value_v1
 from viraldy.modules.media_analysis.models import EvidenceItemModel
 from viraldy.shared.errors.base import AppError
 
@@ -14,15 +16,29 @@ ALLOWED_EVIDENCE_TYPES = {
     "transcript_segment",
     "on_screen_text",
     "product_first_appearance",
+    "product_appearance",
+    "product_visibility_summary",
     "hook_signal",
     "demo_signal",
+    "demo_step",
+    "demo_summary",
     "proof_signal",
     "cta_signal",
+    "offer_signal",
+    "creator_signal",
+    "editing_signal",
     "claim_signal",
+    "platform_signal",
 }
 ALLOWED_SOURCES = {"asr", "ocr", "vision", "derived"}
 REQUIRED_COMPLETENESS_SIGNALS = {
-    "visual_observations": {"product_first_appearance", "demo_signal", "proof_signal"},
+    "visual_observations": {
+        "product_first_appearance",
+        "product_appearance",
+        "demo_signal",
+        "demo_summary",
+        "proof_signal",
+    },
     "opening": {"hook_signal"},
     "cta": {"cta_signal"},
 }
@@ -76,6 +92,14 @@ def validate_evidence_payload(asset_version_id: UUID, item: Mapping[str, Any]) -
         raise AppError("EVIDENCE_PERSIST_FAILED", "Evidence confidence is outside 0..1.")
     if not item.get("identity_hash"):
         raise AppError("EVIDENCE_PERSIST_FAILED", "Evidence identity hash is required.")
+    if item.get("evidence_schema_version") == EVIDENCE_SCHEMA_VERSION:
+        try:
+            validate_evidence_value_v1(dict(item.get("value_json") or {}))
+        except Exception as exc:
+            raise AppError(
+                "EVIDENCE_SCHEMA_INVALID",
+                "Evidence value payload is not valid evidence_v1.",
+            ) from exc
 
 
 def build_evidence_bundle(
@@ -139,6 +163,16 @@ def _label(item: EvidenceItemModel) -> str:
     value = item.value_json
     if "text" in value:
         return str(value["text"])
+    if "spoken_text" in value and value["spoken_text"]:
+        return str(value["spoken_text"])
+    if "hook_type" in value:
+        return str(value["hook_type"])
+    if "cta_type" in value:
+        return str(value["cta_type"])
+    if "demo_type" in value:
+        return str(value["demo_type"])
+    if "proof_type" in value:
+        return str(value["proof_type"])
     if "value" in value:
         return str(value["value"])
     return item.evidence_type.replace("_", " ")

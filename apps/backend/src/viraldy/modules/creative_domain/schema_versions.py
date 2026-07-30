@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+PRODUCT_CONTEXT_SCHEMA_VERSION = "product_context_v1"
+MEDIA_OBSERVATION_SCHEMA_VERSION = "media_observation_v1"
+EVIDENCE_SCHEMA_VERSION = "evidence_v1"
+CREATIVE_DNA_SCHEMA_VERSION = "creative_dna_v1"
+TIKTOK_SCORE_SCHEMA_VERSION = "tiktok_score_v2"
+TIKTOK_RUBRIC_VERSION = "tiktok_structure_rubric_v2"
+TIKTOK_RULE_VERSION = "tiktok_structure_rules_v2"
+ADAPTATION_SCHEMA_VERSION = "adaptation_v2"
+CAMPAIGN_PACK_SCHEMA_VERSION = "campaign_pack_brief_v1"
+COMPILED_REQUIREMENTS_SCHEMA_VERSION = "compiled_requirements_v2"
+PREFLIGHT_SCHEMA_VERSION = "ugc_preflight_v2"
+PREFLIGHT_RUBRIC_VERSION = "ugc_preflight_rubric_v2"
+PREFLIGHT_RULE_VERSION = "ugc_preflight_rules_v2"
+RECOMMENDATION_SCHEMA_VERSION = "recommendation_v2"
+
+CREATIVE_DNA_LEGACY_SCHEMA_VERSION = "creative_dna_legacy_v1"
+TIKTOK_SCORE_LEGACY_SCHEMA_VERSION = "tiktok_score_v1"
+ADAPTATION_LEGACY_SCHEMA_VERSION = "adaptation_legacy_v1"
+CAMPAIGN_PACK_LEGACY_SCHEMA_VERSION = "campaign_pack_brief_legacy_v1"
+PREFLIGHT_LEGACY_SCHEMA_VERSION = "ugc_preflight_legacy_v1"
+RECOMMENDATION_LEGACY_SCHEMA_VERSION = "recommendation_legacy_v1"

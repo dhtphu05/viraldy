@@ -28,6 +28,8 @@ class ProductModel(Base):
     external_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metadata_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    product_context_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    context_schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

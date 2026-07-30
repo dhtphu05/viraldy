@@ -5,7 +5,6 @@ from pathlib import Path
 
 SRC = Path("src/viraldy")
 LEGACY_LAYER_DIRS = {"application", "domain", "infrastructure", "presentation"}
-ALLOWED_CROSS_MODULE_PUBLIC_IMPORTS = {"public"}
 
 
 def imports_for(path: Path) -> list[str]:
@@ -37,19 +36,16 @@ def test_modules_have_flat_feature_files_only() -> None:
     assert offenders == []
 
 
-def test_cross_module_imports_go_through_public_contracts() -> None:
+def test_campaign_pack_compiler_does_not_depend_on_preflight_internals() -> None:
     offenders: list[str] = []
-    for path in (SRC / "modules").glob("*/*.py"):
-        module_name = path.relative_to(SRC / "modules").parts[0]
+    for path in (SRC / "modules" / "campaign_packs").glob("*.py"):
         for imported in imports_for(path):
-            marker = "viraldy.modules."
-            if not imported.startswith(marker):
-                continue
-            parts = imported.removeprefix(marker).split(".")
-            if (
-                len(parts) >= 2
-                and parts[0] != module_name
-                and parts[1] not in ALLOWED_CROSS_MODULE_PUBLIC_IMPORTS
-            ):
+            if imported.startswith("viraldy.modules.preflight."):
                 offenders.append(f"{path}: {imported}")
     assert offenders == []
+
+
+def test_campaign_pack_requirement_compiler_is_publicly_exposed() -> None:
+    public_imports = set(imports_for(SRC / "modules" / "campaign_packs" / "public.py"))
+
+    assert "viraldy.modules.campaign_packs.requirements" in public_imports

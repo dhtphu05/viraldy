@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 from viraldy.modules.ai_gateway.repository import SyncAiModelRunRepository
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.modules.assets.public import AssetVersionModel, AssetVersionSnapshot
+from viraldy.modules.creative_domain.schema_versions import EVIDENCE_SCHEMA_VERSION
+from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1, TimeRangeV1
 from viraldy.modules.media_analysis.fixtures import fixture_media_contract, is_known_fixture
 from viraldy.modules.media_analysis.models import EvidenceItemModel
 from viraldy.modules.media_analysis.provider import (
@@ -24,9 +26,9 @@ from viraldy.modules.media_analysis.provider import (
     OcrContract,
     SceneContract,
     TranscriptContract,
-    VisualObservationsContract,
 )
 from viraldy.modules.media_analysis.repository import SyncMediaAnalysisRepository
+from viraldy.modules.products.public import SyncProductQueries
 from viraldy.platform.config.settings import Settings
 from viraldy.platform.storage.ports import StoragePort
 from viraldy.platform.storage.s3 import S3StorageAdapter
@@ -146,9 +148,7 @@ class SyncMediaEvidencePipeline:
         )
         if reusable:
             return MediaEvidencePipelineResult(reusable, None)
-        prefix = (
-            f"viraldy-{processing_job_id or snapshot.asset_version_id}-"
-        )
+        prefix = f"viraldy-{processing_job_id or snapshot.asset_version_id}-"
         with tempfile.TemporaryDirectory(prefix=prefix) as temp_dir:
             work_dir = Path(temp_dir)
             source_path = work_dir / f"source{_extension(snapshot.original_filename)}"
@@ -160,6 +160,7 @@ class SyncMediaEvidencePipeline:
 
             metadata = self.probe_local_file(source_path)
             self._update_version_metadata(snapshot.asset_version_id, metadata)
+            has_audio = int(metadata.get("audio_stream_count") or 0) > 0
 
             thumbnail_path = work_dir / "thumbnail.jpg"
             audio_path = work_dir / "audio.wav"
@@ -168,19 +169,20 @@ class SyncMediaEvidencePipeline:
             _run_ffmpeg(
                 ["-ss", "0.5", "-i", str(source_path), "-frames:v", "1", str(thumbnail_path)]
             )
-            _run_ffmpeg(
-                [
-                    "-i",
-                    str(source_path),
-                    "-vn",
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "16000",
-                    "-y",
-                    str(audio_path),
-                ]
-            )
+            if has_audio:
+                _run_ffmpeg(
+                    [
+                        "-i",
+                        str(source_path),
+                        "-vn",
+                        "-ac",
+                        "1",
+                        "-ar",
+                        "16000",
+                        "-y",
+                        str(audio_path),
+                    ]
+                )
             frame_paths = _sample_frames(
                 source_path,
                 frame_dir,
@@ -195,28 +197,34 @@ class SyncMediaEvidencePipeline:
                 f"/versions/{snapshot.asset_version_id}/artifacts"
             )
             thumbnail_key = f"{base_key}/thumbnail.jpg"
-            audio_key = f"{base_key}/audio.wav"
+            audio_key = f"{base_key}/audio.wav" if has_audio else None
             self._storage.upload_file(str(thumbnail_path), thumbnail_key, "image/jpeg")
-            self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
+            if has_audio and audio_key is not None:
+                self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
             uploaded_frames: list[tuple[int, Path, str]] = []
             for timestamp_ms, path, storage_key in frame_paths:
                 self._storage.upload_file(str(path), storage_key, "image/jpeg")
                 uploaded_frames.append((timestamp_ms, path, storage_key))
 
             provider = LiveAnalysisProvider(self._settings)
-            transcript, transcript_run_id = self._tracked_provider_call(
-                snapshot,
-                processing_job_id,
-                "audio_transcription",
-                self._settings.asr_model or "asr",
-                {
-                    "asset_version_id": str(snapshot.asset_version_id),
-                    "audio_artifact": "audio.wav",
-                    "run_type": run_type,
-                },
-                lambda: provider.transcribe_audio_with_response(audio_path),
-            )
+            if has_audio:
+                transcript, transcript_run_id = self._tracked_provider_call(
+                    snapshot,
+                    processing_job_id,
+                    "audio_transcription",
+                    self._settings.asr_model or "asr",
+                    {
+                        "asset_version_id": str(snapshot.asset_version_id),
+                        "audio_artifact": "audio.wav",
+                        "run_type": run_type,
+                    },
+                    lambda: provider.transcribe_audio_with_response(audio_path),
+                )
+            else:
+                transcript = TranscriptContract(segments=[], full_text="")
+                transcript_run_id = None
             if self._settings.ocr_provider == "vision":
+                product_context = self._product_context_json(snapshot)
                 ocr, ocr_run_id = self._tracked_provider_call(
                     snapshot,
                     processing_job_id,
@@ -227,10 +235,10 @@ class SyncMediaEvidencePipeline:
                         "frame_count": len(uploaded_frames[:8]),
                         "run_type": run_type,
                     },
-                    lambda: provider.extract_ocr_with_response(uploaded_frames),
+                    lambda: provider.extract_ocr_with_response(uploaded_frames, product_context),
                 )
             else:
-                ocr = provider.extract_ocr(uploaded_frames)
+                ocr = provider.extract_ocr(uploaded_frames, self._product_context_json(snapshot))
                 ocr_run_id = None
             scenes = _detect_scenes(int(metadata["duration_ms"]))
             observations, vision_run_id = self._tracked_provider_call(
@@ -249,7 +257,8 @@ class SyncMediaEvidencePipeline:
                     uploaded_frames,
                     transcript,
                     ocr,
-                    snapshot.metadata_json,
+                    self._product_context_json(snapshot),
+                    int(metadata["duration_ms"]),
                 ),
             )
             contract = _live_contract(
@@ -412,12 +421,11 @@ class SyncMediaEvidencePipeline:
                 contract.get("thumbnail_storage_key", "fixtures/opening.jpg"),
                 {"timestamp_ms": 500},
             ),
-            (
-                "audio",
-                contract.get("audio_storage_key", "fixtures/audio.wav"),
-                {"fixture": mode == "fixture"},
-            ),
         ]
+        default_audio_key = "fixtures/audio.wav" if mode == "fixture" else None
+        audio_key = contract.get("audio_storage_key", default_audio_key)
+        if audio_key is not None:
+            rows.append(("audio", audio_key, {"fixture": mode == "fixture"}))
         return [
             {
                 "workspace_id": workspace_id,
@@ -443,7 +451,7 @@ class SyncMediaEvidencePipeline:
     ) -> list[dict[str, Any]]:
         provider = str(contract["provider"])
         model_version = str(contract["model_version"])
-        observations = contract["visual_observations"]
+        observations = MediaObservationBundleV1.model_validate(contract["visual_observations"])
         rows: list[dict[str, Any]] = []
         for segment in contract["transcript"]["segments"]:
             rows.append(
@@ -454,7 +462,14 @@ class SyncMediaEvidencePipeline:
                     "asr",
                     provider,
                     model_version,
-                    segment,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "transcript_segment",
+                        "observation_id": None,
+                        "text": str(segment["text"]),
+                        "start_ms": int(segment["start_ms"]),
+                        "end_ms": int(segment["end_ms"]),
+                    },
                 )
             )
         for segment in contract["ocr"]["segments"]:
@@ -466,44 +481,125 @@ class SyncMediaEvidencePipeline:
                     "ocr",
                     provider,
                     model_version,
-                    segment,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "on_screen_text",
+                        "observation_id": None,
+                        "text": str(segment["text"]),
+                        "start_ms": int(segment["start_ms"]),
+                        "end_ms": int(segment["end_ms"]),
+                        "frame_storage_key": segment.get("frame_storage_key"),
+                        "confidence": segment.get("confidence"),
+                    },
                 )
             )
-        raw_first_product_ms = observations.get("product_first_appearance_ms")
-        first_product_ms = int(raw_first_product_ms) if raw_first_product_ms is not None else None
-        rows.extend(
-            [
-                _row(
-                    asset_version_id,
-                    run_type,
-                    "product_first_appearance",
-                    "vision",
-                    provider,
-                    model_version,
-                    {
-                        "start_ms": first_product_ms,
-                        "end_ms": first_product_ms + 1000 if first_product_ms is not None else None,
-                        "value": first_product_ms,
-                    },
-                ),
+        for hook in observations.hooks:
+            rows.append(
                 _row(
                     asset_version_id,
                     run_type,
                     "hook_signal",
-                    "derived",
-                    provider,
-                    model_version,
-                    {"start_ms": 0, "end_ms": 2100, "text": "problem-first counter mess hook"},
-                ),
-                _row(
-                    asset_version_id,
-                    run_type,
-                    "demo_signal",
                     "vision",
                     provider,
                     model_version,
-                    {"start_ms": 6500, "end_ms": 15000, "text": str(observations["demo_type"])},
-                ),
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "hook_signal",
+                        "observation_id": hook.observation_id,
+                        "hook_type": hook.hook_type,
+                        "spoken_text": hook.spoken_text,
+                        "overlay_text": hook.overlay_text,
+                        "visual_description": hook.visual_description,
+                        "buyer_pain": hook.buyer_pain,
+                        "clarity": hook.clarity,
+                        "confidence": hook.confidence,
+                        **_time_fields(hook.time_range),
+                        "frame_storage_keys": hook.frame_storage_keys,
+                    },
+                )
+            )
+        for appearance in observations.product_appearances:
+            rows.append(
+                _row(
+                    asset_version_id,
+                    run_type,
+                    "product_appearance",
+                    "vision",
+                    provider,
+                    model_version,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "product_appearance",
+                        "observation_id": appearance.observation_id,
+                        "visibility": appearance.visibility,
+                        "shot_type": appearance.shot_type,
+                        "usage_visible": appearance.usage_visible,
+                        "product_match_confidence": appearance.product_match_confidence,
+                        "confidence": appearance.confidence,
+                        **_time_fields(appearance.time_range),
+                        "frame_storage_keys": appearance.frame_storage_keys,
+                    },
+                )
+            )
+        rows.append(
+            _row(
+                asset_version_id,
+                run_type,
+                "product_visibility_summary",
+                "derived",
+                provider,
+                model_version,
+                {
+                    "schema_version": EVIDENCE_SCHEMA_VERSION,
+                    "evidence_type": "product_visibility_summary",
+                    "observation_id": None,
+                    **observations.product_visibility.model_dump(mode="json"),
+                },
+            )
+        )
+        if observations.demo.detected:
+            rows.append(
+                _row(
+                    asset_version_id,
+                    run_type,
+                    "demo_summary",
+                    "vision",
+                    provider,
+                    model_version,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "demo_summary",
+                        "observation_id": None,
+                        **observations.demo.model_dump(mode="json", exclude={"steps"}),
+                    },
+                )
+            )
+            for step in observations.demo.steps:
+                rows.append(
+                    _row(
+                        asset_version_id,
+                        run_type,
+                        "demo_step",
+                        "vision",
+                        provider,
+                        model_version,
+                        {
+                            "schema_version": EVIDENCE_SCHEMA_VERSION,
+                            "evidence_type": "demo_step",
+                            "observation_id": step.observation_id,
+                            "step_index": step.step_index,
+                            "action": step.action,
+                            "product_visible": step.product_visible,
+                            "mechanism_visible": step.mechanism_visible,
+                            "result_visible": step.result_visible,
+                            "confidence": step.confidence,
+                            **_time_fields(step.time_range),
+                            "frame_storage_keys": step.frame_storage_keys,
+                        },
+                    )
+                )
+        for proof in observations.proof_moments:
+            rows.append(
                 _row(
                     asset_version_id,
                     run_type,
@@ -511,20 +607,101 @@ class SyncMediaEvidencePipeline:
                     "vision",
                     provider,
                     model_version,
-                    {"start_ms": 15000, "end_ms": 18200, "text": str(observations["proof_type"])},
-                ),
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "proof_signal",
+                        "observation_id": proof.observation_id,
+                        "proof_type": proof.proof_type,
+                        "description": proof.description,
+                        "verifiability": proof.verifiability,
+                        "confidence": proof.confidence,
+                        **_time_fields(proof.time_range),
+                        "frame_storage_keys": proof.frame_storage_keys,
+                    },
+                )
+            )
+        for cta in observations.ctas:
+            rows.append(
                 _row(
                     asset_version_id,
                     run_type,
                     "cta_signal",
-                    "derived",
+                    "vision",
                     provider,
                     model_version,
-                    {"start_ms": 18200, "end_ms": 27000, "text": "TikTok Shop CTA"},
-                ),
-            ]
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "cta_signal",
+                        "observation_id": cta.observation_id,
+                        "modality": cta.modality,
+                        "cta_type": cta.cta_type,
+                        "text": cta.text,
+                        "spoken_text": cta.spoken_text,
+                        "overlay_text": cta.overlay_text,
+                        "product_tag_visible": cta.product_tag_visible,
+                        "confidence": cta.confidence,
+                        **_time_fields(cta.time_range),
+                        "frame_storage_keys": cta.frame_storage_keys,
+                    },
+                )
+            )
+        for offer in observations.offers:
+            rows.append(
+                _row(
+                    asset_version_id,
+                    run_type,
+                    "offer_signal",
+                    "vision",
+                    provider,
+                    model_version,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "offer_signal",
+                        "observation_id": offer.observation_id,
+                        "offer_type": offer.offer_type,
+                        "text": offer.text,
+                        "price_text": offer.price_text,
+                        "discount_text": offer.discount_text,
+                        "urgency_present": offer.urgency_present,
+                        "confidence": offer.confidence,
+                        **_time_fields(offer.time_range),
+                        "frame_storage_keys": offer.frame_storage_keys,
+                    },
+                )
+            )
+        rows.append(
+            _row(
+                asset_version_id,
+                run_type,
+                "creator_signal",
+                "vision",
+                provider,
+                model_version,
+                {
+                    "schema_version": EVIDENCE_SCHEMA_VERSION,
+                    "evidence_type": "creator_signal",
+                    "observation_id": None,
+                    **observations.creator.model_dump(mode="json"),
+                },
+            )
         )
-        for claim in observations.get("claim_candidates", []):
+        rows.append(
+            _row(
+                asset_version_id,
+                run_type,
+                "editing_signal",
+                "derived",
+                provider,
+                model_version,
+                {
+                    "schema_version": EVIDENCE_SCHEMA_VERSION,
+                    "evidence_type": "editing_signal",
+                    "observation_id": None,
+                    **observations.editing.model_dump(mode="json"),
+                },
+            )
+        )
+        for claim in observations.claims:
             rows.append(
                 _row(
                     asset_version_id,
@@ -533,10 +710,48 @@ class SyncMediaEvidencePipeline:
                     "vision",
                     provider,
                     model_version,
-                    claim,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "claim_signal",
+                        "observation_id": claim.observation_id,
+                        "text": claim.text,
+                        "source": claim.source,
+                        "category": claim.category,
+                        "risk": claim.risk,
+                        "qualification_present": claim.qualification_present,
+                        "confidence": claim.confidence,
+                        **_optional_time_fields(claim.time_range),
+                        "frame_storage_keys": claim.frame_storage_keys,
+                    },
                 )
             )
+        rows.append(
+            _row(
+                asset_version_id,
+                run_type,
+                "platform_signal",
+                "derived",
+                provider,
+                model_version,
+                {
+                    "schema_version": EVIDENCE_SCHEMA_VERSION,
+                    "evidence_type": "platform_signal",
+                    "observation_id": None,
+                    **observations.platform.model_dump(mode="json"),
+                },
+            )
+        )
         return rows
+
+    def _product_context_json(self, snapshot: AssetVersionSnapshot) -> dict[str, object] | None:
+        if snapshot.product_id is None:
+            return None
+        product_snapshot = SyncProductQueries(self._session).get_product_context_snapshot(
+            snapshot.workspace_id, snapshot.product_id
+        )
+        if product_snapshot is None:
+            return None
+        return product_snapshot.product_context.model_dump(mode="json")
 
 
 def _row(
@@ -564,13 +779,35 @@ def _row(
         ),
         "start_ms": value.get("start_ms"),
         "end_ms": value.get("end_ms"),
-        "frame_storage_key": value.get("frame_storage_key"),
+        "frame_storage_key": _frame_storage_key(value),
         "value_json": value,
-        "confidence": value.get("confidence", 0.8),
+        "confidence": value.get("confidence"),
         "source": source,
         "provider": provider,
         "model_version": model_version,
+        "evidence_schema_version": value.get("schema_version", EVIDENCE_SCHEMA_VERSION),
+        "observation_id": value.get("observation_id"),
     }
+
+
+def _time_fields(time_range: TimeRangeV1) -> dict[str, int]:
+    return {"start_ms": time_range.start_ms, "end_ms": time_range.end_ms}
+
+
+def _optional_time_fields(time_range: TimeRangeV1 | None) -> dict[str, int | None]:
+    if time_range is None:
+        return {"start_ms": None, "end_ms": None}
+    return _time_fields(time_range)
+
+
+def _frame_storage_key(value: dict[str, Any]) -> object:
+    frame_storage_key = value.get("frame_storage_key")
+    if frame_storage_key:
+        return frame_storage_key
+    frame_storage_keys = value.get("frame_storage_keys")
+    if isinstance(frame_storage_keys, list) and frame_storage_keys:
+        return frame_storage_keys[0]
+    return None
 
 
 def _fps(value: object) -> float | None:
@@ -670,12 +907,12 @@ def _detect_scenes(duration_ms: int) -> SceneContract:
 def _live_contract(
     metadata: dict[str, object],
     thumbnail_key: str,
-    audio_key: str,
+    audio_key: str | None,
     frames: list[tuple[int, Path, str]],
     transcript: TranscriptContract,
     ocr: OcrContract,
     scenes: SceneContract,
-    observations: VisualObservationsContract,
+    observations: MediaObservationBundleV1,
     settings: Settings,
 ) -> dict[str, Any]:
     return {
@@ -726,10 +963,12 @@ def _provider_output_summary(result: object) -> dict[str, object]:
         }
     if isinstance(result, OcrContract):
         return {"segment_count": len(result.segments)}
-    if isinstance(result, VisualObservationsContract):
+    if isinstance(result, MediaObservationBundleV1):
         return {
-            "claim_count": len(result.claim_candidates),
-            "demo_detected": result.demo_detected,
-            "opening_visual": result.opening_visual,
+            "claim_count": len(result.claims),
+            "cta_count": len(result.ctas),
+            "demo_detected": result.demo.detected,
+            "hook_count": len(result.hooks),
+            "product_appearance_count": len(result.product_appearances),
         }
     return {}

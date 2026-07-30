@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from viraldy.modules.campaign_packs.models import CampaignPackModel, CampaignPackVersionModel
+from viraldy.modules.creative_domain.schema_versions import CAMPAIGN_PACK_SCHEMA_VERSION
 
 
 class CampaignPackRepository:
@@ -23,6 +24,9 @@ class CampaignPackRepository:
         source_model_run_id: UUID | None,
         source_prompt_version: str | None,
         source_schema_version: str | None,
+        product_snapshot_json: dict[str, object],
+        compiled_requirements_json: dict[str, object],
+        requirements_schema_version: str,
     ) -> tuple[CampaignPackModel, CampaignPackVersionModel]:
         pack = CampaignPackModel(
             workspace_id=workspace_id,
@@ -36,6 +40,10 @@ class CampaignPackRepository:
             campaign_pack_id=pack.id,
             version_number=1,
             brief_json=brief_json,
+            brief_schema_version=CAMPAIGN_PACK_SCHEMA_VERSION,
+            product_snapshot_json=product_snapshot_json,
+            compiled_requirements_json=compiled_requirements_json,
+            requirements_schema_version=requirements_schema_version,
             change_note="Initial generated brief",
             source_adaptation_run_id=adaptation_run_id,
             source_model_run_id=source_model_run_id,
@@ -103,6 +111,9 @@ class CampaignPackRepository:
         user_id: UUID,
         brief_json: dict[str, object],
         change_note: str | None,
+        product_snapshot_json: dict[str, object],
+        compiled_requirements_json: dict[str, object],
+        requirements_schema_version: str,
     ) -> CampaignPackVersionModel:
         next_version = (
             await self._session.scalar(
@@ -119,6 +130,10 @@ class CampaignPackRepository:
             campaign_pack_id=pack.id,
             version_number=next_version,
             brief_json=brief_json,
+            brief_schema_version=CAMPAIGN_PACK_SCHEMA_VERSION,
+            product_snapshot_json=product_snapshot_json,
+            compiled_requirements_json=compiled_requirements_json,
+            requirements_schema_version=requirements_schema_version,
             change_note=change_note,
             source_adaptation_run_id=base_version.source_adaptation_run_id
             if base_version

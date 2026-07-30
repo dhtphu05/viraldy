@@ -23,6 +23,7 @@ class AssetVersionSnapshot:
     asset_id: UUID
     asset_version_id: UUID
     workspace_id: UUID
+    product_id: UUID | None
     storage_key: str
     original_filename: str
     declared_mime_type: str
@@ -57,6 +58,7 @@ class SyncAssetQueries:
             asset_id=asset.id,
             asset_version_id=version.id,
             workspace_id=asset.workspace_id,
+            product_id=asset.product_id,
             storage_key=version.storage_key,
             original_filename=version.original_filename,
             declared_mime_type=version.declared_mime_type,
@@ -85,6 +87,7 @@ class SyncAssetQueries:
             asset_id=asset.id,
             asset_version_id=version.id,
             workspace_id=asset.workspace_id,
+            product_id=asset.product_id,
             storage_key=version.storage_key,
             original_filename=version.original_filename,
             declared_mime_type=version.declared_mime_type,

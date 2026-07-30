@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from viraldy.modules.creative_domain.schema_versions import EVIDENCE_SCHEMA_VERSION
 from viraldy.modules.media_analysis.evidence_bundle import validate_evidence_payload
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
 
@@ -66,6 +67,7 @@ class SyncMediaAnalysisRepository:
                     EvidenceItemModel.provider == provider,
                     EvidenceItemModel.model_version == model_version,
                     EvidenceItemModel.pipeline_version == pipeline_version,
+                    EvidenceItemModel.evidence_schema_version == EVIDENCE_SCHEMA_VERSION,
                 )
                 .order_by(
                     EvidenceItemModel.start_ms.asc().nulls_last(),
@@ -122,6 +124,10 @@ class SyncMediaAnalysisRepository:
                 analysis_run_type=item["analysis_run_type"],
                 analysis_run_id=item.get("analysis_run_id"),
                 evidence_type=item["evidence_type"],
+                evidence_schema_version=item.get(
+                    "evidence_schema_version", EVIDENCE_SCHEMA_VERSION
+                ),
+                observation_id=item.get("observation_id"),
                 identity_hash=item.get("identity_hash"),
                 start_ms=item.get("start_ms"),
                 end_ms=item.get("end_ms"),

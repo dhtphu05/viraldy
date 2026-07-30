@@ -73,6 +73,10 @@ class EvidenceItemModel(Base):
     analysis_run_type: Mapped[str] = mapped_column(String(100), nullable=False)
     analysis_run_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     evidence_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    evidence_schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="evidence_legacy_v1"
+    )
+    observation_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     identity_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     start_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     end_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

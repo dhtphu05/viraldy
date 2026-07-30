@@ -37,6 +37,9 @@ class CreativeDnaVersionModel(Base):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="creative_dna_legacy_v1"
+    )
     dna_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     confidence: Mapped[str] = mapped_column(String(50), nullable=False)
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)

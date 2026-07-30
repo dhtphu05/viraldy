@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from viraldy.modules.ai_gateway.public import OpenAICompatibleClient, extract_message_json
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
+from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
@@ -44,25 +46,6 @@ class SceneItem(BaseModel):
 
 class SceneContract(BaseModel):
     scenes: list[SceneItem]
-
-
-class ClaimCandidate(BaseModel):
-    text: str
-    risk: str
-    timestamp_ms: int | None = Field(default=None, ge=0)
-
-
-class VisualObservationsContract(BaseModel):
-    product_first_appearance_ms: int | None = Field(default=None, ge=0)
-    face_present_opening: bool = False
-    opening_visual: str = "unknown"
-    demo_detected: bool = False
-    demo_type: str = "unknown"
-    close_up_present: bool = False
-    cta_visual_detected: bool = False
-    proof_type: str = "unknown"
-    creator_style: str = "unknown"
-    claim_candidates: list[ClaimCandidate] = Field(default_factory=list)
 
 
 class LiveAnalysisProvider:
@@ -110,23 +93,30 @@ class LiveAnalysisProvider:
     def extract_ocr(
         self,
         frame_paths: list[tuple[int, Path, str]],
+        product_context: dict[str, object] | None = None,
     ) -> OcrContract:
-        return self.extract_ocr_with_response(frame_paths)[0]
+        return self.extract_ocr_with_response(frame_paths, product_context)[0]
 
     def extract_ocr_with_response(
         self,
         frame_paths: list[tuple[int, Path, str]],
+        product_context: dict[str, object] | None = None,
     ) -> tuple[OcrContract, ProviderResponse | None]:
         if self._settings.ocr_provider != "vision":
             return OcrContract(), None
+        context_json = json.dumps(product_context or {}, sort_keys=True)
         payload, response = self._vision_json_with_response(
             prompt=(
                 "Extract readable on-screen text from these TikTok/UGC frames. "
                 'Return JSON: {"segments":[{"start_ms":number,"end_ms":number,'
                 '"text":"...","confidence":0..1,"frame_storage_key":"..."}]}. '
-                "Use only visible text."
+                "Use only visible text. Product context is supplied only to disambiguate the "
+                "mock/local scenario and must not be used to invent OCR text."
+                f"\nProduct context: {context_json}"
             ),
             frame_paths=frame_paths[:8],
+            schema_name="OcrContract",
+            schema_model=OcrContract,
         )
         return _validate_contract(OcrContract, payload, "OCR_OUTPUT_INVALID"), response
 
@@ -136,9 +126,10 @@ class LiveAnalysisProvider:
         transcript: TranscriptContract,
         ocr: OcrContract,
         product_context: dict[str, object] | None,
-    ) -> VisualObservationsContract:
+        duration_ms: int,
+    ) -> MediaObservationBundleV1:
         return self.extract_visual_observations_with_response(
-            frame_paths, transcript, ocr, product_context
+            frame_paths, transcript, ocr, product_context, duration_ms
         )[0]
 
     def extract_visual_observations_with_response(
@@ -147,21 +138,31 @@ class LiveAnalysisProvider:
         transcript: TranscriptContract,
         ocr: OcrContract,
         product_context: dict[str, object] | None,
-    ) -> tuple[VisualObservationsContract, ProviderResponse]:
+        duration_ms: int,
+    ) -> tuple[MediaObservationBundleV1, ProviderResponse]:
         payload, response = self._vision_json_with_response(
             prompt=(
-                "Analyze the creative structure from frames, transcript, OCR, and product context. "
-                "Return only JSON with keys: product_first_appearance_ms, face_present_opening, "
-                "opening_visual, demo_detected, demo_type, close_up_present, cta_visual_detected, "
-                "proof_type, creator_style, claim_candidates. Do not return a score."
+                "Analyze the creative structure from frames, transcript, OCR, metadata, and "
+                "product context. Return JSON matching MediaObservationBundleV1 exactly. "
+                "Use only supplied frames, transcript, OCR, metadata, and product context. "
+                "Return unknown when evidence is insufficient. Do not infer hidden events. "
+                "Do not create timestamps that are not supported by frame, transcript, or OCR "
+                "timing. Do not return a score or predict virality, orders, sales, or GMV. "
+                "Every observation must have a stable observation_id, confidence in 0..1, and "
+                "frame_storage_keys when frame evidence supports it. Use empty arrays when no CTA, "
+                "offer, claim, proof, hook, or product appearance is detected."
+                f"\nRequired schema_version: media_observation_v1"
+                f"\nDuration_ms: {duration_ms}"
                 f"\nTranscript: {transcript.model_dump(mode='json')}"
                 f"\nOCR: {ocr.model_dump(mode='json')}"
                 f"\nProduct context: {product_context or {}}"
             ),
             frame_paths=frame_paths[:12],
+            schema_name="MediaObservationBundleV1",
+            schema_model=MediaObservationBundleV1,
         )
         contract = _validate_contract(
-            VisualObservationsContract, payload, "VISUAL_OBSERVATIONS_INVALID"
+            MediaObservationBundleV1, payload, "MEDIA_OBSERVATION_INVALID"
         )
         return contract, response
 
@@ -176,6 +177,8 @@ class LiveAnalysisProvider:
         self,
         prompt: str,
         frame_paths: list[tuple[int, Path, str]],
+        schema_name: str | None = None,
+        schema_model: type[BaseModel] | None = None,
     ) -> tuple[dict[str, Any], ProviderResponse]:
         if not self._settings.ai_vision_model:
             raise AppError(
@@ -200,7 +203,7 @@ class LiveAnalysisProvider:
         payload: dict[str, Any] = {
             "model": self._settings.ai_vision_model,
             "messages": [{"role": "user", "content": content}],
-            "response_format": {"type": "json_object"},
+            "response_format": _response_format(self._settings, schema_name, schema_model),
         }
         if self._settings.ai_max_output_tokens is not None:
             payload["max_tokens"] = self._settings.ai_max_output_tokens
@@ -221,3 +224,20 @@ def _validate_contract[T: BaseModel](model: type[T], payload: dict[str, Any], co
 
 def _b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _response_format(
+    settings: Settings,
+    schema_name: str | None,
+    schema_model: type[BaseModel] | None,
+) -> dict[str, object]:
+    if not settings.ai_supports_json_schema or schema_name is None or schema_model is None:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": schema_name,
+            "schema": schema_model.model_json_schema(),
+            "strict": True,
+        },
+    }

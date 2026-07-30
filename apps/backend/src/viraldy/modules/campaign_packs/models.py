@@ -24,7 +24,7 @@ class CampaignPackModel(Base):
     adaptation_run_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("adaptation_runs.id"), nullable=False, index=True
     )
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     current_version_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("campaign_pack_versions.id"), nullable=True
     )
@@ -52,6 +52,14 @@ class CampaignPackVersionModel(Base):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     brief_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    brief_schema_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="campaign_pack_brief_legacy_v1"
+    )
+    product_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    compiled_requirements_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    requirements_schema_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     change_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_adaptation_run_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("adaptation_runs.id"), nullable=True, index=True

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from viraldy.modules.campaign_packs.contracts import CampaignPackBriefV1
+from viraldy.modules.campaign_packs.requirements import CompiledRequirementsSnapshotV2
+from viraldy.modules.products.contracts import ProductContextV1
 
 
 class CreateCampaignPackRequest(BaseModel):
@@ -12,19 +17,23 @@ class CreateCampaignPackRequest(BaseModel):
 
 
 class CreateCampaignPackVersionRequest(BaseModel):
-    brief_json: dict[str, object]
+    brief: CampaignPackBriefV1
     change_note: str | None = None
 
 
 class UpdateCampaignPackRequest(BaseModel):
-    status: str | None = None
+    status: Literal["draft", "ready", "sent", "archived"] | None = None
 
 
 class CampaignPackVersionResponse(BaseModel):
     id: UUID
     campaign_pack_id: UUID
     version_number: int
-    brief_json: dict[str, object]
+    brief_json: CampaignPackBriefV1
+    brief_schema_version: str
+    product_snapshot_json: ProductContextV1 | None = None
+    compiled_requirements_json: CompiledRequirementsSnapshotV2
+    requirements_schema_version: str | None = None
     change_note: str | None
     source_adaptation_run_id: UUID | None = None
     source_model_run_id: UUID | None = None

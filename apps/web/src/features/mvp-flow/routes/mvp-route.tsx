@@ -62,32 +62,76 @@ type Dna = {
     id: string;
     analysis_mode: string;
     confidence: string;
-    dna_json: Record<string, unknown>;
+    schema_version: string;
+    dna_json: CreativeDnaV1;
 };
-type DimensionResult = { score: number | string; reason?: string };
-type Finding = { message?: string; instruction?: string };
+type ObservedValue = {
+    value: unknown;
+    confidence?: number;
+    evidence_ids?: string[];
+    status?: "observed" | "inferred" | "unknown" | "not_present";
+};
+type CreativeDnaSection = Record<string, ObservedValue | unknown>;
+type CreativeDnaV1 = {
+    schema_version?: string;
+    opening?: CreativeDnaSection;
+    product?: CreativeDnaSection;
+    narrative?: CreativeDnaSection;
+    demo?: CreativeDnaSection;
+    proof?: CreativeDnaSection;
+    creator?: CreativeDnaSection;
+    editing?: CreativeDnaSection;
+    offer?: CreativeDnaSection;
+    cta?: CreativeDnaSection;
+    platform?: CreativeDnaSection;
+    claims?: unknown[];
+    risks?: unknown[];
+    reusable_mechanisms?: unknown[];
+    uncertainties?: string[];
+    completeness?: Record<string, boolean>;
+    overall_confidence?: string;
+};
+type ScoreSignal = {
+    code: string;
+    value: unknown;
+    contribution: number;
+    confidence: number;
+    evidence_ids: string[];
+};
+type DimensionResult = {
+    score: number | string;
+    confidence?: string;
+    reason?: string;
+    signals?: ScoreSignal[];
+    missing_signals?: string[];
+    evidence_ids?: string[];
+};
+type Finding = {
+    code?: string;
+    message?: string;
+    instruction?: string;
+    why?: string;
+    evidence_ids?: string[];
+};
 type AdaptationConcept = {
     id: string;
     name: string;
-    hook: string;
+    strategic_axis?: string;
+    angle?: string;
+    buyer_pain?: string;
+    desired_outcome?: string;
+    creator_persona?: string;
+    delivery_style?: string;
+    hook_options?: string[];
+    demo_mechanism?: string;
+    proof_mechanism?: string;
+    must_show?: string[];
     test_hypothesis: string;
-};
-type CreativeDnaView = {
-    opening?: { hook_text?: string };
-    product?: { first_appearance_ms?: number };
-    cta?: { cta_type?: string };
-    creator?: { delivery_style?: string };
-    narrative?: { angle?: string };
-    summary?: {
-        what_to_keep?: string[];
-        what_to_change?: string[];
-        what_not_to_copy?: string[];
-        test_hypotheses?: string[];
-    };
 };
 type ScoreRun = {
     id: string;
     status: string;
+    schema_version: string;
     structural_score: number;
     action_label: string;
     confidence: string;
@@ -98,14 +142,29 @@ type ScoreRun = {
 };
 type Adaptation = {
     id: string;
-    result_json: { concepts: AdaptationConcept[] };
+    schema_version: string;
+    result_json: { schema_version?: string; concepts: AdaptationConcept[]; guidance?: unknown[] };
     analysis_mode: string;
+};
+type CampaignPackBrief = {
+    schema_version?: string;
+    product_snapshot?: Record<string, unknown>;
+    objective?: Record<string, unknown>;
+    audience?: Record<string, unknown>;
+    angle?: Record<string, unknown>;
+    must_show?: unknown[];
+    cta?: Record<string, unknown>;
+    claim_guardrails?: Record<string, unknown>;
 };
 type CampaignPackVersion = {
     id: string;
     campaign_pack_id: string;
     version_number: number;
-    brief_json: Record<string, unknown>;
+    brief_json: CampaignPackBrief;
+    brief_schema_version: string;
+    product_snapshot_json: Record<string, unknown> | null;
+    compiled_requirements_json: Record<string, unknown>;
+    requirements_schema_version: string | null;
     change_note: string | null;
     source_adaptation_run_id: string | null;
     source_model_run_id: string | null;
@@ -121,14 +180,32 @@ type CampaignPack = {
 type PreflightRun = {
     id: string;
     status: string;
+    schema_version: string;
     preflight_score: number;
     structural_score: number;
     brief_alignment_score: number;
     action_label: string;
     analysis_mode: string;
+    brief_alignment_json: {
+        schema_version?: string;
+        confidence?: string;
+        coverage?: Record<string, unknown>;
+        requirements?: RequirementEvaluation[];
+    };
     blockers_json: Finding[];
     fixes_json: Finding[];
     revision_message: string;
+    requirements_snapshot_json?: Record<string, unknown> | null;
+};
+type RequirementEvaluation = {
+    requirement_id: string;
+    status: string;
+    score: number;
+    confidence: string;
+    reason: string;
+    expected: Record<string, unknown>;
+    observed: Record<string, unknown>;
+    evidence_ids: string[];
 };
 type UploadState = {
     status: "idle" | "uploading" | "completed" | "failed";
@@ -352,14 +429,16 @@ function MvpRoute() {
     });
 
     const savePackVersion = useMutation({
-        mutationFn: async () =>
-            apiPost<CampaignPackVersion>(
+        mutationFn: async () => {
+            const brief = parseCampaignBriefDraft(briefDraft);
+            return apiPost<CampaignPackVersion>(
                 `/workspaces/${workspaceId}/campaign-packs/${packId}/versions`,
                 {
-                    brief_json: JSON.parse(briefDraft),
+                    brief,
                     change_note: "Edited in MVP console",
                 },
-            ),
+            );
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({
                 queryKey: queryKeys.campaignPacks.detail(workspaceId, packId),
@@ -757,37 +836,42 @@ function ScoreBlock({ score }: { score: ScoreRun }) {
             mode={score.analysis_mode}
         >
             <DimensionGrid dimensions={score.dimension_scores_json} />
+            <SignalBlock dimensions={score.dimension_scores_json} />
             <Fixes blockers={score.blockers_json} fixes={score.fixes_json} />
             <p className="text-xs text-text-tertiary">
-                This is a structural readiness score, not a guarantee of viral reach, sales, or GMV.
+                {score.schema_version} structural readiness score. This is not a guarantee of viral
+                reach, sales, or GMV.
             </p>
         </ResultShell>
     );
 }
 
 function DnaBlock({ dna }: { dna: Dna }) {
-    const data = dna.dna_json as CreativeDnaView;
+    const data = dna.dna_json;
     return (
         <ResultShell
-            title={String(data.narrative?.angle ?? "Creative DNA")}
-            subtitle={dna.confidence}
+            title={observedText(data.narrative?.angle, "Creative DNA")}
+            subtitle={`${data.schema_version ?? dna.schema_version} - ${data.overall_confidence ?? dna.confidence}`}
             mode={dna.analysis_mode}
         >
             <DimensionGrid
                 dimensions={{
-                    Hook: { score: "-", reason: data.opening?.hook_text },
+                    Hook: { score: "-", reason: observedText(data.opening?.hook_text) },
                     Product: {
                         score: "-",
-                        reason: `${data.product?.first_appearance_ms}ms first reveal`,
+                        reason: `${observedText(data.product?.first_appearance_ms)}ms first reveal`,
                     },
-                    CTA: { score: "-", reason: data.cta?.cta_type },
-                    Creator: { score: "-", reason: data.creator?.delivery_style },
+                    Demo: { score: "-", reason: observedText(data.demo?.demo_type) },
+                    Proof: { score: "-", reason: observedText(data.proof?.strongest_proof) },
+                    CTA: { score: "-", reason: observedText(data.cta?.cta_types) },
+                    Creator: { score: "-", reason: observedText(data.creator?.delivery_style) },
                 }}
             />
-            <ListBlock title="Keep" items={data.summary?.what_to_keep ?? []} />
-            <ListBlock title="Change" items={data.summary?.what_to_change ?? []} />
-            <ListBlock title="Avoid" items={data.summary?.what_not_to_copy ?? []} />
-            <ListBlock title="Hypotheses" items={data.summary?.test_hypotheses ?? []} />
+            <ListBlock title="Reusable mechanisms" items={toTextList(data.reusable_mechanisms)} />
+            <ListBlock title="Claims" items={toTextList(data.claims)} />
+            <ListBlock title="Risks" items={toTextList(data.risks)} />
+            <ListBlock title="Uncertainties" items={data.uncertainties ?? []} />
+            <KeyValueBlock title="Completeness" values={data.completeness ?? {}} />
         </ResultShell>
     );
 }
@@ -801,7 +885,14 @@ function ConceptBlock({ concepts }: { concepts: AdaptationConcept[] }) {
                     className="rounded-md border border-hairline bg-surface-soft p-4"
                 >
                     <h3 className="font-semibold text-text-primary">{concept.name}</h3>
-                    <p className="mt-1 text-sm text-text-secondary">{concept.hook}</p>
+                    <p className="mt-1 text-sm text-text-secondary">
+                        {concept.hook_options?.[0] ?? concept.angle ?? "No hook option"}
+                    </p>
+                    <p className="mt-2 text-xs text-text-secondary">
+                        {concept.strategic_axis ?? "unknown axis"} -{" "}
+                        {concept.delivery_style ?? "unknown delivery"}
+                    </p>
+                    <ListBlock title="Must show" items={concept.must_show ?? []} compact />
                     <p className="mt-3 text-xs text-text-tertiary">{concept.test_hypothesis}</p>
                 </article>
             ))}
@@ -822,9 +913,13 @@ function PreflightBlock({ run }: { run: PreflightRun }) {
                         score: run.structural_score,
                         reason: "Reused TikTok structure scorer",
                     },
-                    Brief: { score: run.brief_alignment_score, reason: "Campaign Pack alignment" },
+                    Brief: {
+                        score: run.brief_alignment_score,
+                        reason: `${run.brief_alignment_json.schema_version ?? run.schema_version} Campaign Pack alignment`,
+                    },
                 }}
             />
+            <RequirementCoverage run={run} />
             <Fixes blockers={run.blockers_json} fixes={run.fixes_json} />
             <div className="rounded-md bg-info-soft p-3 text-sm text-text-primary">
                 {run.revision_message}
@@ -946,19 +1041,183 @@ function Fixes({ blockers, fixes }: { blockers: Finding[]; fixes: Finding[] }) {
     );
 }
 
-function ListBlock({ title, items }: { title: string; items: string[] }) {
+function SignalBlock({ dimensions }: { dimensions: Record<string, DimensionResult> }) {
+    const rows = Object.entries(dimensions).flatMap(([dimension, item]) =>
+        (item.signals ?? []).map((signal) => ({ dimension, signal })),
+    );
+    return (
+        <div className="rounded-md border border-hairline bg-surface-soft p-3">
+            <h3 className="text-sm font-semibold text-text-primary">Signals</h3>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+                {rows.length ? (
+                    rows.slice(0, 12).map(({ dimension, signal }) => (
+                        <div
+                            key={`${dimension}-${signal.code}`}
+                            className="rounded-md border border-hairline bg-surface p-2 text-xs"
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-text-primary">
+                                    {signal.code.replaceAll("_", " ")}
+                                </span>
+                                <span className="text-text-secondary">{signal.contribution}</span>
+                            </div>
+                            <p className="mt-1 text-text-tertiary">
+                                {dimension.replaceAll("_", " ")} - {stringify(signal.value)}
+                            </p>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-sm text-text-secondary">No signals returned.</p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function RequirementCoverage({ run }: { run: PreflightRun }) {
+    const requirements = run.brief_alignment_json.requirements ?? [];
+    return (
+        <div className="rounded-md border border-hairline bg-surface-soft p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-text-primary">Requirement coverage</h3>
+                <span className="text-xs text-text-secondary">
+                    {stringify(run.brief_alignment_json.coverage ?? {})}
+                </span>
+            </div>
+            <div className="mt-3 grid gap-2">
+                {requirements.length ? (
+                    requirements.map((requirement) => (
+                        <div
+                            key={requirement.requirement_id}
+                            className="rounded-md border border-hairline bg-surface p-3 text-sm"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-medium text-text-primary">
+                                    {requirement.requirement_id}
+                                </span>
+                                <Badge variant="secondary">
+                                    {requirement.status} · {requirement.score}
+                                </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-text-secondary">{requirement.reason}</p>
+                            <p className="mt-2 text-xs text-text-tertiary">
+                                Expected: {stringify(requirement.expected)}
+                            </p>
+                            <p className="mt-1 text-xs text-text-tertiary">
+                                Observed: {stringify(requirement.observed)}
+                            </p>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-sm text-text-secondary">No requirements returned.</p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function KeyValueBlock({ title, values }: { title: string; values: Record<string, unknown> }) {
     return (
         <div className="rounded-md border border-hairline bg-surface-soft p-3">
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+            <div className="mt-2 grid gap-1 text-sm text-text-secondary">
+                {Object.entries(values).length ? (
+                    Object.entries(values).map(([key, value]) => (
+                        <div key={key} className="flex justify-between gap-3">
+                            <span>{key.replaceAll("_", " ")}</span>
+                            <span>{stringify(value)}</span>
+                        </div>
+                    ))
+                ) : (
+                    <span>None</span>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function ListBlock({
+    title,
+    items,
+    compact = false,
+}: {
+    title: string;
+    items: Array<string | undefined>;
+    compact?: boolean;
+}) {
+    return (
+        <div
+            className={cn(
+                "rounded-md border border-hairline bg-surface-soft",
+                compact ? "p-2" : "p-3",
+            )}
+        >
+            <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
             <ul className="mt-2 space-y-1 text-sm text-text-secondary">
-                {items.length ? items.map((item) => <li key={item}>{item}</li>) : <li>None</li>}
+                {items.filter(Boolean).length ? (
+                    items.filter(Boolean).map((item) => <li key={item}>{item}</li>)
+                ) : (
+                    <li>None</li>
+                )}
             </ul>
         </div>
     );
 }
 
+function observedText(value: unknown, fallback = "unknown") {
+    if (isObservedValue(value)) return stringify(value.value, fallback);
+    return stringify(value, fallback);
+}
+
+function toTextList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => stringify(item)).filter((item) => item !== "unknown");
+}
+
+function isObservedValue(value: unknown): value is ObservedValue {
+    return Boolean(value && typeof value === "object" && "value" in value);
+}
+
+function stringify(value: unknown, fallback = "unknown"): string {
+    if (value === null || value === undefined || value === "") return fallback;
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) return value.map((item) => stringify(item)).join(", ");
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return fallback;
+    }
+}
+
 function assetTitle(asset: Asset | undefined) {
     return String(asset?.metadata_json.title ?? asset?.id ?? "Seed required");
+}
+
+function parseCampaignBriefDraft(value: string): CampaignPackBrief {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value);
+    } catch {
+        throw new Error("Campaign Pack brief must be valid JSON.");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Campaign Pack brief must be an object.");
+    }
+    const brief = parsed as CampaignPackBrief;
+    if (brief.schema_version !== "campaign_pack_brief_v1") {
+        throw new Error("Campaign Pack brief must use campaign_pack_brief_v1.");
+    }
+    if (!brief.product_snapshot || !brief.objective || !brief.audience || !brief.angle) {
+        throw new Error("Campaign Pack brief is missing product/objective/audience/angle.");
+    }
+    if (!Array.isArray(brief.must_show)) {
+        throw new Error("Campaign Pack brief must include must_show requirements.");
+    }
+    if (!brief.cta || !brief.claim_guardrails) {
+        throw new Error("Campaign Pack brief is missing CTA or claim guardrails.");
+    }
+    return brief;
 }
 
 function errorMessage(error: unknown) {

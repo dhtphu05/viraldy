@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from viraldy.modules.products.contracts import ProductContextV1
+
 
 class CreateProductRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -12,6 +14,7 @@ class CreateProductRequest(BaseModel):
     external_source: str | None = None
     external_id: str | None = None
     metadata_json: dict[str, object] = Field(default_factory=dict)
+    product_context: ProductContextV1 | None = None
 
 
 class UpdateProductRequest(BaseModel):
@@ -20,6 +23,7 @@ class UpdateProductRequest(BaseModel):
     status: str | None = None
     market: str | None = None
     metadata_json: dict[str, object] | None = None
+    product_context: ProductContextV1 | None = None
 
 
 class ProductResponse(BaseModel):
@@ -32,6 +36,8 @@ class ProductResponse(BaseModel):
     external_source: str | None
     external_id: str | None
     metadata_json: dict[str, object]
+    product_context: ProductContextV1
+    context_schema_version: str
 
     model_config = {"from_attributes": True}
 
@@ -41,5 +47,6 @@ class ProductSummary(BaseModel):
     workspace_id: UUID
     name: str
     status: str
+    context_schema_version: str | None = None
 
     model_config = {"from_attributes": True}
