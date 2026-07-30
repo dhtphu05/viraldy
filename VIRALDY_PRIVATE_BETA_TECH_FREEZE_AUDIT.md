@@ -17,6 +17,7 @@ current source code and verification commands prove them.
 - S3 commit SHA: `9382fcb`
 - S4 commit SHA: `667e418`
 - S5 implementation commit SHA: `f45b318`
+- S6 implementation commit SHA: `2257ed4`
 - PR URL: pending
 
 ## 2. Changed Files By Module
@@ -147,6 +148,44 @@ current source code and verification commands prove them.
 - `apps/backend/tests/contract/test_openapi.py`
 - `apps/backend/tests/integration/test_migrations.py`
 
+### S6 Deletion, Retention, And Storage Cleanup
+
+- `apps/backend/src/viraldy/modules/deletion/`
+- Existing workspace, product, asset, reference, Creative DNA, PatternKit,
+  ViralKit, and Campaign Pack routers now use the shared hard-deletion service.
+- `apps/backend/src/viraldy/platform/storage/ports.py`
+- `apps/backend/src/viraldy/platform/storage/s3.py`
+- `apps/backend/src/viraldy/platform/config/settings.py`
+- `apps/backend/src/viraldy/platform/database/models.py`
+- `apps/backend/src/viraldy/worker/tasks/process_asset.py`
+- `apps/backend/src/viraldy/worker/celery_app.py`
+- `apps/backend/src/viraldy/api/main.py`
+- `apps/backend/alembic/versions/0011_deletion_audit.py`
+- `SECURITY.md`
+- `docs/runbooks/OBJECT_STORAGE.md`
+
+### S6 Health
+
+- `apps/backend/src/viraldy/api/routers/health.py`
+- `apps/backend/src/viraldy/platform/storage/ports.py`
+- `apps/backend/src/viraldy/platform/storage/s3.py`
+- `apps/backend/src/viraldy/api/main.py`
+
+### S6 Evaluation
+
+- `apps/backend/src/viraldy/evaluation/`
+- `apps/backend/scripts/run_evaluation.py`
+- `evaluation/README.md`
+- `apps/backend/README.md`
+
+### S6 Tests
+
+- `apps/backend/tests/unit/test_deletion.py`
+- `apps/backend/tests/unit/test_health.py`
+- `apps/backend/tests/unit/test_evaluation.py`
+- `apps/backend/tests/contract/test_openapi.py`
+- `apps/backend/tests/integration/test_migrations.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -159,6 +198,7 @@ current source code and verification commands prove them.
 - `0008_viral_kits`
 - `0009_generation_foundation`
 - `0010_job_contract_normalization`
+- `0011_deletion_audit`
 
 `0005_auth_workspace_rbac` adds `users.last_login_at`, converts legacy
 `workspace_members.role='editor'` to `member`, and adds check constraints for
@@ -197,6 +237,12 @@ collide with the existing idempotency unique constraint. Application-level
 aliases remain so queued legacy deliveries and collision-preserved rows are
 still readable. The migration replaces job/event status constraints and has a
 reverse mapping for rollback.
+
+`0011_deletion_audit` adds minimal deletion audit records and durable
+`storage_deletion_batches`. Audit and outbox rows intentionally have no foreign
+key to workspace/user data so they survive workspace deletion. Status and
+source constraints, workspace/status indexes, safe errors, object counts, and
+row-count summaries support idempotent post-commit object cleanup and retry.
 
 ## 4. Auth And Identity
 
@@ -412,10 +458,18 @@ Implemented in S5:
 - `POST /api/v1/workspaces/{workspace_id}/generation/concept-video-previews`
 - `GET /api/v1/workspaces/{workspace_id}/generation/runs/{generation_run_id}`
 
-Pending:
+Implemented in S6:
 
-- Health endpoints `/health/live`, `/health/ready`, `/health/dependencies`,
-  `/health/worker`
+- `GET /health/live`
+- `GET /health/ready`
+- `GET /health/dependencies`
+- `GET /health/worker`
+- `DELETE /api/v1/workspaces/{workspace_id}/deletions`
+- `DELETE /api/v1/workspaces/{workspace_id}/deletions/{resource_type}/{resource_id}`
+- `POST /api/v1/workspaces/{workspace_id}/deletions/retention`
+- Direct DELETE routes for workspace, product, asset, reference, Creative DNA
+  version, PatternKit, ViralKit, and Campaign Pack use the same audited hard
+  deletion path.
 
 S2 behavior implemented:
 
@@ -516,6 +570,37 @@ S5 behavior implemented:
 - Provider artifact contracts recursively reject persisted HTTP(S) URLs.
   Signed download URLs remain request-time concerns and are not stored.
 
+S6 behavior implemented:
+
+- Liveness reports only API process health. Readiness checks PostgreSQL, Redis,
+  and object storage required for API traffic. The full dependency endpoint
+  additionally checks Celery workers and AI provider configuration; worker/AI
+  outages therefore do not incorrectly remove a healthy API instance.
+- Health responses contain only component status and latency. Raw dependency
+  exceptions, URLs, credentials, provider errors, and bucket details are not
+  returned.
+- Owner/admin hard deletion is workspace-scoped and follows a dynamic
+  child-first dependency plan. Evidence/source deletion promotes dependent
+  PatternKit, ViralKit, and Campaign Pack artifacts so no visible artifact keeps
+  invalid provenance.
+- Storage keys are collected from asset versions, media artifacts, nested
+  sampled-frame payloads, evidence scalar and multi-frame payloads, and
+  generation artifacts. Shared `fixtures/` keys are excluded.
+- Business-row deletion and a durable object-cleanup outbox batch commit in one
+  PostgreSQL transaction before S3 deletion. Failed or partial object cleanup
+  remains pending with a safe error and is retried every five minutes on the
+  maintenance queue. S3-compatible DELETE retry is idempotent.
+- Minimal deletion audit records retain initiator UUID, workspace/resource UUID,
+  status, row counts, object count, safe failure, and timestamps without foreign
+  keys or copied PII, so workspace deletion does not erase the audit.
+- Retention removes expired `pending_upload` assets, redacts old AI model input
+  and output summaries, and scans the workspace prefix for old unreferenced
+  objects. Referenced, recent, fixture, and already-pending keys are protected.
+- The evaluation harness accepts typed captured fixture/mock/live datasets and
+  produces deterministic JSON and Markdown reports. PatternKit and ViralKit
+  metrics use structured judgments, IDs, labels, compile checks, and reviewer
+  scores rather than exact prose matching.
+
 ## 9. Test Commands And Results
 
 Commands run locally:
@@ -548,6 +633,13 @@ cd apps/backend && uv run pytest tests/unit/test_ai_gateway.py tests/unit/test_g
 cd apps/backend && uv run pytest tests/integration/test_migrations.py -q
 cd apps/backend && uv run pytest -q
 docker compose -f <(sed '/env_file: \.env/d' docker-compose.yml) --project-directory "$PWD" config --quiet
+cd apps/backend && uv run pytest tests/unit/test_deletion.py tests/unit/test_health.py tests/unit/test_evaluation.py tests/contract/test_openapi.py --no-cov -q
+cd apps/backend && uv run mypy src/viraldy/modules/deletion src/viraldy/evaluation src/viraldy/api/routers/health.py src/viraldy/platform/storage tests/unit/test_deletion.py tests/unit/test_evaluation.py tests/unit/test_health.py scripts/run_evaluation.py
+cd apps/backend && uv run ruff check .
+cd apps/backend && uv run pytest tests/integration/test_migrations.py -q
+cd apps/backend && uv run pytest -q
+cd apps/backend && uv run pip-audit
+git diff --check
 ```
 
 Results:
@@ -585,6 +677,23 @@ Results:
 - S5 Docker Compose structure validation: passed. The local `.env` file is not
   present, so validation omitted only the `env_file` entries while preserving
   all service, command, dependency, queue, and network structure.
+- S6 deletion/health/evaluation/OpenAPI targeted suite: `20 passed`.
+- S6 targeted mypy: passed, `no issues found in 22 source files`.
+- S6 full backend lint: passed.
+- S6 clean Postgres migration integration: `1 passed`, coverage `73.73%`.
+  Besides zero-to-head migration, this verifies DB-first hard deletion,
+  sampled-frame and multi-frame key discovery, persisted outbox state,
+  failure/retry behavior, cross-workspace graph rejection, expired upload
+  cleanup, orphan cleanup, and protection of referenced/recent objects.
+- S6 full backend pytest: `139 passed`, coverage `73.66%`.
+- S6 dependency audit: no known vulnerabilities; the local unpublished
+  `viraldy-backend` package is not present on PyPI and was skipped.
+- S6 diff whitespace validation: passed.
+- S6 scoped secret-pattern scan: no matches.
+- Independent S6 review initially found storage-before-DB ordering, incomplete
+  nested frame-key discovery, readiness coupling to worker/AI, and a malformed
+  cross-workspace FK cascade risk. All findings were fixed and covered by
+  automated tests before commit.
 
 Local `alembic current` against the default localhost database failed because
 the local Postgres credentials rejected `viraldy`; the clean migration test used
@@ -609,8 +718,9 @@ recommendations. The full fixture/mock E2E path is not yet implemented.
 ## 12. Known Limitations
 
 - PatternKit module exists, but live/mock provider qualification, full HTTP
-  tenant-isolation coverage, deletion invalidation, and performance-evidence
-  promotion rules remain pending.
+  tenant-isolation coverage, and performance-evidence promotion rules remain
+  pending. Source deletion now removes dependent PatternKit/ViralKit/Campaign
+  Pack lineage through the hard-deletion cascade.
 - ViralKit module exists, but full HTTP tenant-isolation coverage, live provider
   qualification and frontend integration remain pending.
 - Feedback module exists for workspace-scoped field-level correction, and
@@ -619,12 +729,19 @@ recommendations. The full fixture/mock E2E path is not yet implemented.
   required event producer is wired yet.
 - Generation foundation is implemented, but live Seedream/Seedance provider
   qualification and real generated-object storage tests remain pending.
-- Health endpoint set is incomplete.
 - Product Context still needs expansion to the full private beta section model.
 - Recommendation product snapshots and full source-version metadata remain incomplete.
 - Model-run trace fields and the operation registry are present; existing
   analysis services still need complete registry-driven execution coverage.
-- Data deletion/retention is incomplete.
+- Health checks are contract-tested but have not yet been qualified against the
+  deployed private-beta PostgreSQL, Redis, S3-compatible service, Celery worker,
+  and live AI provider.
+- Retention is invoked per workspace through the API; automatic per-workspace
+  scheduling is not configured. Pending object-cleanup outbox retries are
+  automatic every five minutes.
+- Evaluation mode records whether candidates came from fixture, mock, or live
+  execution. The harness evaluates captured output and intentionally does not
+  call providers itself.
 - GitHub CI and release tag are pending.
 
 ## 13. OIDC Environment Variables
@@ -692,16 +809,32 @@ use deterministic artifacts and do not prove visual model quality.
 
 ## 16. Data Deletion Evidence
 
-Pending. Existing soft deletes cover selected MVP entities, but private beta
-retention cleanup, storage cleanup, workspace cascade policy, and deletion audit
-records are not yet implemented.
+Implemented and exercised against clean Testcontainers PostgreSQL:
+
+- Workspace hard deletion removes the workspace, assets, versions, media
+  artifacts, evidence, dependent lineage, traces, and all discovered
+  non-fixture object keys.
+- The test persists sampled frames inside media artifact JSON and multiple frame
+  keys inside evidence JSON; all five unique source/media keys are deleted.
+- A second PostgreSQL connection is opened from inside the recording storage
+  adapter. It proves business rows are already absent and the pending outbox is
+  committed before the first object DELETE occurs.
+- Failure injection makes the first object DELETE raise. Business rows remain
+  deleted, the audit reports `storage_cleanup_pending`, the outbox stays
+  `pending`, and a retry succeeds idempotently and completes the audit.
+- Retention deletes an expired incomplete upload, preserves an old referenced
+  active object, preserves a recent unreferenced object, removes an old
+  unreferenced orphan, and proves the DB-first ordering through a separate
+  connection.
+- Direct and generic deletion endpoints require `data.delete`; root resource
+  lookup and every graph query/delete are workspace-scoped. A deliberately
+  malformed workspace-B artifact pointing at a workspace-A asset is rejected
+  with `DELETION_TENANT_GRAPH_CONFLICT`; neither tenant's row is deleted.
 
 ## 17. Incomplete Items
 
 The backend is not technically frozen yet. Remaining milestones:
 
 - Remaining S3 hardening: PatternKit live/mock provider qualification, full
-  HTTP tenant-isolation tests, deletion invalidation, and performance evidence
-  promotion rules.
-- S6 deletion, health, evaluation harness.
+  HTTP tenant-isolation tests, and performance evidence promotion rules.
 - S7 full fixture/mock E2E, GitHub CI, PR, and release tag.
