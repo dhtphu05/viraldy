@@ -1,6 +1,6 @@
 # Viraldy Private Beta Tech Freeze Audit
 
-Status: Backend implementation complete through S7 local gates; release freeze still blocked
+Status: Backend local implementation complete through S8; release freeze still blocked
 Branch: `release/private-beta-tech-freeze`
 Baseline commit: `6461380`
 Target release: `v0.1.0-beta-rc1`
@@ -19,6 +19,7 @@ current source code and verification commands prove them.
 - S5 implementation commit SHA: `f45b318`
 - S6 implementation commit SHA: `2257ed4`
 - S7 implementation commit SHA: `6de0066`
+- S8 release-validation implementation SHA: `33c8780`
 - PR URL: pending
 
 ## 2. Changed Files By Module
@@ -202,6 +203,31 @@ current source code and verification commands prove them.
 - `apps/backend/tests/unit/test_local_test_auth.py`
 - `apps/backend/tests/unit/test_campaign_pack_repository.py`
 
+### S8 Auth, Tenant, Revision, Events, And Release Validation
+
+- `apps/backend/tests/integration/test_http_auth_tenancy.py`
+- `apps/backend/src/viraldy/modules/assets/`
+- `apps/backend/src/viraldy/modules/identity/public.py`
+- `apps/backend/src/viraldy/modules/references/`
+- `apps/backend/src/viraldy/modules/creative_dna/`
+- `apps/backend/src/viraldy/modules/preflight/`
+- `apps/backend/src/viraldy/modules/product_events/`
+- `apps/backend/src/viraldy/modules/campaign_packs/exporter.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/router.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/schemas.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/service.py`
+- `apps/backend/src/viraldy/worker/tasks/process_asset.py`
+- `apps/backend/scripts/smoke_mvp_flow.py`
+- `Makefile`
+- `apps/backend/README.md`
+
+### S8 Tests
+
+- `apps/backend/tests/integration/test_http_auth_tenancy.py`
+- `apps/backend/tests/unit/test_campaign_pack_export.py`
+- `apps/backend/tests/unit/test_policies.py`
+- `apps/backend/tests/contract/test_openapi.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -278,11 +304,16 @@ Completed in S1:
 - `GET /api/v1/me` returns persisted user status.
 - `GET /api/v1/auth/config` returns public auth mode/config without secrets.
 
-Still pending:
+Verified in S8 against migrated Testcontainers PostgreSQL through the ASGI HTTP
+boundary:
 
-- HTTP-level auth tests for missing/malformed bearer headers.
-- HTTP-level suspended-user denial test.
-- Explicit concurrent provisioning integration test against Postgres.
+- Missing bearer, malformed auth scheme, and invalid token return normalized
+  `401 UNAUTHENTICATED` envelopes.
+- Repeated provisioning returns the same user; concurrent provisioning produces
+  one row, one stable UUID, and one `user_signed_up` event.
+- Suspended users are denied with `403 USER_SUSPENDED`.
+- Successful first authentication persists the user and does not duplicate the
+  signup event on later requests.
 
 ## 5. RBAC Matrix
 
@@ -328,9 +359,23 @@ Rules implemented:
 - Deleted workspaces are excluded from permission checks.
 - The only owner cannot demote or remove themself.
 
+S8 tenant evidence:
+
+- The exact role/permission matrix is asserted in unit tests.
+- Two real workspaces and users are created through HTTP on migrated PostgreSQL.
+- Missing membership returns generic `403 FORBIDDEN` across products, assets,
+  references, Creative DNA, PatternKit, ViralKit, Campaign Pack, Preflight,
+  recommendations, feedback, events, and jobs.
+- Actual workspace-B rows for each major resource type return workspace-scoped
+  `404` when requested through a workspace-A URL.
+- Viewer read access succeeds while viewer writes and member-list access fail.
+- Campaign Pack export and asset revision endpoints are included in tenant
+  checks.
+
 Still pending:
 
-- Full tenant-isolation HTTP tests for every major resource.
+- Exhaustive cross-workspace tests for every mutating PatternKit/ViralKit route;
+  the shared permission boundary and major resource lookup paths are covered.
 - Optional owner-grant restrictions beyond the explicit private beta rule.
 
 ## 6. PatternKit Contract Summary
@@ -365,7 +410,8 @@ Still pending for PatternKit:
 
 - Live provider qualification against real Dola/Seed-compatible responses.
   Local OpenAI-compatible mock contract execution passed in S7.
-- Full HTTP tenant-isolation coverage for every PatternKit endpoint.
+- Exhaustive mutating-endpoint tenant coverage beyond the shared permission and
+  real foreign-resource lookup tests added in S8.
 - Performance evidence promotion rules for directional/supported labels.
 
 ## 7. ViralKit Contract Summary
@@ -407,7 +453,8 @@ Implemented in S4:
 
 Still pending for ViralKit:
 
-- HTTP tenant-isolation tests across the full endpoint set.
+- Exhaustive mutating-endpoint tenant coverage beyond the shared permission and
+  real foreign-resource lookup tests added in S8.
 - Live provider qualification against real Dola/Seed-compatible responses.
 - Frontend integration for ViralKit list/detail/create/select/pack creation.
 - Generation provider execution for the optional generation brief payloads.
@@ -486,6 +533,33 @@ Implemented in S6:
 - Direct DELETE routes for workspace, product, asset, reference, Creative DNA
   version, PatternKit, ViralKit, and Campaign Pack use the same audited hard
   deletion path.
+
+Implemented in S8:
+
+- `POST /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/upload-sessions`
+- `POST /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/{asset_version_id}/complete-upload`
+- `GET /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions`
+- `POST /api/v1/workspaces/{workspace_id}/campaign-packs/{campaign_pack_id}/exports`
+
+S8 behavior implemented:
+
+- UGC revisions are immutable, receive serialized version numbers, and can
+  complete out of order without moving `current_version_id` backward.
+- Repeated completion is idempotent and does not duplicate `ugc_uploaded` or
+  `revision_uploaded` events.
+- Revision creation and completion explicitly reject non-UGC assets so a
+  reference source cannot be silently replaced behind existing lineage.
+- Campaign Pack export supports canonical JSON and creator-readable text from
+  the current immutable version, includes version/source traceability, requires
+  `data.export`, and emits `campaign_pack_exported`.
+- Successful reference analysis emits `reference_analyzed` in the same worker
+  transaction as the DNA and reference status.
+- Successful Creative DNA and Preflight reads emit `creative_dna_viewed` and
+  `preflight_viewed` with actor and subject IDs.
+- First user provisioning and reference creation emit `user_signed_up` and
+  `reference_uploaded`.
+- Required product-event writes are first-party transactional audit records,
+  not best-effort external telemetry.
 
 S2 behavior implemented:
 
@@ -663,6 +737,16 @@ cd apps/backend && uv run ruff check .
 cd apps/backend && MYPYPATH=src uv run mypy scripts/smoke_mvp_flow.py scripts/mock_openai_provider.py scripts/seed_local.py src/viraldy/modules/campaign_packs/repository.py src/viraldy/platform/auth/local_test.py tests/unit/test_campaign_pack_repository.py tests/unit/test_local_test_auth.py
 cd apps/backend && uv run bandit -q -r src
 cd apps/backend && uv run pip-audit
+cd apps/backend && uv run pytest tests/integration/test_http_auth_tenancy.py -q --no-cov
+cd apps/backend && uv run pytest
+cd apps/backend && uv run ruff check <all S8 changed Python files>
+cd apps/backend && uv run ruff format --check <all S8 changed Python files>
+cd apps/backend && uv run mypy src
+cd apps/backend && uv run bandit -q -r src && uv run pip-audit
+cd apps/web && pnpm lint && pnpm build
+make smoke-release-fixture
+make smoke-release-mock
+git diff --check
 ```
 
 Results:
@@ -745,10 +829,32 @@ Results:
   every distinct run job, and model-run checks to exact
   workspace/PatternKit/ViralKit/mode/completed rows. Both captured runs passed
   the strengthened DB and event-subject checks.
-
-Local `alembic current` against the default localhost database failed because
-the local Postgres credentials rejected `viraldy`; the clean migration test used
-Testcontainers Postgres and passed.
+- S8 HTTP auth/RBAC/tenant/revision integration: `2 passed` against a migrated
+  Testcontainers PostgreSQL database.
+- S8 full backend pytest on the final implementation state: `148 passed`,
+  coverage `74.60%` against the configured 70% gate.
+- S8 changed-file Ruff lint and format checks: passed.
+- S8 full-project `mypy src`: still `45 errors in 13 files` across 223 checked
+  files, unchanged from the recorded S7 baseline and not represented as a
+  passed release gate.
+- S8 Bandit: passed. Dependency audit: no known vulnerabilities; the
+  unpublished local package was skipped because it is not on PyPI.
+- Frontend lint/build: passed with zero errors. ESLint reports nine existing
+  Fast Refresh warnings; Vite reports an existing large-chunk warning.
+- S8 fixture isolated-lifecycle E2E: passed on the final code state with four
+  successful jobs, required event subjects, Campaign Pack export, immutable UGC
+  revision, DB verification, storage-prefix cleanup, and deletion status
+  `succeeded`.
+- S8 mock OpenAI-compatible isolated-lifecycle E2E: passed on the final code
+  state through ASR and vision/chat HTTP calls with the same lifecycle and
+  deletion assertions.
+- Independent S8 review found that revisions were initially available to
+  reference assets. The implementation now rejects non-UGC revision create and
+  completion; the regression is covered by the HTTP PostgreSQL test.
+- The S8 migration check ran `alembic upgrade head` successfully against the
+  existing local Viraldy PostgreSQL container; clean zero-to-head migration is
+  also covered by Testcontainers.
+- Final diff whitespace and scoped secret-pattern checks: passed.
 
 ## 10. CI Result
 
@@ -759,41 +865,55 @@ therefore remains incomplete.
 
 ## 11. Fixture And Mock E2E Evidence
 
-The executable runner is `apps/backend/scripts/smoke_mvp_flow.py`. `make smoke`,
-`make smoke-fixture`, and `make smoke-mock` now invoke this runner instead of a
-missing pytest file. Both modes verify the configured AI mode, `/me`, terminal
-job status, typed output ranges, exact PatternKit source lineage, PatternKit
-human gates, three distinct ViralKit concepts, buyer/creator persona separation,
-Campaign Pack version creation, Preflight recommendation, seller action,
-field-level feedback, required first-party events, processing job events, and
-mock model-run persistence.
+The executable runner is `apps/backend/scripts/smoke_mvp_flow.py`.
+`make smoke-release-fixture` and `make smoke-release-mock` invoke it with
+`--isolated-lifecycle --verify-db`. Each mode creates a workspace and detailed
+Product Context, uploads reference and UGC media through presigned MinIO URLs,
+executes four Celery jobs, validates exact PatternKit/ViralKit lineage, exports
+the Campaign Pack, runs Preflight and the recommendation/feedback loop, uploads
+an immutable UGC revision, checks required first-party event subjects, then
+hard-deletes the workspace and verifies PostgreSQL audit state plus an empty
+workspace object prefix.
 
 Fixture evidence from 2026-07-30:
 
 - status: `ok`
-- workspace: `181a2e7f-1afd-47ba-8ad5-54895bd6d76f`
-- Quick score: `6ba27a41-aa5d-4286-a48b-d23bc3de8e92`
-- Creative DNA versions: `238ad1b1-a1ad-4a78-80f7-98e535719281`,
-  `9f440d2b-17d0-4c37-a6c0-2ef0846fbcea`
-- PatternKit: `a4032d00-5148-41ff-8df0-57c02db80102`
-- ViralKit: `1f80f5b8-5ce5-476d-808a-1ac0b326a4ee`
-- Campaign Pack version: `b8d34004-f920-4168-a6e8-1d719517c33a`
-- Preflight: `f758f068-699d-4333-9e60-c5fbddad15cc`
-- Recommendation: `8b774911-2b89-43d5-879c-cb76a07ac0ca`
-- completed jobs: 4
+- workspace: `26bf2480-af2b-4a70-89af-66ebc5e6fb82`
+- Quick score: `b48db213-5a5a-4baf-8417-c18d635d8fbd`
+- Creative DNA versions: `0c32b304-5ab9-453d-a72e-8218c8f2a6a7`,
+  `d1f3e3f5-ddc1-4289-b33c-4532f984ff58`
+- PatternKit: `489326b4-3fc8-4d16-8e49-14cf04838ac4`
+- ViralKit: `f97351c4-91cf-4e51-8e1a-fd26e3a8184a`
+- Campaign Pack: `b7331bb8-955a-457a-a70c-b85638ffd32e`
+- Campaign Pack version: `f3496a43-0c4a-4f31-b08e-c30e276cdaca`
+- Preflight: `7a9e6877-31eb-4212-92ec-45e8931dacab`
+- Recommendation: `7f4b5730-2b09-49a1-99a5-6f018a4250e1`
+- UGC revision version: `04c78a11-fe39-4362-9037-199bf5f29ace`
+- completed jobs: `6ca4cefd-f00e-414b-a5b7-de3509f6d8fe`,
+  `683c3605-f04b-454f-9685-f6d64d8e0fb1`,
+  `0541c4dd-c459-45b4-8287-ea4c21d1d75b`,
+  `923f7e62-c71c-454d-bb10-72756b777094`
+- workspace deletion status: `succeeded`
 
 Mock-provider evidence from 2026-07-30:
 
 - status: `ok`
-- Quick score: `ac95d92b-facf-4c46-b23c-3be234ff8453`
-- Creative DNA versions: `2a14fb31-0f48-46f4-b4d8-4d083f75ebb6`,
-  `2fb93827-b7fb-4509-8bda-c19a410d9f23`
-- PatternKit: `21f04292-bb63-4ceb-b715-c736c4ff3576`
-- ViralKit: `31eb4f51-2f12-4804-a502-dce84c0991f7`
-- Campaign Pack version: `9741c1e2-bda8-47ff-8c06-61c584e8b070`
-- Preflight: `c4f3739a-be06-4934-aa9b-3abf91e282da`
-- Recommendation: `f2a8d6cc-a43c-4baf-bfcf-3794aa4125a1`
-- completed jobs: 4
+- workspace: `964a652c-f458-4b8a-ae8c-d5fca10ecb2f`
+- Quick score: `995236a5-e4a9-44cf-832d-7b231e6de367`
+- Creative DNA versions: `65107c64-55cb-4815-ada4-aa74707c8277`,
+  `98967f31-0227-49d6-b0c8-0db6dbb91c76`
+- PatternKit: `f6daf379-b2f6-4f2c-a24b-f8d25891d916`
+- ViralKit: `9dfa0154-7545-447f-8c9f-07e75ffe9396`
+- Campaign Pack: `e7d7077f-7314-4713-8a49-469933846b7b`
+- Campaign Pack version: `77e00580-f879-4157-a878-1caa8dd10c2c`
+- Preflight: `f5157144-3477-4e2c-9c42-6cca7aa09aab`
+- Recommendation: `f23d09d7-9e4d-4b0f-908c-1c95d8acdf83`
+- UGC revision version: `483b526b-ad37-48e8-88cd-8612f838aabe`
+- completed jobs: `fcf9c0af-f9bd-4bc0-9737-0dd0c6574464`,
+  `123ee09e-b855-4d7f-9538-b9955df8a0cf`,
+  `15c6d275-ed49-4ec6-ac6f-52bff85717f6`,
+  `9775a0ea-1be2-4004-b51b-9e376ef3dcee`
+- workspace deletion status: `succeeded`
 
 The runs exposed and led to fixes for two real defects: the local-test identity
 email was rejected by `EmailStr`, and Campaign Pack response serialization
@@ -801,41 +921,42 @@ attempted async lazy loading of an expired `updated_at`. The mock provider was
 also extended to return schema-valid PatternKit and ViralKit responses through
 the same OpenAI-compatible HTTP boundary.
 
-The extended E2E sequence in the original goal is not completely consolidated
-into this runner: workspace/product creation, revision re-upload, workspace
-deletion, and object-cleanup confirmation are covered by separate API/service
-and clean-Postgres tests, not by the same fixture/mock smoke execution.
+Both final runs include the formerly separate lifecycle assertions: workspace
+and Product Context creation, revision re-upload, required event verification,
+workspace deletion, deletion audit/storage-batch success, database absence, and
+object-prefix cleanup.
 
 ## 12. Known Limitations
 
-- PatternKit module exists, but live provider qualification, full HTTP
-  tenant-isolation coverage, and performance-evidence promotion rules remain
-  pending. Mock-provider contract execution passed. Source deletion removes
-  dependent PatternKit/ViralKit/Campaign Pack lineage through the hard-deletion
-  cascade.
-- ViralKit module exists, but full HTTP tenant-isolation coverage, live provider
-  qualification and frontend integration remain pending.
+- PatternKit module exists, but live provider qualification, exhaustive
+  mutating-endpoint tenant coverage, and performance-evidence promotion rules
+  remain pending. Mock-provider contract execution and real foreign-resource
+  tenant lookups pass. Source deletion removes dependent
+  PatternKit/ViralKit/Campaign Pack lineage through the hard-deletion cascade.
+- ViralKit module exists, but exhaustive mutating-endpoint tenant coverage,
+  live provider qualification, and frontend integration remain pending.
 - Feedback module exists for workspace-scoped field-level correction, and
   PatternKit/ViralKit both have resource-local feedback endpoints.
-- Product events module exists for workspace-scoped export, but not every
-  required event producer is wired yet.
+- Required private-beta product event producers are wired and exercised in both
+  final E2E modes. Event persistence is intentionally transactional with the
+  action it audits.
 - Generation foundation is implemented, but live Seedream/Seedance provider
   qualification and real generated-object storage tests remain pending.
 - Product Context still needs expansion to the full private beta section model.
 - Recommendation product snapshots and full source-version metadata remain incomplete.
 - Model-run trace fields and the operation registry are present; existing
   analysis services still need complete registry-driven execution coverage.
-- Health checks are contract-tested but have not yet been qualified against the
-  deployed private-beta PostgreSQL, Redis, S3-compatible service, Celery worker,
-  and live AI provider.
+- Health and lifecycle checks passed against local PostgreSQL, Redis, MinIO, and
+  Celery; deployed-environment and live-provider qualification remain pending.
 - Retention is invoked per workspace through the API; automatic per-workspace
   scheduling is not configured. Pending object-cleanup outbox retries are
   automatic every five minutes.
 - Evaluation mode records whether candidates came from fixture, mock, or live
   execution. The harness evaluates captured output and intentionally does not
   call providers itself.
-- Full-project mypy is not clean; the changed S7 scope is clean.
-- GitHub CI, PR, and release tag are pending.
+- Full-project mypy is not clean: `45 errors in 13 files`.
+- GitHub CI is intentionally not configured for this milestone. PR and release
+  tag are pending.
 
 ## 13. OIDC Environment Variables
 
@@ -926,14 +1047,17 @@ Implemented and exercised against clean Testcontainers PostgreSQL:
 
 ## 17. Incomplete Items
 
-The backend implementation has completed the local S7 fixture/mock gates, but
+The backend implementation has completed the local S8 fixture/mock gates, but
 the release is not technically frozen. Remaining items:
 
-- Remaining S3 hardening: PatternKit live provider qualification, full
-  HTTP tenant-isolation tests, and performance evidence promotion rules.
-- Consolidate workspace/product creation, revision upload, workspace deletion,
-  and object-cleanup verification into each E2E mode; these are currently
-  proven by separate smoke and automated test paths.
+- PatternKit/ViralKit live provider qualification against the intended
+  Dola/Seed-compatible service.
+- Exhaustive cross-workspace tests for every mutating PatternKit/ViralKit
+  endpoint; shared permission and major resource lookup paths already pass.
+- Performance evidence promotion rules for PatternKit
+  directional/supported labels.
+- Frontend integration for the backend ViralKit and Campaign Pack decision
+  workflow.
 - Resolve the 45 full-project mypy errors if a clean typecheck is adopted as a
   release gate.
 - GitHub CI is intentionally not configured for the current milestone and
