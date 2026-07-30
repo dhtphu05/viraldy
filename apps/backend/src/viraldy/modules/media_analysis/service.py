@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -841,7 +841,8 @@ def _run_subprocess(
     args: list[str], error_code: str, message: str
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(  # noqa: S603
+        # Executables are resolved locally and callers build fixed argument lists.
+        return subprocess.run(  # noqa: S603  # nosec B603
             args,
             check=True,
             capture_output=True,

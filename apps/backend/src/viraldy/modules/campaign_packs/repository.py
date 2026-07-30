@@ -56,6 +56,8 @@ class CampaignPackRepository:
         await self._session.flush()
         pack.current_version_id = version.id
         await self._session.flush()
+        await self._session.refresh(pack)
+        await self._session.refresh(version)
         return pack, version
 
     async def list(self, workspace_id: UUID) -> list[CampaignPackModel]:

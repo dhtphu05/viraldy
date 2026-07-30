@@ -1,14 +1,32 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import os
 import re
+from datetime import datetime
 from typing import Annotated, Any
+from uuid import UUID
 
 import uvicorn
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
+from starlette.responses import Response
+
+from viraldy.modules.creative_dna.contracts import CreativeDnaV1
+from viraldy.modules.pattern_kits.contracts import PatternKitV1
+from viraldy.modules.pattern_kits.provider import (
+    PatternEvidenceInput,
+    PatternSourceInput,
+    build_fixture_pattern_kit,
+)
+from viraldy.modules.pattern_kits.public import PatternKitVersionSnapshot
+from viraldy.modules.pattern_kits.schemas import CreatePatternKitRequest
+from viraldy.modules.products.public import ProductContextSnapshot
+from viraldy.modules.viral_kits.contracts import ViralKitPatternMatchV1
+from viraldy.modules.viral_kits.provider import build_fixture_viral_kit
+from viraldy.modules.viral_kits.schemas import CreateViralKitRequest
 
 app = FastAPI(title="Viraldy Mock OpenAI-Compatible Provider")
 
@@ -49,7 +67,7 @@ async def transcriptions(
 async def chat_completions(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
-):
+) -> Response:
     _require_auth_shape(authorization)
     failure = os.getenv("MOCK_AI_FAILURE", "")
     if failure == "malformed_json":
@@ -59,9 +77,7 @@ async def chat_completions(
     if not body.get("model") or not isinstance(body.get("messages"), list):
         raise HTTPException(status_code=400, detail="model and messages are required")
     prompt = _prompt_text(body["messages"])
-    content = (
-        _adaptation_payload() if "Adapt this Creative DNA" in prompt else _vision_payload(prompt)
-    )
+    content = _response_payload(prompt)
     if failure == "missing_field":
         if "concepts" in content:
             content.pop("concepts")
@@ -111,6 +127,117 @@ def _prompt_text(messages: list[Any]) -> str:
                 if isinstance(item, dict) and item.get("type") == "text"
             )
     return "\n".join(parts)
+
+
+def _response_payload(prompt: str) -> dict[str, Any]:
+    if "Extract a PatternKitV1" in prompt:
+        return _pattern_kit_payload(prompt)
+    if "Compose a ViralKitV1" in prompt:
+        return _viral_kit_payload(prompt)
+    if "Adapt this Creative DNA" in prompt:
+        return _adaptation_payload()
+    return _vision_payload(prompt)
+
+
+def _pattern_kit_payload(prompt: str) -> dict[str, Any]:
+    request = CreatePatternKitRequest.model_validate(
+        _literal_section(prompt, "Request: ", "\nSources:")
+    )
+    raw_sources = _literal_section(prompt, "Sources: ")
+    sources: list[PatternSourceInput] = []
+    for raw_source in raw_sources:
+        asset_version_id = UUID(str(raw_source["asset_version_id"]))
+        evidence_by_id = {
+            UUID(str(item["evidence_id"])): PatternEvidenceInput(
+                id=UUID(str(item["evidence_id"])),
+                asset_version_id=asset_version_id,
+                evidence_type=str(item["evidence_type"]),
+                source=str(item["source"]),
+                start_ms=item.get("start_ms"),
+                end_ms=item.get("end_ms"),
+                value_json={},
+                confidence=0.8,
+            )
+            for item in raw_source["evidence"]
+        }
+        sources.append(
+            PatternSourceInput(
+                creative_dna_version_id=UUID(str(raw_source["creative_dna_version_id"])),
+                asset_version_id=asset_version_id,
+                dna=CreativeDnaV1.model_validate(raw_source["dna"]),
+                evidence_by_id=evidence_by_id,
+            )
+        )
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=UUID(_line_value(prompt, "Pattern kit ID")),
+        workspace_id=UUID(_line_value(prompt, "Workspace ID")),
+        version=int(_line_value(prompt, "Version")),
+        created_by=UUID(_line_value(prompt, "Created by")),
+        created_at=datetime.fromisoformat(_line_value(prompt, "Created at")),
+        request=request,
+        sources=sources,
+        model_run_id=UUID(_line_value(prompt, "Model run ID")),
+    )
+    pattern = pattern.model_copy(
+        update={
+            "source": pattern.source.model_copy(update={"extraction_mode": "ai_assisted"}),
+        }
+    )
+    return pattern.model_dump(mode="json")
+
+
+def _viral_kit_payload(prompt: str) -> dict[str, Any]:
+    request = CreateViralKitRequest.model_validate(
+        _literal_section(prompt, "Request: ", "\nProduct snapshot:")
+    )
+    product = ProductContextSnapshot.model_validate(
+        _literal_section(prompt, "Product snapshot: ", "\nPattern matches:")
+    )
+    matches = [
+        ViralKitPatternMatchV1.model_validate(item)
+        for item in _literal_section(prompt, "Pattern matches: ", "\nPattern payloads:")
+    ]
+    patterns = [
+        PatternKitVersionSnapshot(
+            pattern_kit_id=UUID(str(item["pattern_kit_id"])),
+            pattern_kit_version_id=UUID(str(item["pattern_kit_version_id"])),
+            workspace_id=UUID(_line_value(prompt, "Workspace ID")),
+            version=int(item["version"]),
+            status=str(item["status"]),
+            pattern=PatternKitV1.model_validate(item["pattern"]),
+        )
+        for item in _literal_section(prompt, "Pattern payloads: ")
+    ]
+    viral_kit = build_fixture_viral_kit(
+        viral_kit_id=UUID(_line_value(prompt, "Viral kit ID")),
+        workspace_id=UUID(_line_value(prompt, "Workspace ID")),
+        version=int(_line_value(prompt, "Version")),
+        created_by=UUID(_line_value(prompt, "Created by")),
+        created_at=datetime.fromisoformat(_line_value(prompt, "Created at")),
+        request=request,
+        product=product,
+        patterns=patterns,
+        pattern_matches=matches,
+        model_run_id=UUID(_line_value(prompt, "Model run ID")),
+    )
+    return viral_kit.model_dump(mode="json")
+
+
+def _line_value(prompt: str, label: str) -> str:
+    match = re.search(rf"^{re.escape(label)}:\s*(.+)$", prompt, flags=re.MULTILINE)
+    if match is None:
+        raise HTTPException(status_code=400, detail=f"missing prompt field: {label}")
+    return match.group(1).strip()
+
+
+def _literal_section(prompt: str, start: str, end: str | None = None) -> Any:
+    try:
+        raw = prompt.split(start, 1)[1]
+        if end is not None:
+            raw = raw.split(end, 1)[0]
+        return ast.literal_eval(raw.strip())
+    except (IndexError, SyntaxError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"invalid prompt section: {start}") from exc
 
 
 def _vision_payload(prompt: str) -> dict[str, Any]:
@@ -581,7 +708,7 @@ def _observation_bundle(duration_ms: int, scenario: dict[str, Any]) -> dict[str,
                 "qualification_present": False,
                 "confidence": 0.8,
                 "frame_storage_keys": [],
-}
+            }
         ],
         "platform": {
             "aspect_ratio": "9:16",
@@ -626,8 +753,7 @@ def _adaptation_payload() -> dict[str, Any]:
                 "evidence_ids": [],
                 "product_context_refs": ["creative.primary_angles"],
                 "risk_codes": [],
-            }
-        ,
+            },
             {
                 "element_type": "product_context",
                 "source_path": "product_context.identity",
@@ -636,8 +762,7 @@ def _adaptation_payload() -> dict[str, Any]:
                 "evidence_ids": [],
                 "product_context_refs": ["identity.name", "identity.category"],
                 "risk_codes": [],
-            }
-        ,
+            },
             {
                 "element_type": "claims",
                 "source_path": "product_context.governance",

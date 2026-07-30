@@ -1,7 +1,9 @@
 BACKEND_DIR=apps/backend
 WEB_DIR=apps/web
+SMOKE_MODE ?= fixture
+SMOKE_ARGS ?=
 
-.PHONY: setup infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke security docker-build logs clean
+.PHONY: setup infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke smoke-fixture smoke-mock security docker-build logs clean
 
 setup: backend-install
 
@@ -76,7 +78,13 @@ test-contract:
 	cd $(BACKEND_DIR) && uv run pytest tests/contract
 
 smoke:
-	cd $(BACKEND_DIR) && uv run pytest tests/integration/test_smoke_flow.py
+	cd $(BACKEND_DIR) && uv run python scripts/smoke_mvp_flow.py --expect-mode $(SMOKE_MODE) $(SMOKE_ARGS)
+
+smoke-fixture:
+	$(MAKE) smoke SMOKE_MODE=fixture
+
+smoke-mock:
+	$(MAKE) smoke SMOKE_MODE=mock
 
 security:
 	cd $(BACKEND_DIR) && uv run bandit -q -r src && uv run pip-audit
