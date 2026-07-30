@@ -1,6 +1,6 @@
 # Viraldy Private Beta Tech Freeze Audit
 
-Status: In progress
+Status: Backend implementation complete through S7 local gates; release freeze still blocked
 Branch: `release/private-beta-tech-freeze`
 Baseline commit: `6461380`
 Target release: `v0.1.0-beta-rc1`
@@ -18,6 +18,7 @@ current source code and verification commands prove them.
 - S4 commit SHA: `667e418`
 - S5 implementation commit SHA: `f45b318`
 - S6 implementation commit SHA: `2257ed4`
+- S7 implementation commit SHA: `6de0066`
 - PR URL: pending
 
 ## 2. Changed Files By Module
@@ -186,6 +187,21 @@ current source code and verification commands prove them.
 - `apps/backend/tests/contract/test_openapi.py`
 - `apps/backend/tests/integration/test_migrations.py`
 
+### S7 E2E And Release Hardening
+
+- `Makefile`
+- `apps/backend/scripts/smoke_mvp_flow.py`
+- `apps/backend/scripts/mock_openai_provider.py`
+- `apps/backend/scripts/seed_local.py`
+- `apps/backend/src/viraldy/platform/auth/local_test.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/repository.py`
+- `apps/backend/src/viraldy/modules/media_analysis/service.py`
+
+### S7 Tests
+
+- `apps/backend/tests/unit/test_local_test_auth.py`
+- `apps/backend/tests/unit/test_campaign_pack_repository.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -347,9 +363,9 @@ Implemented in S3:
 
 Still pending for PatternKit:
 
-- Live/mock provider qualification against real Dola/Seed-compatible responses.
+- Live provider qualification against real Dola/Seed-compatible responses.
+  Local OpenAI-compatible mock contract execution passed in S7.
 - Full HTTP tenant-isolation coverage for every PatternKit endpoint.
-- Deletion invalidation policy when source evidence/assets are removed.
 - Performance evidence promotion rules for directional/supported labels.
 
 ## 7. ViralKit Contract Summary
@@ -640,6 +656,13 @@ cd apps/backend && uv run pytest tests/integration/test_migrations.py -q
 cd apps/backend && uv run pytest -q
 cd apps/backend && uv run pip-audit
 git diff --check
+cd apps/backend && uv run python scripts/smoke_mvp_flow.py --base-url http://127.0.0.1:18000/api/v1 --expect-mode fixture --verify-db --timeout-seconds 120
+cd apps/backend && uv run python scripts/smoke_mvp_flow.py --base-url http://127.0.0.1:18000/api/v1 --expect-mode mock --verify-db --timeout-seconds 180
+cd apps/backend && uv run pytest
+cd apps/backend && uv run ruff check .
+cd apps/backend && MYPYPATH=src uv run mypy scripts/smoke_mvp_flow.py scripts/mock_openai_provider.py scripts/seed_local.py src/viraldy/modules/campaign_packs/repository.py src/viraldy/platform/auth/local_test.py tests/unit/test_campaign_pack_repository.py tests/unit/test_local_test_auth.py
+cd apps/backend && uv run bandit -q -r src
+cd apps/backend && uv run pip-audit
 ```
 
 Results:
@@ -694,6 +717,34 @@ Results:
   nested frame-key discovery, readiness coupling to worker/AI, and a malformed
   cross-workspace FK cascade risk. All findings were fixed and covered by
   automated tests before commit.
+- S7 fixture HTTP E2E: passed with four successful Celery jobs and DB
+  verification. It exercised auth identity, seeded product/assets, two
+  reference analyses, exact Creative DNA lineage, PatternKit review and
+  validation, ViralKit composition, concept selection, Campaign Pack
+  compilation, Preflight, recommendation acceptance, three feedback writes,
+  and required product events.
+- S7 mock-provider HTTP E2E: passed with four successful Celery jobs and DB
+  verification. It additionally created a real MP4 with ffmpeg, uploaded four
+  assets through presigned MinIO URLs, ran ASR/vision/chat through the local
+  OpenAI-compatible provider, and persisted `ai_model_runs` in `mock` mode.
+- S7 full backend pytest: `142 passed`, coverage `73.77%`.
+- S7 full backend ruff: passed.
+- S7 targeted mypy for all changed Python entrypoints/modules/tests: passed,
+  `no issues found in 7 source files`.
+- Full-project `mypy src` is not clean: `45 errors in 13 files`. These are
+  existing typing gaps outside the S7 diff and are not represented as a passed
+  release gate.
+- S7 Bandit scan: passed after documenting the reviewed ffmpeg/ffprobe
+  subprocess boundary; argv is used without a shell, executable paths are
+  locally resolved, and calls have a timeout.
+- S7 dependency audit: no known vulnerabilities; the unpublished local
+  `viraldy-backend` package was skipped because it is not on PyPI.
+- Independent S7 review identified three false-positive risks in the initial
+  smoke assertions. Before commit, event checks were changed to exact
+  event-type/subject-ID pairs, job persistence checks to a terminal event for
+  every distinct run job, and model-run checks to exact
+  workspace/PatternKit/ViralKit/mode/completed rows. Both captured runs passed
+  the strengthened DB and event-subject checks.
 
 Local `alembic current` against the default localhost database failed because
 the local Postgres credentials rejected `viraldy`; the clean migration test used
@@ -701,26 +752,67 @@ Testcontainers Postgres and passed.
 
 ## 10. CI Result
 
-Pending. Do not claim GitHub CI success from local tests.
+Not configured for this milestone, per the current release instruction that
+GitHub Actions are not needed. Local gates are recorded above, but they are not
+reported as GitHub CI success. The original goal's `GitHub CI passes` item
+therefore remains incomplete.
 
 ## 11. Fixture And Mock E2E Evidence
 
-Pending for the full private beta flow. Existing unit tests now cover media
-evidence, Creative DNA, PatternKit fixture extraction, PatternKit state
-transitions, PatternKit feedback, ViralKit fixture composition, ViralKit
-product-version locking, ViralKit concept actions, ViralKit-to-Campaign-Pack
-lineage, typed AI operation registration, generation feature flags, exact
-generation-brief selection, deterministic generation artifacts, job aliases,
-stale-job recovery fencing, live-provider retry/error/output validation,
-TikTok scorer, campaign pack semantics, preflight requirements, and
-recommendations. The full fixture/mock E2E path is not yet implemented.
+The executable runner is `apps/backend/scripts/smoke_mvp_flow.py`. `make smoke`,
+`make smoke-fixture`, and `make smoke-mock` now invoke this runner instead of a
+missing pytest file. Both modes verify the configured AI mode, `/me`, terminal
+job status, typed output ranges, exact PatternKit source lineage, PatternKit
+human gates, three distinct ViralKit concepts, buyer/creator persona separation,
+Campaign Pack version creation, Preflight recommendation, seller action,
+field-level feedback, required first-party events, processing job events, and
+mock model-run persistence.
+
+Fixture evidence from 2026-07-30:
+
+- status: `ok`
+- workspace: `181a2e7f-1afd-47ba-8ad5-54895bd6d76f`
+- Quick score: `6ba27a41-aa5d-4286-a48b-d23bc3de8e92`
+- Creative DNA versions: `238ad1b1-a1ad-4a78-80f7-98e535719281`,
+  `9f440d2b-17d0-4c37-a6c0-2ef0846fbcea`
+- PatternKit: `a4032d00-5148-41ff-8df0-57c02db80102`
+- ViralKit: `1f80f5b8-5ce5-476d-808a-1ac0b326a4ee`
+- Campaign Pack version: `b8d34004-f920-4168-a6e8-1d719517c33a`
+- Preflight: `f758f068-699d-4333-9e60-c5fbddad15cc`
+- Recommendation: `8b774911-2b89-43d5-879c-cb76a07ac0ca`
+- completed jobs: 4
+
+Mock-provider evidence from 2026-07-30:
+
+- status: `ok`
+- Quick score: `ac95d92b-facf-4c46-b23c-3be234ff8453`
+- Creative DNA versions: `2a14fb31-0f48-46f4-b4d8-4d083f75ebb6`,
+  `2fb93827-b7fb-4509-8bda-c19a410d9f23`
+- PatternKit: `21f04292-bb63-4ceb-b715-c736c4ff3576`
+- ViralKit: `31eb4f51-2f12-4804-a502-dce84c0991f7`
+- Campaign Pack version: `9741c1e2-bda8-47ff-8c06-61c584e8b070`
+- Preflight: `c4f3739a-be06-4934-aa9b-3abf91e282da`
+- Recommendation: `f2a8d6cc-a43c-4baf-bfcf-3794aa4125a1`
+- completed jobs: 4
+
+The runs exposed and led to fixes for two real defects: the local-test identity
+email was rejected by `EmailStr`, and Campaign Pack response serialization
+attempted async lazy loading of an expired `updated_at`. The mock provider was
+also extended to return schema-valid PatternKit and ViralKit responses through
+the same OpenAI-compatible HTTP boundary.
+
+The extended E2E sequence in the original goal is not completely consolidated
+into this runner: workspace/product creation, revision re-upload, workspace
+deletion, and object-cleanup confirmation are covered by separate API/service
+and clean-Postgres tests, not by the same fixture/mock smoke execution.
 
 ## 12. Known Limitations
 
-- PatternKit module exists, but live/mock provider qualification, full HTTP
+- PatternKit module exists, but live provider qualification, full HTTP
   tenant-isolation coverage, and performance-evidence promotion rules remain
-  pending. Source deletion now removes dependent PatternKit/ViralKit/Campaign
-  Pack lineage through the hard-deletion cascade.
+  pending. Mock-provider contract execution passed. Source deletion removes
+  dependent PatternKit/ViralKit/Campaign Pack lineage through the hard-deletion
+  cascade.
 - ViralKit module exists, but full HTTP tenant-isolation coverage, live provider
   qualification and frontend integration remain pending.
 - Feedback module exists for workspace-scoped field-level correction, and
@@ -742,7 +834,8 @@ recommendations. The full fixture/mock E2E path is not yet implemented.
 - Evaluation mode records whether candidates came from fixture, mock, or live
   execution. The harness evaluates captured output and intentionally does not
   call providers itself.
-- GitHub CI and release tag are pending.
+- Full-project mypy is not clean; the changed S7 scope is clean.
+- GitHub CI, PR, and release tag are pending.
 
 ## 13. OIDC Environment Variables
 
@@ -833,8 +926,17 @@ Implemented and exercised against clean Testcontainers PostgreSQL:
 
 ## 17. Incomplete Items
 
-The backend is not technically frozen yet. Remaining milestones:
+The backend implementation has completed the local S7 fixture/mock gates, but
+the release is not technically frozen. Remaining items:
 
-- Remaining S3 hardening: PatternKit live/mock provider qualification, full
+- Remaining S3 hardening: PatternKit live provider qualification, full
   HTTP tenant-isolation tests, and performance evidence promotion rules.
-- S7 full fixture/mock E2E, GitHub CI, PR, and release tag.
+- Consolidate workspace/product creation, revision upload, workspace deletion,
+  and object-cleanup verification into each E2E mode; these are currently
+  proven by separate smoke and automated test paths.
+- Resolve the 45 full-project mypy errors if a clean typecheck is adopted as a
+  release gate.
+- GitHub CI is intentionally not configured for the current milestone and
+  therefore cannot be marked passed.
+- PR URL and release tag `v0.1.0-beta-rc1` are pending. No tag should be created
+  while the freeze statement remains false.
