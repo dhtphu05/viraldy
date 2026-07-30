@@ -21,6 +21,7 @@ from viraldy.modules.feedback.router import router as feedback_router
 from viraldy.modules.identity.router import router as identity_router
 from viraldy.modules.jobs.router import router as jobs_router
 from viraldy.modules.media_analysis.router import router as media_analysis_router
+from viraldy.modules.pattern_kits.router import router as pattern_kits_router
 from viraldy.modules.preflight.router import router as preflight_router
 from viraldy.modules.product_events.router import router as product_events_router
 from viraldy.modules.products.router import router as products_router
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(reference_boards_router, prefix=api_v1)
     app.include_router(references_router, prefix=api_v1)
     app.include_router(creative_dna_router, prefix=api_v1)
+    app.include_router(pattern_kits_router, prefix=api_v1)
     app.include_router(tiktok_scorer_router, prefix=api_v1)
     app.include_router(adaptations_router, prefix=api_v1)
     app.include_router(campaign_packs_router, prefix=api_v1)

@@ -44,6 +44,11 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
         "recommendation_actions",
         "feedback_items",
         "product_events",
+        "pattern_kits",
+        "pattern_kit_versions",
+        "pattern_kit_sources",
+        "pattern_kit_evidence_links",
+        "pattern_kit_actions",
     }.issubset(tables)
     assert {
         "operation",

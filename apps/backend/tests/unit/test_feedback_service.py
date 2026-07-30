@@ -74,13 +74,15 @@ class FakeProductEventPublisher:
 async def test_feedback_service_records_field_correction_and_event(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import viraldy.modules.feedback.public as public_module
     import viraldy.modules.feedback.service as service_module
 
     session = FakeSession()
     repository = FakeFeedbackRepository(session)
     event_publisher = FakeProductEventPublisher(session)
     monkeypatch.setattr(service_module, "FeedbackRepository", lambda _: repository)
-    monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: event_publisher)
+    monkeypatch.setattr(public_module, "FeedbackRepository", lambda _: repository)
+    monkeypatch.setattr(public_module, "ProductEventPublisher", lambda _: event_publisher)
     workspace_id = uuid4()
     user_id = uuid4()
     subject_id = uuid4()

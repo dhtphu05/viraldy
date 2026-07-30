@@ -11,6 +11,13 @@ from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.identity.models import UserModel
 from viraldy.modules.jobs.models import ProcessingJobEventModel, ProcessingJobModel
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
+from viraldy.modules.pattern_kits.models import (
+    PatternKitActionModel,
+    PatternKitEvidenceLinkModel,
+    PatternKitModel,
+    PatternKitSourceModel,
+    PatternKitVersionModel,
+)
 from viraldy.modules.preflight.models import PreflightRunModel
 from viraldy.modules.product_events.models import ProductEventModel
 from viraldy.modules.products.models import ProductModel
@@ -34,6 +41,11 @@ __all__ = [
     "EvidenceItemModel",
     "FeedbackItemModel",
     "MediaArtifactModel",
+    "PatternKitActionModel",
+    "PatternKitEvidenceLinkModel",
+    "PatternKitModel",
+    "PatternKitSourceModel",
+    "PatternKitVersionModel",
     "PreflightRunModel",
     "ProductEventModel",
     "ProcessingJobEventModel",
