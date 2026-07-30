@@ -7,10 +7,12 @@ from viraldy.modules.ai_gateway.models import AiModelRunModel
 from viraldy.modules.assets.models import AssetModel, AssetVersionModel
 from viraldy.modules.campaign_packs.models import CampaignPackModel, CampaignPackVersionModel
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
+from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.identity.models import UserModel
 from viraldy.modules.jobs.models import ProcessingJobEventModel, ProcessingJobModel
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
 from viraldy.modules.preflight.models import PreflightRunModel
+from viraldy.modules.product_events.models import ProductEventModel
 from viraldy.modules.products.models import ProductModel
 from viraldy.modules.recommendations.models import (
     RecommendationActionModel,
@@ -30,8 +32,10 @@ __all__ = [
     "CampaignPackVersionModel",
     "CreativeDnaVersionModel",
     "EvidenceItemModel",
+    "FeedbackItemModel",
     "MediaArtifactModel",
     "PreflightRunModel",
+    "ProductEventModel",
     "ProcessingJobEventModel",
     "ProcessingJobModel",
     "ProductModel",

@@ -64,6 +64,15 @@ class FakeIdentityQueries:
         return []
 
 
+class FakeProductEventPublisher:
+    def __init__(self, session: FakeSession) -> None:
+        self.session = session
+        self.records: list[dict[str, object]] = []
+
+    async def record(self, **kwargs: object) -> None:
+        self.records.append(kwargs)
+
+
 class FakeMemberRepository:
     def __init__(self, member: WorkspaceMemberModel | None = None, owner_count: int = 1) -> None:
         self.member = member
@@ -103,7 +112,9 @@ async def test_workspace_service_creates_owner_workspace(
 
     session = FakeSession()
     repository = FakeWorkspaceRepository(session)
+    event_publisher = FakeProductEventPublisher(session)
     monkeypatch.setattr(service_module, "WorkspaceRepository", lambda _: repository)
+    monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: event_publisher)
     user_id = uuid4()
 
     workspace = await WorkspaceService(cast(AsyncSession, session)).create_workspace(
@@ -114,6 +125,16 @@ async def test_workspace_service_creates_owner_workspace(
     assert workspace.name == "Viraldy Team"
     assert workspace.slug == "viraldy-team"
     assert repository.created_by_user_id == user_id
+    assert event_publisher.records == [
+        {
+            "event_type": "workspace_created",
+            "workspace_id": workspace.id,
+            "actor_user_id": user_id,
+            "subject_type": "workspace",
+            "subject_id": workspace.id,
+            "payload_json": {"name": "Viraldy Team", "slug": "viraldy-team"},
+        }
+    ]
     assert session.commits == 1
 
 

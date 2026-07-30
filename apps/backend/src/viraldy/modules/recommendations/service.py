@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from viraldy.modules.product_events.public import ProductEventPublisher, ProductEventType
 from viraldy.modules.recommendations.repository import RecommendationRepository
 from viraldy.modules.recommendations.schemas import (
     RecommendationActionResponse,
@@ -53,5 +54,25 @@ class RecommendationService:
             data.action_type,
             data.metadata_json,
         )
+        event_type = _event_type_for_recommendation_action(data.action_type)
+        if event_type is not None:
+            await ProductEventPublisher(self._session).record(
+                event_type=event_type,
+                workspace_id=workspace_id,
+                actor_user_id=user_id,
+                subject_type="recommendation",
+                subject_id=recommendation_id,
+                payload_json={"action_id": str(action_id)},
+            )
         await self._session.commit()
         return RecommendationActionResponse(id=action_id)
+
+
+def _event_type_for_recommendation_action(action_type: str) -> ProductEventType | None:
+    if action_type == "accepted":
+        return "recommendation_accepted"
+    if action_type == "rejected":
+        return "recommendation_rejected"
+    if action_type == "applied":
+        return "recommendation_applied"
+    return None

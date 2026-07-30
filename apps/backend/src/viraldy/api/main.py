@@ -17,10 +17,12 @@ from viraldy.modules.adaptations.router import router as adaptations_router
 from viraldy.modules.assets.router import router as assets_router
 from viraldy.modules.campaign_packs.router import router as campaign_packs_router
 from viraldy.modules.creative_dna.router import router as creative_dna_router
+from viraldy.modules.feedback.router import router as feedback_router
 from viraldy.modules.identity.router import router as identity_router
 from viraldy.modules.jobs.router import router as jobs_router
 from viraldy.modules.media_analysis.router import router as media_analysis_router
 from viraldy.modules.preflight.router import router as preflight_router
+from viraldy.modules.product_events.router import router as product_events_router
 from viraldy.modules.products.router import router as products_router
 from viraldy.modules.recommendations.router import router as recommendations_router
 from viraldy.modules.reference_boards.router import router as reference_boards_router
@@ -60,6 +62,8 @@ def create_app() -> FastAPI:
     app.include_router(assets_router, prefix=api_v1)
     app.include_router(jobs_router, prefix=api_v1)
     app.include_router(recommendations_router, prefix=api_v1)
+    app.include_router(product_events_router, prefix=api_v1)
+    app.include_router(feedback_router, prefix=api_v1)
     app.include_router(media_analysis_router, prefix=api_v1)
     app.include_router(reference_boards_router, prefix=api_v1)
     app.include_router(references_router, prefix=api_v1)

@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.identity.public import IdentityQueries, UserSummary
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.workspaces.models import WorkspaceMemberModel
 from viraldy.modules.workspaces.repository import WorkspaceRepository
 from viraldy.modules.workspaces.schemas import (
@@ -29,6 +30,14 @@ class WorkspaceService:
         self, data: CreateWorkspaceRequest, user_id: UUID
     ) -> WorkspaceResponse:
         workspace = await self._repository.create(data.name, data.slug, user_id)
+        await ProductEventPublisher(self._session).record(
+            event_type="workspace_created",
+            workspace_id=workspace.id,
+            actor_user_id=user_id,
+            subject_type="workspace",
+            subject_id=workspace.id,
+            payload_json={"name": data.name, "slug": data.slug},
+        )
         await self._session.commit()
         return WorkspaceResponse.model_validate(workspace)
 

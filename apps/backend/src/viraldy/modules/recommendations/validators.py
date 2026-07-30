@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from viraldy.shared.errors.base import AppError
 
-ACTION_TYPES = {"viewed", "accepted", "rejected", "exported", "applied", "dismissed"}
+ACTION_TYPES = {"viewed", "accepted", "rejected", "applied", "ignored"}
 
 
 def validate_action_type(action_type: str) -> None:

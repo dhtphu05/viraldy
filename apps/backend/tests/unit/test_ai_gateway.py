@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -14,6 +15,7 @@ from fastapi.testclient import TestClient
 import viraldy.modules.adaptations.provider as adaptation_provider_module
 import viraldy.modules.ai_gateway.http_client as http_client_module
 from viraldy.modules.ai_gateway.http_client import OpenAICompatibleClient, extract_message_json
+from viraldy.modules.ai_gateway.repository import _run
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
@@ -124,6 +126,39 @@ def test_extract_message_json_rejects_malformed_content() -> None:
         extract_message_json(response)
 
     assert exc_info.value.code == "MODEL_RESPONSE_INVALID"
+
+
+def test_model_run_populates_private_beta_trace_fields() -> None:
+    request_hash = "a" * 64
+
+    run = _run(
+        workspace_id=uuid4(),
+        processing_job_id=None,
+        subject_type="asset",
+        subject_id=uuid4(),
+        capability="legacy_capability",
+        analysis_mode="fixture",
+        provider="fixture",
+        model="fixture-model",
+        prompt_version="prompt_v1",
+        response_schema_version="schema_v1",
+        request_hash=request_hash,
+        input_summary={"source": "unit"},
+        operation="media_observation",
+        schema_version="media_observation_v1",
+        input_hash=request_hash,
+        attempt_count=2,
+    )
+
+    assert run.capability == "legacy_capability"
+    assert run.operation == "media_observation"
+    assert run.response_schema_version == "schema_v1"
+    assert run.schema_version == "media_observation_v1"
+    assert run.request_hash == request_hash
+    assert run.input_hash == request_hash
+    assert run.attempt == 1
+    assert run.attempt_count == 2
+    assert run.usage_json == {}
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.products.contracts import (
     ProductContextV1,
     build_minimal_product_context,
@@ -44,6 +45,17 @@ class ProductService:
             product_context_json=product_context_to_json(product_context),
             context_schema_version=product_context.schema_version,
             created_by_user_id=user_id,
+        )
+        await ProductEventPublisher(self._session).record(
+            event_type="product_created",
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            subject_type="product",
+            subject_id=product.id,
+            payload_json={
+                "name": product.name,
+                "context_schema_version": product.context_schema_version,
+            },
         )
         await self._session.commit()
         return _response_from_product(product)

@@ -24,7 +24,11 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
 
         engine = create_engine(sync_url)
         try:
-            tables = set(inspect(engine).get_table_names())
+            inspector = inspect(engine)
+            tables = set(inspector.get_table_names())
+            ai_model_run_columns = {
+                column["name"] for column in inspector.get_columns("ai_model_runs")
+            }
         finally:
             engine.dispose()
 
@@ -38,4 +42,15 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
         "processing_jobs",
         "recommendations",
         "recommendation_actions",
+        "feedback_items",
+        "product_events",
     }.issubset(tables)
+    assert {
+        "operation",
+        "schema_version",
+        "input_hash",
+        "attempt_count",
+        "usage_json",
+        "estimated_cost",
+        "safe_error_message",
+    }.issubset(ai_model_run_columns)

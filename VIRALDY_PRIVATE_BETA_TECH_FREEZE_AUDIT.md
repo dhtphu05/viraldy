@@ -12,7 +12,8 @@ current source code and verification commands prove them.
 
 - Branch: `release/private-beta-tech-freeze`
 - Baseline SHA before this goal work: `6461380`
-- Current milestone commit SHA: pending
+- S1 commit SHA: `1f603ba`
+- Current S2 commit SHA: pending
 - PR URL: pending
 
 ## 2. Changed Files By Module
@@ -43,6 +44,28 @@ current source code and verification commands prove them.
 - `apps/backend/tests/unit/test_workspace_service.py`
 - `apps/backend/tests/integration/test_migrations.py` exercised clean Postgres migration.
 
+### S2 Persistence Foundations
+
+- `apps/backend/src/viraldy/modules/feedback/`
+- `apps/backend/src/viraldy/modules/product_events/`
+- `apps/backend/src/viraldy/modules/ai_gateway/models.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/repository.py`
+- `apps/backend/src/viraldy/modules/recommendations/validators.py`
+- `apps/backend/src/viraldy/modules/recommendations/service.py`
+- `apps/backend/src/viraldy/modules/products/service.py`
+- `apps/backend/src/viraldy/modules/workspaces/service.py`
+- `apps/backend/src/viraldy/api/main.py`
+- `apps/backend/src/viraldy/platform/database/models.py`
+
+### S2 Tests
+
+- `apps/backend/tests/unit/test_feedback_service.py`
+- `apps/backend/tests/unit/test_product_events.py`
+- `apps/backend/tests/unit/test_recommendation_service.py`
+- `apps/backend/tests/unit/test_workspace_service.py`
+- `apps/backend/tests/unit/test_ai_gateway.py`
+- `apps/backend/tests/integration/test_migrations.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -50,10 +73,17 @@ current source code and verification commands prove them.
 - `0003_keyless_product_hardening`
 - `0004_creative_domain_contracts`
 - `0005_auth_workspace_rbac`
+- `0006_feedback_events_model_runs`
 
 `0005_auth_workspace_rbac` adds `users.last_login_at`, converts legacy
 `workspace_members.role='editor'` to `member`, and adds check constraints for
 valid user status and workspace roles.
+
+`0006_feedback_events_model_runs` adds `feedback_items` and `product_events`,
+adds private-beta trace fields to `ai_model_runs`, normalizes legacy
+recommendation actions into the supported action set while preserving the prior
+action in `metadata_json.legacy_action_type`, and adds constraints/indexes for
+new append-only data.
 
 ## 4. Auth And Identity
 
@@ -180,15 +210,37 @@ Implemented in S1:
 - workspace PATCH/DELETE
 - workspace member list/add/update/delete
 
+Implemented in S2:
+
+- `POST /api/v1/workspaces/{workspace_id}/feedback`
+- `GET /api/v1/workspaces/{workspace_id}/feedback`
+- `GET /api/v1/workspaces/{workspace_id}/events`
+
 Pending:
 
 - PatternKit endpoints
 - ViralKit endpoints
-- Feedback endpoints
-- Product event export endpoints
+- PatternKit/ViralKit-specific feedback convenience endpoints
 - Health endpoints `/health/live`, `/health/ready`, `/health/dependencies`,
   `/health/worker`
 - Generation endpoints/foundations where required
+
+S2 behavior implemented:
+
+- Field-level feedback is stored separately from AI output.
+- Feedback subjects are restricted to Creative DNA, PatternKit, ViralKit,
+  TikTok score, Preflight, and Recommendation.
+- Feedback types are restricted to `correct`, `incorrect`, `partial`,
+  `missing`, `false_positive`, `false_negative`, and `not_useful`.
+- Product events are persisted first-party in PostgreSQL and exportable by
+  owner/admin through `data.export`.
+- Workspace creation, product creation, and accepted/rejected/applied
+  recommendation actions emit product events.
+- Recommendation seller actions now accept only `viewed`, `accepted`,
+  `rejected`, `applied`, and `ignored`.
+- `ai_model_runs` now stores `operation`, `schema_version`, `input_hash`,
+  `attempt_count`, `usage_json`, `estimated_cost`, and `safe_error_message`,
+  while retaining legacy fields for backward compatibility.
 
 ## 9. Test Commands And Results
 
@@ -201,6 +253,9 @@ cd apps/backend && .venv/bin/pytest tests/unit
 cd apps/backend && .venv/bin/pytest tests/integration/test_migrations.py
 cd apps/backend && .venv/bin/ruff check src tests
 cd apps/backend && .venv/bin/pytest tests/unit tests/architecture tests/contract tests/integration/test_migrations.py
+cd apps/backend && .venv/bin/ruff check src tests alembic/versions/0006_feedback_events_model_runs.py
+cd apps/backend && .venv/bin/pytest tests/unit/test_feedback_service.py tests/unit/test_product_events.py tests/unit/test_recommendation_service.py tests/unit/test_workspace_service.py tests/unit/test_ai_gateway.py
+cd apps/backend && .venv/bin/pytest tests/unit tests/architecture tests/contract tests/integration/test_migrations.py
 ```
 
 Results:
@@ -211,6 +266,10 @@ Results:
 - Clean Postgres migration integration: `1 passed`.
 - Full backend lint: passed.
 - Backend unit + architecture + contract + clean migration suite: `80 passed`.
+- S2 backend lint including new migration: passed.
+- S2 targeted unit suite: `19 passed`.
+- S2 backend unit + architecture + contract + clean migration suite:
+  `86 passed`, coverage `71.90%`.
 
 Local `alembic current` against the default localhost database failed because
 the local Postgres credentials rejected `viraldy`; the clean migration test used
@@ -230,13 +289,17 @@ and recommendations, but the full private beta E2E path is not yet implemented.
 
 - PatternKit module is still absent.
 - ViralKit module is still absent.
-- Feedback module is still absent.
-- Product events module is still absent.
+- Feedback module exists for workspace-scoped field-level correction, but
+  PatternKit/ViralKit resource-local feedback endpoints are pending.
+- Product events module exists for workspace-scoped export, but not every
+  required event producer is wired yet.
 - Generation foundation is still absent.
 - Health endpoint set is incomplete.
 - Job statuses still use the pre-existing naming in parts of the codebase.
 - Product Context still needs expansion to the full private beta section model.
 - Recommendation product snapshots and full source-version metadata remain incomplete.
+- Model-run trace fields are present, but the full Dola/Seed operation registry
+  and generation run foundation remain incomplete.
 - Data deletion/retention is incomplete.
 - GitHub CI and release tag are pending.
 
@@ -277,7 +340,7 @@ Pending implementation. Existing AI analysis settings:
 - `AI_MAX_RETRIES`
 - `AI_MAX_OUTPUT_TOKENS`
 
-Required additions still pending:
+Required generation additions still pending:
 
 - `IMAGE_GENERATION_ENABLED`
 - `VIDEO_GENERATION_ENABLED`
@@ -298,7 +361,7 @@ records are not yet implemented.
 
 The backend is not technically frozen yet. Remaining milestones:
 
-- S2 persistence foundations for feedback, product events, model-run/job updates.
+- Remaining S2 job naming/progress additions beyond model-run trace fields.
 - S3 PatternKit contracts, persistence, service, API, fixtures, tests.
 - S4 ViralKit contracts, matcher, composer, persistence, Campaign Pack links, tests.
 - S5 provider/generation/job integration.
