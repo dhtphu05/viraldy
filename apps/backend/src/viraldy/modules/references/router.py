@@ -32,9 +32,7 @@ async def create_reference(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(
-        workspace_id, Permission.REFERENCE_WRITE, current_user, db
-    )
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_WRITE, current_user, db)
     reference = await _service(db).create(workspace_id, current_user.id, payload)
     return success(reference.model_dump(mode="json"), request_id)
 
@@ -75,10 +73,10 @@ async def analyze_reference(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(
-        workspace_id, Permission.ANALYSIS_RUN, current_user, db
+    await require_workspace_permission(workspace_id, Permission.ANALYSIS_RUN, current_user, db)
+    result = await _service(db).analyze(
+        workspace_id, reference_id, current_user.id, idempotency_key
     )
-    result = await _service(db).analyze(workspace_id, reference_id, idempotency_key)
     return success(result.model_dump(mode="json"), request_id)
 
 

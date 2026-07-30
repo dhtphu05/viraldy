@@ -27,6 +27,43 @@ AI_MODE=fixture uv run celery -A viraldy.worker.celery_app beat --loglevel=INFO
 return `UNSUPPORTED_FIXTURE_ASSET`; use `AI_MODE=live` with `AI_BASE_URL`, `AI_API_KEY`,
 `AI_TEXT_MODEL`, and `AI_VISION_MODEL` for live provider work.
 
+Private-beta release smoke:
+
+```bash
+make smoke-release-fixture
+make smoke-release-mock
+```
+
+Each release target creates an isolated workspace and Product Context, uploads
+the reference and UGC media through presigned object-storage URLs, executes the
+full PatternKit/ViralKit/Preflight learning loop, uploads an immutable UGC
+revision, then hard-deletes the workspace and verifies both PostgreSQL deletion
+audit state and an empty workspace object-storage prefix. Fixture mode requires
+`DATABASE_SYNC_URL` so the test harness can attach a known fixture identity to
+the newly uploaded asset versions; this metadata step is not exposed by the
+production API.
+
+Asset revision endpoints:
+
+```text
+POST /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/upload-sessions
+POST /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/{asset_version_id}/complete-upload
+GET  /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions
+```
+
+The initial upload must complete before a revision can be created. Completing
+older revisions never moves `current_version_id` backward.
+
+Campaign Pack export endpoint:
+
+```text
+POST /api/v1/workspaces/{workspace_id}/campaign-packs/{campaign_pack_id}/exports
+```
+
+The request accepts `{"format": "json"}` or `{"format": "text"}`. The response
+contains a downloadable canonical snapshot of the current immutable Campaign
+Pack version and records a first-party `campaign_pack_exported` event.
+
 OpenAPI export:
 
 ```bash

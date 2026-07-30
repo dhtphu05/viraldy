@@ -13,6 +13,7 @@ from viraldy.modules.jobs.repository import WorkerJobRepository
 from viraldy.modules.media_analysis.service import SyncMediaEvidencePipeline
 from viraldy.modules.preflight.repository import SyncPreflightRepository
 from viraldy.modules.preflight.service import calculate_preflight_result
+from viraldy.modules.product_events.public import SyncProductEventPublisher
 from viraldy.modules.recommendations.contracts import (
     RecommendationEvidenceV2,
     RecommendationPayloadV2,
@@ -254,6 +255,20 @@ def _analyze_reference(
     reference = SyncReferenceRepository(session).get(job.workspace_id, reference_id)
     if reference is not None:
         reference.status = "analyzed"
+    actor_user_id = job.input_json.get("actor_user_id")
+    SyncProductEventPublisher(session).record(
+        event_type="reference_analyzed",
+        workspace_id=job.workspace_id,
+        actor_user_id=UUID(str(actor_user_id)) if actor_user_id else None,
+        subject_type="reference",
+        subject_id=reference_id,
+        payload_json={
+            "creative_dna_version_id": str(dna.id),
+            "asset_version_id": str(loaded.asset_version_id),
+            "processing_job_id": str(job.id),
+            "analysis_mode": dna.analysis_mode,
+        },
+    )
     repo.update_progress(job, 90, "persisting_results")
     session.commit()
     return {

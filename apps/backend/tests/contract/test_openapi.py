@@ -20,6 +20,17 @@ def test_response_envelope_schema_is_registered() -> None:
     assert "Envelope" in schema["components"]["schemas"]
 
 
+def test_openapi_contains_asset_revision_routes() -> None:
+    paths = app.openapi()["paths"]
+
+    assert "/api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/upload-sessions" in paths
+    assert (
+        "/api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/"
+        "{asset_version_id}/complete-upload" in paths
+    )
+    assert "/api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions" in paths
+
+
 def test_openapi_contains_private_beta_health_routes() -> None:
     paths = app.openapi()["paths"]
 
@@ -33,10 +44,7 @@ def test_openapi_contains_audited_hard_deletion_routes() -> None:
     paths = app.openapi()["paths"]
 
     assert "/api/v1/workspaces/{workspace_id}/deletions" in paths
-    assert (
-        "/api/v1/workspaces/{workspace_id}/deletions/{resource_type}/{resource_id}"
-        in paths
-    )
+    assert "/api/v1/workspaces/{workspace_id}/deletions/{resource_type}/{resource_id}" in paths
     assert "/api/v1/workspaces/{workspace_id}/deletions/retention" in paths
     direct_delete_paths = (
         "/api/v1/workspaces/{workspace_id}",
@@ -49,3 +57,10 @@ def test_openapi_contains_audited_hard_deletion_routes() -> None:
         "/api/v1/workspaces/{workspace_id}/campaign-packs/{campaign_pack_id}",
     )
     assert all("delete" in paths[path] for path in direct_delete_paths)
+
+
+def test_openapi_contains_campaign_pack_export_route() -> None:
+    paths = app.openapi()["paths"]
+
+    export_path = "/api/v1/workspaces/{workspace_id}/campaign-packs/{campaign_pack_id}/exports"
+    assert "post" in paths[export_path]

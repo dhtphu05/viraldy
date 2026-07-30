@@ -20,19 +20,23 @@ from viraldy.modules.campaign_packs.contracts import (
     ScriptBeatV1,
     StoryboardSceneV1,
 )
+from viraldy.modules.campaign_packs.exporter import build_campaign_pack_export
 from viraldy.modules.campaign_packs.repository import CampaignPackRepository
 from viraldy.modules.campaign_packs.requirements import (
     compile_campaign_requirements,
     compiled_requirements_to_json,
 )
 from viraldy.modules.campaign_packs.schemas import (
+    CampaignPackExportResponse,
     CampaignPackResponse,
     CampaignPackVersionResponse,
     CreateCampaignPackRequest,
     CreateCampaignPackVersionRequest,
+    ExportCampaignPackRequest,
     UpdateCampaignPackRequest,
 )
 from viraldy.modules.creative_domain.schema_versions import COMPILED_REQUIREMENTS_SCHEMA_VERSION
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.products.contracts import ProductContextV1
 from viraldy.shared.errors.base import AppError, NotFoundError
 
@@ -159,6 +163,44 @@ class CampaignPackService:
             raise NotFoundError("CAMPAIGN_PACK_NOT_FOUND", "Campaign Pack was not found.")
         versions = await self._repository.list_versions(pack_id)
         return [CampaignPackVersionResponse.model_validate(version) for version in versions]
+
+    async def export(
+        self,
+        workspace_id: UUID,
+        pack_id: UUID,
+        user_id: UUID,
+        data: ExportCampaignPackRequest,
+    ) -> CampaignPackExportResponse:
+        pack = await self._repository.get(workspace_id, pack_id)
+        if pack is None:
+            raise NotFoundError("CAMPAIGN_PACK_NOT_FOUND", "Campaign Pack was not found.")
+        version = (
+            await self._repository.get_version(pack.current_version_id)
+            if pack.current_version_id
+            else None
+        )
+        if version is None:
+            raise AppError(
+                "CAMPAIGN_PACK_VERSION_NOT_FOUND",
+                "Campaign Pack has no current version to export.",
+            )
+        version_response = CampaignPackVersionResponse.model_validate(version)
+        export = build_campaign_pack_export(version_response, data.format)
+        await ProductEventPublisher(self._session).record(
+            event_type="campaign_pack_exported",
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            subject_type="campaign_pack",
+            subject_id=pack.id,
+            payload_json={
+                "campaign_pack_version_id": str(version.id),
+                "version_number": version.version_number,
+                "format": data.format,
+                "filename": export.filename,
+            },
+        )
+        await self._session.commit()
+        return export
 
 
 def _pack_response(pack, version) -> CampaignPackResponse:
@@ -293,9 +335,7 @@ def _brief_from_concept(
         talking_points=[pain, outcome],
         text_overlays=hook_options[:2],
         proof_direction=[str(concept.get("proof_mechanism") or "show observable result")],
-        offer_direction=[text]
-        if (text := str(concept.get("offer_framing") or "").strip())
-        else [],
+        offer_direction=[text] if (text := str(concept.get("offer_framing") or "").strip()) else [],
         cta=CtaDirectionV1(
             spoken="Check the product tag if this campaign is for TikTok Shop.",
             overlay="Product tag",

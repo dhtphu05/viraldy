@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from viraldy.modules.product_events.contracts import ProductEventType
 from viraldy.modules.product_events.models import ProductEventModel
@@ -52,3 +53,30 @@ class ProductEventRepository:
             statement.order_by(ProductEventModel.created_at.desc()).limit(limit)
         )
         return list(result.scalars())
+
+
+class SyncProductEventRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self,
+        *,
+        event_type: ProductEventType,
+        workspace_id: UUID | None,
+        actor_user_id: UUID | None,
+        subject_type: str | None = None,
+        subject_id: UUID | None = None,
+        payload_json: dict[str, object] | None = None,
+    ) -> ProductEventModel:
+        event = ProductEventModel(
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            event_type=event_type,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            payload_json=payload_json or {},
+        )
+        self._session.add(event)
+        self._session.flush()
+        return event

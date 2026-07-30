@@ -26,6 +26,7 @@ from viraldy.modules.preflight.schemas import (
     CreatePreflightRunResponse,
     PreflightRunResponse,
 )
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError, NotFoundError
 
@@ -103,11 +104,30 @@ class PreflightService:
             job=job,
         )
 
-    async def get(self, workspace_id: UUID, preflight_run_id: UUID) -> PreflightRunResponse:
+    async def get(
+        self,
+        workspace_id: UUID,
+        preflight_run_id: UUID,
+        user_id: UUID,
+    ) -> PreflightRunResponse:
         run = await self._repository.get(workspace_id, preflight_run_id)
         if run is None:
             raise NotFoundError("PREFLIGHT_RUN_NOT_FOUND", "Preflight run was not found.")
-        return PreflightRunResponse.model_validate(run)
+        response = PreflightRunResponse.model_validate(run)
+        await ProductEventPublisher(self._session).record(
+            event_type="preflight_viewed",
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            subject_type="preflight_run",
+            subject_id=run.id,
+            payload_json={
+                "campaign_pack_version_id": str(run.campaign_pack_version_id),
+                "status": run.status,
+                "action_label": run.action_label,
+            },
+        )
+        await self._session.commit()
+        return response
 
 
 def calculate_preflight_result(
@@ -186,9 +206,7 @@ def _brief_alignment(
             "missing": sum(1 for item in evaluations if item.status == "missing"),
             "violated": sum(1 for item in evaluations if item.status == "violated"),
             "unknown": sum(1 for item in evaluations if item.status == "unknown"),
-            "not_applicable": sum(
-                1 for item in evaluations if item.status == "not_applicable"
-            ),
+            "not_applicable": sum(1 for item in evaluations if item.status == "not_applicable"),
         },
         blockers=blockers,
         fixes=fixes,
@@ -303,7 +321,6 @@ def _revision_message(fixes: list[dict[str, Any]], action: str) -> str:
         return "This draft is structurally ready. Please confirm rights before Spark or paid usage."
     instructions = [str(fix["instruction"]).rstrip(".") for fix in fixes[:3]]
     return "The demonstration is clear. Could you " + "; and ".join(instructions) + "?"
-
 
 
 def _alignment_score(

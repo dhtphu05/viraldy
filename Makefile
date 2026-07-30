@@ -3,7 +3,7 @@ WEB_DIR=apps/web
 SMOKE_MODE ?= fixture
 SMOKE_ARGS ?=
 
-.PHONY: setup infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke smoke-fixture smoke-mock security docker-build logs clean
+.PHONY: setup infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke smoke-fixture smoke-mock smoke-release-fixture smoke-release-mock security docker-build logs clean
 
 setup: backend-install
 
@@ -85,6 +85,12 @@ smoke-fixture:
 
 smoke-mock:
 	$(MAKE) smoke SMOKE_MODE=mock
+
+smoke-release-fixture:
+	$(MAKE) smoke SMOKE_MODE=fixture SMOKE_ARGS="--isolated-lifecycle --verify-db"
+
+smoke-release-mock:
+	$(MAKE) smoke SMOKE_MODE=mock SMOKE_ARGS="--isolated-lifecycle --verify-db"
 
 security:
 	cd $(BACKEND_DIR) && uv run bandit -q -r src && uv run pip-audit

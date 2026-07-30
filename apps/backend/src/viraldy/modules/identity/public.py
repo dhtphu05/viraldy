@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.identity.models import UserModel
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.platform.auth.current_user import CurrentUser
 from viraldy.platform.auth.token_verifier import VerifiedToken
 from viraldy.platform.clock.utc import utc_now
@@ -49,6 +50,7 @@ async def get_or_create_current_user(
     verified: VerifiedToken,
 ) -> CurrentUser:
     normalized_email = verified.email.strip().lower()
+    created = False
     result = await session.execute(
         select(UserModel).where(UserModel.external_auth_id == verified.external_auth_id)
     )
@@ -63,6 +65,7 @@ async def get_or_create_current_user(
         session.add(user)
         try:
             await session.flush()
+            created = True
         except IntegrityError:
             await session.rollback()
             result = await session.execute(
@@ -76,6 +79,15 @@ async def get_or_create_current_user(
     user.email = normalized_email
     user.display_name = verified.display_name
     user.last_login_at = utc_now()
+    if created:
+        await ProductEventPublisher(session).record(
+            event_type="user_signed_up",
+            workspace_id=None,
+            actor_user_id=user.id,
+            subject_type="user",
+            subject_id=user.id,
+            payload_json={},
+        )
     await session.commit()
     await session.refresh(user)
 

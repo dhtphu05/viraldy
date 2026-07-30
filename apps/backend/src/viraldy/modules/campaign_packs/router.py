@@ -11,6 +11,7 @@ from viraldy.api.responses.envelope import Envelope, success
 from viraldy.modules.campaign_packs.schemas import (
     CreateCampaignPackRequest,
     CreateCampaignPackVersionRequest,
+    ExportCampaignPackRequest,
     UpdateCampaignPackRequest,
 )
 from viraldy.modules.campaign_packs.service import CampaignPackService
@@ -110,6 +111,25 @@ async def list_pack_versions(
     await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     versions = await CampaignPackService(db).list_versions(workspace_id, campaign_pack_id)
     return success([version.model_dump(mode="json") for version in versions], request_id)
+
+
+@router.post("/{campaign_pack_id}/exports", response_model=Envelope)
+async def export_pack(
+    workspace_id: UUID,
+    campaign_pack_id: UUID,
+    payload: ExportCampaignPackRequest,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    await require_workspace_permission(workspace_id, Permission.DATA_EXPORT, current_user, db)
+    export = await CampaignPackService(db).export(
+        workspace_id,
+        campaign_pack_id,
+        current_user.id,
+        payload,
+    )
+    return success(export.model_dump(mode="json"), request_id)
 
 
 @router.delete("/{campaign_pack_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -8,17 +8,37 @@ from viraldy.shared.errors.base import AppError, PayloadTooLargeError
 
 
 def test_workspace_role_permissions() -> None:
+    expected_permissions = {
+        WorkspaceRole.OWNER: set(Permission),
+        WorkspaceRole.ADMIN: set(Permission),
+        WorkspaceRole.MEMBER: {
+            Permission.WORKSPACE_READ,
+            Permission.MEMBERS_READ,
+            Permission.PRODUCT_READ,
+            Permission.PRODUCT_WRITE,
+            Permission.REFERENCE_READ,
+            Permission.REFERENCE_WRITE,
+            Permission.ANALYSIS_RUN,
+            Permission.PATTERN_KIT_WRITE,
+            Permission.VIRAL_KIT_WRITE,
+            Permission.CAMPAIGN_PACK_WRITE,
+            Permission.PREFLIGHT_RUN,
+            Permission.RECOMMENDATION_ACT,
+            Permission.FEEDBACK_WRITE,
+        },
+        WorkspaceRole.VIEWER: {
+            Permission.WORKSPACE_READ,
+            Permission.PRODUCT_READ,
+            Permission.REFERENCE_READ,
+        },
+    }
     policy = WorkspaceMembershipPolicy()
-    assert policy.has_permission(WorkspaceRole.OWNER, Permission.DATA_DELETE)
-    assert policy.has_permission(WorkspaceRole.ADMIN, Permission.DATA_EXPORT)
-    assert policy.has_permission(WorkspaceRole.MEMBER, Permission.PRODUCT_WRITE)
-    assert policy.has_permission(WorkspaceRole.MEMBER, Permission.FEEDBACK_WRITE)
-    assert not policy.has_permission(WorkspaceRole.MEMBER, Permission.DATA_EXPORT)
-    assert not policy.has_permission(WorkspaceRole.MEMBER, Permission.DATA_DELETE)
-    assert policy.has_permission(WorkspaceRole.VIEWER, Permission.WORKSPACE_READ)
-    assert policy.has_permission(WorkspaceRole.VIEWER, Permission.PRODUCT_READ)
-    assert not policy.has_permission(WorkspaceRole.VIEWER, Permission.PRODUCT_WRITE)
-    assert not policy.has_permission(WorkspaceRole.VIEWER, Permission.RECOMMENDATION_ACT)
+
+    for role, expected in expected_permissions.items():
+        actual = {
+            permission for permission in Permission if policy.has_permission(role, permission)
+        }
+        assert actual == expected
 
 
 def test_upload_declaration_rejects_unknown_mime() -> None:
