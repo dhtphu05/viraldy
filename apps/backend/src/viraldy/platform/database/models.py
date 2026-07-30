@@ -7,6 +7,10 @@ from viraldy.modules.ai_gateway.models import AiModelRunModel
 from viraldy.modules.assets.models import AssetModel, AssetVersionModel
 from viraldy.modules.campaign_packs.models import CampaignPackModel, CampaignPackVersionModel
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
+from viraldy.modules.deletion.models import (
+    DeletionAuditRecordModel,
+    StorageDeletionBatchModel,
+)
 from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.generation.models import GenerationArtifactModel, GenerationRunModel
 from viraldy.modules.identity.models import UserModel
@@ -46,6 +50,7 @@ __all__ = [
     "CampaignPackModel",
     "CampaignPackVersionModel",
     "CreativeDnaVersionModel",
+    "DeletionAuditRecordModel",
     "EvidenceItemModel",
     "FeedbackItemModel",
     "GenerationArtifactModel",
@@ -65,6 +70,7 @@ __all__ = [
     "ReferenceModel",
     "RecommendationActionModel",
     "RecommendationModel",
+    "StorageDeletionBatchModel",
     "TikTokScoreRunModel",
     "ViralKitCampaignPackLinkModel",
     "ViralKitConceptActionModel",

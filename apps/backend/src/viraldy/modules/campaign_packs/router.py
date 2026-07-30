@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from viraldy.api.dependencies.auth import CurrentUserDep, DbSession, require_workspace_permission
 from viraldy.api.dependencies.request import get_request_id
@@ -13,9 +14,13 @@ from viraldy.modules.campaign_packs.schemas import (
     UpdateCampaignPackRequest,
 )
 from viraldy.modules.campaign_packs.service import CampaignPackService
+from viraldy.modules.deletion.public import DeletionResourceType, DeletionService
 from viraldy.platform.auth.policy import Permission
+from viraldy.platform.config.settings import Settings, get_settings
+from viraldy.platform.storage.s3 import S3StorageAdapter
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/campaign-packs", tags=["campaign-packs"])
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=Envelope)
@@ -105,3 +110,26 @@ async def list_pack_versions(
     await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     versions = await CampaignPackService(db).list_versions(workspace_id, campaign_pack_id)
     return success([version.model_dump(mode="json") for version in versions], request_id)
+
+
+@router.delete("/{campaign_pack_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pack(
+    workspace_id: UUID,
+    campaign_pack_id: UUID,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    settings: SettingsDep,
+) -> Response:
+    await require_workspace_permission(
+        workspace_id,
+        Permission.DATA_DELETE,
+        current_user,
+        db,
+    )
+    await DeletionService(db, S3StorageAdapter(settings)).delete(
+        workspace_id=workspace_id,
+        resource_type=DeletionResourceType.CAMPAIGN_PACK,
+        resource_id=campaign_pack_id,
+        user_id=current_user.id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

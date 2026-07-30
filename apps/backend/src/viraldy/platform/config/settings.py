@@ -56,10 +56,13 @@ class Settings(BaseSettings):
     s3_presigned_expiry_seconds: int = 900
 
     max_declared_upload_mb: int = 250
+    max_upload_size_bytes: int | None = Field(default=None, ge=1)
     allowed_upload_mime_types: list[str] = Field(
         default_factory=lambda: ["video/mp4", "video/quicktime", "image/jpeg", "image/png"]
     )
     max_media_duration_seconds: int = 180
+    asset_retention_days: int = Field(default=14, ge=1)
+    model_output_retention_days: int = Field(default=90, ge=1)
 
     ai_mode: str = "fixture"
     ai_provider: str = "openai_compatible"
@@ -138,7 +141,7 @@ class Settings(BaseSettings):
 
     @property
     def max_declared_upload_bytes(self) -> int:
-        return self.max_declared_upload_mb * 1024 * 1024
+        return self.max_upload_size_bytes or self.max_declared_upload_mb * 1024 * 1024
 
     @property
     def public_version(self) -> str:

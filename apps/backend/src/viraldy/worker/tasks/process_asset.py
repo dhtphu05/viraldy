@@ -118,6 +118,24 @@ def recover_stale_processing_jobs() -> dict[str, object]:
         session.close()
 
 
+@celery_app.task  # type: ignore[misc]
+def retry_pending_storage_deletions() -> dict[str, int]:
+    from viraldy.modules.deletion.storage_cleanup import (
+        process_pending_storage_deletions,
+    )
+    from viraldy.platform.storage.s3 import S3StorageAdapter
+
+    settings = get_settings()
+    session = create_worker_session()
+    try:
+        return process_pending_storage_deletions(
+            session,
+            S3StorageAdapter(settings),
+        )
+    finally:
+        session.close()
+
+
 def _execute_job(
     job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
 ) -> dict[str, object]:
@@ -173,6 +191,25 @@ def _execute_job(
             job.id,
             get_settings(),
             lambda: repo.assert_claim_active(job),
+        )
+        repo.update_progress(job, 90, "persisting_results")
+        return output
+    if job_type == JobType.RETENTION_CLEANUP.value:
+        from viraldy.modules.deletion.retention import execute_retention_cleanup
+        from viraldy.platform.storage.s3 import S3StorageAdapter
+
+        if job.subject_type != "workspace" or job.subject_id != job.workspace_id:
+            raise AppError(
+                "RETENTION_JOB_SUBJECT_INVALID",
+                "Retention jobs must target their own workspace.",
+            )
+        repo.update_progress(job, 30, "selecting_expired_records")
+        session.commit()
+        output = execute_retention_cleanup(
+            session,
+            job.workspace_id,
+            get_settings(),
+            S3StorageAdapter(get_settings()),
         )
         repo.update_progress(job, 90, "persisting_results")
         return output

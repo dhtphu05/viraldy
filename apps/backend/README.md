@@ -32,3 +32,25 @@ OpenAPI export:
 ```bash
 uv run python scripts/export_openapi.py
 ```
+
+Health probes:
+
+```text
+GET /health/live
+GET /health/ready
+GET /health/dependencies
+GET /health/worker
+```
+
+`ready` checks API-serving dependencies only. `dependencies` also reports the
+worker and AI provider configuration so their outage does not remove an
+otherwise healthy API instance from service.
+
+PatternKit/ViralKit evaluation from captured fixture, mock, or live output:
+
+```bash
+uv run python scripts/run_evaluation.py dataset.json --output-dir reports
+```
+
+The runner validates typed inputs and writes deterministic JSON and Markdown
+reports. It evaluates captured outputs and does not invoke a model provider.

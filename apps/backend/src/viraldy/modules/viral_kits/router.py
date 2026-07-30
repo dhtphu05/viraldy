@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from viraldy.api.dependencies.auth import CurrentUserDep, DbSession, require_workspace_permission
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
+from viraldy.modules.deletion.public import DeletionResourceType, DeletionService
 from viraldy.modules.viral_kits.contracts import (
     ViralKitObjectiveV1,
     ViralKitPlatformV1,
@@ -23,6 +24,7 @@ from viraldy.modules.viral_kits.schemas import (
 from viraldy.modules.viral_kits.service import ViralKitService
 from viraldy.platform.auth.policy import Permission
 from viraldy.platform.config.settings import Settings, get_settings
+from viraldy.platform.storage.s3 import S3StorageAdapter
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/viral-kits", tags=["viral-kits"])
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -236,8 +238,10 @@ async def delete_viral_kit(
     settings: SettingsDep,
 ) -> Response:
     await require_workspace_permission(workspace_id, Permission.DATA_DELETE, current_user, db)
-    await ViralKitService(db, settings).archive(
+    await DeletionService(db, S3StorageAdapter(settings)).delete(
         workspace_id=workspace_id,
-        viral_kit_id=viral_kit_id,
+        resource_type=DeletionResourceType.VIRAL_KIT,
+        resource_id=viral_kit_id,
+        user_id=current_user.id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

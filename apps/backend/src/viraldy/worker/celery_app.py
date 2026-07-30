@@ -26,11 +26,18 @@ celery_app.conf.update(
     task_routes={
         "viraldy.worker.tasks.process_asset.recover_stale_processing_jobs": {
             "queue": "maintenance"
+        },
+        "viraldy.worker.tasks.process_asset.retry_pending_storage_deletions": {
+            "queue": "maintenance"
         }
     },
     beat_schedule={
         "recover-stale-processing-jobs": {
             "task": "viraldy.worker.tasks.process_asset.recover_stale_processing_jobs",
+            "schedule": 300.0,
+        },
+        "retry-pending-storage-deletions": {
+            "task": "viraldy.worker.tasks.process_asset.retry_pending_storage_deletions",
             "schedule": 300.0,
         }
     },

@@ -12,11 +12,13 @@ from viraldy.api.middleware.errors import (
 from viraldy.api.middleware.request_id import RequestIdMiddleware
 from viraldy.api.middleware.security_headers import SecurityHeadersMiddleware
 from viraldy.api.responses.envelope import Envelope, success
+from viraldy.api.routers.health import router as health_router
 from viraldy.api.routers.system import router as system_router
 from viraldy.modules.adaptations.router import router as adaptations_router
 from viraldy.modules.assets.router import router as assets_router
 from viraldy.modules.campaign_packs.router import router as campaign_packs_router
 from viraldy.modules.creative_dna.router import router as creative_dna_router
+from viraldy.modules.deletion.router import router as deletion_router
 from viraldy.modules.feedback.router import router as feedback_router
 from viraldy.modules.generation.router import router as generation_router
 from viraldy.modules.identity.router import router as identity_router
@@ -58,6 +60,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unexpected_error_handler)
 
     api_v1 = "/api/v1"
+    app.include_router(health_router)
     app.include_router(system_router, prefix=api_v1)
     app.include_router(identity_router, prefix=api_v1)
     app.include_router(workspaces_router, prefix=api_v1)
@@ -67,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(recommendations_router, prefix=api_v1)
     app.include_router(product_events_router, prefix=api_v1)
     app.include_router(feedback_router, prefix=api_v1)
+    app.include_router(deletion_router, prefix=api_v1)
     app.include_router(generation_router, prefix=api_v1)
     app.include_router(media_analysis_router, prefix=api_v1)
     app.include_router(reference_boards_router, prefix=api_v1)

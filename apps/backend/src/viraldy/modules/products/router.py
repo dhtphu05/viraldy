@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
@@ -11,11 +12,15 @@ from viraldy.api.dependencies.auth import (
 )
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
+from viraldy.modules.deletion.public import DeletionResourceType, DeletionService
 from viraldy.modules.products.schemas import CreateProductRequest, UpdateProductRequest
 from viraldy.modules.products.service import ProductService
 from viraldy.platform.auth.policy import Permission
+from viraldy.platform.config.settings import Settings, get_settings
+from viraldy.platform.storage.s3 import S3StorageAdapter
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/products", tags=["products"])
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=Envelope)
@@ -80,9 +85,15 @@ async def delete_product(
     product_id: UUID,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
 ) -> Response:
     await require_workspace_permission(
         workspace_id, Permission.DATA_DELETE, current_user, db
     )
-    await ProductService(db).delete_product(workspace_id, product_id)
+    await DeletionService(db, S3StorageAdapter(settings)).delete(
+        workspace_id=workspace_id,
+        resource_type=DeletionResourceType.PRODUCT,
+        resource_id=product_id,
+        user_id=current_user.id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
