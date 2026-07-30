@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from viraldy.modules.media_analysis.public import EvidenceItemModel
@@ -90,7 +90,11 @@ def _hook_clarity(facts: EvidenceFacts) -> DimensionScoreV2:
     item = items[0]
     value = item.value_json
     signals.append(_signal("hook_detected", True, 20, item, _confidence(item, value)))
-    starts = item.start_ms if item.start_ms is not None else int(value.get("start_ms") or 0)
+    starts = (
+        item.start_ms
+        if item.start_ms is not None
+        else int(cast(str | int | float, value.get("start_ms") or 0))
+    )
     signals.append(
         _signal("starts_within_1500ms", starts <= 1500, 20 if starts <= 1500 else 0, item)
     )
@@ -258,12 +262,12 @@ def _proof_strength(facts: EvidenceFacts) -> DimensionScoreV2:
         _signal("verifiability", verifiability, observable_score, item),
         _signal("proof_type_strength", proof_type, type_score, item),
         _signal("specificity", specificity, 15 if specificity else 0, item),
-            _signal(
-                "source_credibility",
-                _source(item),
-                10 if _source(item) in {"vision", "ocr", "asr"} else 5,
-                item,
-            ),
+        _signal(
+            "source_credibility",
+            _source(item),
+            10 if _source(item) in {"vision", "ocr", "asr"} else 5,
+            item,
+        ),
         _signal("proof_confidence", round(confidence, 2), 10 * confidence, item),
     ]
     return _dimension(
@@ -314,7 +318,7 @@ def _creator_authenticity(facts: EvidenceFacts) -> DimensionScoreV2:
         _signal("sales_language_restraint", sales, sales_score, item),
         _signal(
             "emotion_context_fit",
-            value.get("emotion"),
+            cast(str | int | float | bool | None, value.get("emotion")),
             10 if value.get("emotion") not in {None, "unknown"} else 4,
             item,
         ),
@@ -350,16 +354,17 @@ def _offer_clarity(facts: EvidenceFacts) -> DimensionScoreV2:
     first_offer_ms = _first_start_ms(items)
     first_cta_ms = _first_start_ms(_items(facts, "cta_signal"))
     timing_ok = (
-        first_offer_ms is not None
-        and first_cta_ms is not None
-        and first_offer_ms <= first_cta_ms
+        first_offer_ms is not None and first_cta_ms is not None and first_offer_ms <= first_cta_ms
     )
     timing_known = first_offer_ms is not None and first_cta_ms is not None
     signals = [
         _signal("offer_present", True, 30, item),
         _signal("offer_specificity", specific, 25 if specific else 0, item),
         _signal(
-            "speech_overlay_consistency", value.get("text"), 10 if value.get("text") else 0, item
+            "speech_overlay_consistency",
+            cast(str | int | float | bool | None, value.get("text")),
+            10 if value.get("text") else 0,
+            item,
         ),
         _signal(
             "offer_timing_before_cta",
@@ -400,7 +405,7 @@ def _cta_readiness(facts: EvidenceFacts) -> DimensionScoreV2:
         _signal("cta_timing", first_cta_ms, 15 if timing_ok else 0, item),
         _signal(
             "spoken_overlay_consistency",
-            value.get("modality"),
+            cast(str | int | float | bool | None, value.get("modality")),
             10 if value.get("modality") in {"mixed", "spoken", "overlay"} else 0,
             item,
         ),

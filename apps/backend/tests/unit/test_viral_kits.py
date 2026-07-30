@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -47,12 +48,13 @@ from viraldy.modules.viral_kits.provider import build_fixture_viral_kit
 from viraldy.modules.viral_kits.schemas import (
     CreateViralKitCampaignPackRequest,
     CreateViralKitRequest,
+    CreateViralKitVersionRequest,
     ViralKitConceptActionRequest,
 )
 from viraldy.modules.viral_kits.service import ViralKitService
 from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import Settings
-from viraldy.shared.errors.base import ConflictError
+from viraldy.shared.errors.base import AppError, ConflictError
 
 
 @dataclass(slots=True)
@@ -154,6 +156,7 @@ class FakeViralKitRepository:
         self.version: ViralKitVersionModel | None = None
         self.actions: list[ViralKitConceptActionModel] = []
         self.campaign_pack_links: list[tuple[UUID, str, UUID, UUID]] = []
+        self.versions: list[ViralKitVersionModel] = []
 
     async def create_with_version(
         self,
@@ -194,6 +197,7 @@ class FakeViralKitRepository:
             created_by_user_id=user_id,
             created_at=now,
         )
+        self.versions.append(self.version)
         return self.kit, self.version
 
     async def get_kit(self, workspace_id: UUID, viral_kit_id: UUID) -> ViralKitModel | None:
@@ -239,6 +243,36 @@ class FakeViralKitRepository:
         )
         self.actions.append(row)
         return row
+
+    async def create_version(
+        self,
+        *,
+        kit: ViralKitModel,
+        user_id: UUID,
+        viral_kit: ViralKitV1,
+        parent_version: int,
+        change_reason: str,
+    ) -> ViralKitVersionModel:
+        now = utc_now()
+        kit.latest_version = parent_version + 1
+        kit.status = viral_kit.status
+        self.version = ViralKitVersionModel(
+            id=uuid4(),
+            viral_kit_id=kit.id,
+            workspace_id=kit.workspace_id,
+            version=viral_kit.version,
+            parent_version=parent_version,
+            change_reason=change_reason,
+            schema_version=viral_kit.schema_version,
+            product_context_version=viral_kit.product.product_context_version,
+            product_snapshot_json=viral_kit.product.snapshot_json.model_dump(mode="json"),
+            viral_kit_json=viral_kit.model_dump(mode="json"),
+            model_run_id=viral_kit.provenance.model_run_id,
+            created_by_user_id=user_id,
+            created_at=now,
+        )
+        self.versions.append(self.version)
+        return self.version
 
     async def record_campaign_pack_link(
         self,
@@ -335,6 +369,19 @@ def test_viral_kit_request_rejects_duplicate_pattern_versions() -> None:
         )
 
 
+def test_viral_kit_request_requires_exactly_three_concepts() -> None:
+    with pytest.raises(ValidationError, match="exactly three"):
+        CreateViralKitRequest(
+            product_id=uuid4(),
+            expected_product_context_version=1,
+            pattern_kit_version_ids=[uuid4()],
+            objective="tiktok_shop_affiliate_test",
+            platform="tiktok_shop",
+            target_market="US",
+            concept_count=2,
+        )
+
+
 def test_fixture_viral_kit_is_product_grounded_and_diverse() -> None:
     workspace_id = uuid4()
     product = _product_snapshot(workspace_id)
@@ -360,6 +407,7 @@ def test_fixture_viral_kit_is_product_grounded_and_diverse() -> None:
     )
     payload = viral_kit.model_dump(mode="json")
 
+    assert matches[0].applicability_status == "matched"
     assert len(viral_kit.concepts) == 3
     assert viral_kit.product.product_context_version == 3
     assert {concept.strategic_axis for concept in viral_kit.concepts} == {
@@ -368,12 +416,55 @@ def test_fixture_viral_kit_is_product_grounded_and_diverse() -> None:
         "proof_first",
     }
     assert all(
-        concept.buyer_persona_label != concept.creator_persona
-        for concept in viral_kit.concepts
+        concept.buyer_persona_label != concept.creator_persona for concept in viral_kit.concepts
     )
     assert all("cure acne" in concept.claims_to_avoid for concept in viral_kit.concepts)
     assert all("#ad" in concept.required_disclosures for concept in viral_kit.concepts)
     assert "guarantee" not in str(payload).lower()
+
+
+def test_hard_category_conflict_requires_documented_override() -> None:
+    workspace_id = uuid4()
+    product = _product_snapshot(workspace_id)
+    pattern = _pattern_snapshot(workspace_id)
+    applicability = pattern.pattern.applicability.model_copy(
+        update={
+            "suitable_categories": [],
+            "unsuitable_categories": [product.product_context.identity.category],
+            "platforms": [],
+            "markets": [],
+            "objectives": [],
+        }
+    )
+    conflicting_pattern = PatternKitVersionSnapshot(
+        pattern_kit_id=pattern.pattern_kit_id,
+        pattern_kit_version_id=pattern.pattern_kit_version_id,
+        workspace_id=pattern.workspace_id,
+        version=pattern.version,
+        status=pattern.status,
+        pattern=pattern.pattern.model_copy(update={"applicability": applicability}),
+    )
+
+    rejected = match_patterns(
+        product_context=product.product_context,
+        patterns=[conflicting_pattern],
+        request=_create_request(
+            product.product_id,
+            [pattern.pattern_kit_version_id],
+        ),
+    )[0]
+    overridden = match_patterns(
+        product_context=product.product_context,
+        patterns=[conflicting_pattern],
+        request=_create_request(
+            product.product_id,
+            [pattern.pattern_kit_version_id],
+        ).model_copy(update={"applicability_override_reason": "Human cross-category test."}),
+    )[0]
+
+    assert rejected.applicability_status == "rejected"
+    assert overridden.applicability_status == "override"
+    assert rejected.conflicts
 
 
 def test_viral_kit_contract_rejects_near_duplicate_concepts() -> None:
@@ -473,6 +564,173 @@ async def test_viral_kit_service_persists_fixture_and_event(
     assert repository.version.product_context_version == 3
     assert FakeAiModelRunRepository.completed
     assert events.records[0]["event_type"] == "viral_kit_created"
+
+
+@pytest.mark.asyncio
+async def test_user_viral_kit_version_is_append_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.viral_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    repository, viral_kit = await _seed_repository(workspace_id, user_id)
+    original_payload = copy.deepcopy(repository.versions[0].viral_kit_json)
+    original_snapshot = copy.deepcopy(repository.versions[0].product_snapshot_json)
+    edited = viral_kit.model_copy(update={"name": "Human-refined ViralKit"})
+    events = FakeProductEventPublisher(FakeSession())
+    monkeypatch.setattr(service_module, "ViralKitRepository", lambda _: repository)
+    monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: events)
+
+    created = await ViralKitService(
+        cast(AsyncSession, FakeSession()),
+        Settings(ai_mode="fixture"),
+    ).create_version(
+        workspace_id=workspace_id,
+        viral_kit_id=viral_kit.id,
+        user_id=user_id,
+        data=CreateViralKitVersionRequest(
+            change_reason="Clarify the test strategy.",
+            viral_kit=edited,
+        ),
+    )
+
+    assert created.version == 2
+    assert created.parent_version == 1
+    assert created.change_reason == "Clarify the test strategy."
+    assert created.viral_kit.name == "Human-refined ViralKit"
+    assert repository.versions[0].viral_kit_json == original_payload
+    assert repository.versions[0].product_snapshot_json == original_snapshot
+    assert events.records[0]["event_type"] == "viral_kit_version_created"
+
+
+@pytest.mark.asyncio
+async def test_user_viral_kit_version_cannot_weaken_governance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.viral_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    repository, viral_kit = await _seed_repository(workspace_id, user_id)
+    concepts = list(viral_kit.concepts)
+    concepts[0] = concepts[0].model_copy(update={"claims_to_avoid": []})
+    weakened = viral_kit.model_copy(update={"concepts": concepts})
+    monkeypatch.setattr(service_module, "ViralKitRepository", lambda _: repository)
+
+    with pytest.raises(AppError, match="VIRAL_KIT_GOVERNANCE_CONFLICT"):
+        await ViralKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create_version(
+            workspace_id=workspace_id,
+            viral_kit_id=viral_kit.id,
+            user_id=user_id,
+            data=CreateViralKitVersionRequest(
+                change_reason="Unsafe governance edit.",
+                viral_kit=weakened,
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_user_viral_kit_version_cannot_replace_governance_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.viral_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    repository, viral_kit = await _seed_repository(workspace_id, user_id)
+    weakened_constraints = viral_kit.constraints.model_copy(
+        update={
+            "governance": viral_kit.constraints.governance.model_copy(
+                update={"prohibited_claims": [], "required_disclosures": []}
+            )
+        }
+    )
+    weakened = viral_kit.model_copy(update={"constraints": weakened_constraints})
+    monkeypatch.setattr(service_module, "ViralKitRepository", lambda _: repository)
+
+    with pytest.raises(AppError, match="VIRAL_KIT_GOVERNANCE_CONFLICT"):
+        await ViralKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create_version(
+            workspace_id=workspace_id,
+            viral_kit_id=viral_kit.id,
+            user_id=user_id,
+            data=CreateViralKitVersionRequest(
+                change_reason="Remove product governance.",
+                viral_kit=weakened,
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_user_viral_kit_version_cannot_tamper_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.viral_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    repository, viral_kit = await _seed_repository(workspace_id, user_id)
+    tampered = viral_kit.model_copy(
+        update={
+            "provenance": viral_kit.provenance.model_copy(
+                update={
+                    "pattern_kit_version_ids": [uuid4()],
+                    "model_run_id": uuid4(),
+                    "prompt_version": "spoofed_prompt",
+                }
+            )
+        }
+    )
+    monkeypatch.setattr(service_module, "ViralKitRepository", lambda _: repository)
+
+    with pytest.raises(AppError, match="VIRAL_KIT_PROVENANCE_CONFLICT"):
+        await ViralKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create_version(
+            workspace_id=workspace_id,
+            viral_kit_id=viral_kit.id,
+            user_id=user_id,
+            data=CreateViralKitVersionRequest(
+                change_reason="Spoof source lineage.",
+                viral_kit=tampered,
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_user_viral_kit_version_cannot_replace_product_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.viral_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    repository, viral_kit = await _seed_repository(workspace_id, user_id)
+    tampered = viral_kit.model_copy(
+        update={"product": viral_kit.product.model_copy(update={"product_context_version": 999})}
+    )
+    monkeypatch.setattr(service_module, "ViralKitRepository", lambda _: repository)
+
+    with pytest.raises(AppError, match="VIRAL_KIT_PRODUCT_SNAPSHOT_CONFLICT"):
+        await ViralKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create_version(
+            workspace_id=workspace_id,
+            viral_kit_id=viral_kit.id,
+            user_id=user_id,
+            data=CreateViralKitVersionRequest(
+                change_reason="Replace locked product snapshot.",
+                viral_kit=tampered,
+            ),
+        )
 
 
 @pytest.mark.asyncio
@@ -671,6 +929,7 @@ def _pattern_snapshot(workspace_id: UUID) -> PatternKitVersionSnapshot:
     source = PatternSourceInput(
         creative_dna_version_id=uuid4(),
         asset_version_id=asset_version_id,
+        taxonomy_version="creative_dna_taxonomy_v1",
         dna=CreativeDnaV1.model_validate(dna.model_dump(mode="json")),
         evidence_by_id={
             item.id: PatternEvidenceInput(

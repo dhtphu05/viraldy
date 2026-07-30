@@ -142,6 +142,7 @@ def main() -> None:
                 recommendation_id=recommendation_id,
                 revision_version_id=revision_version_id,
                 isolated_lifecycle=args.isolated_lifecycle,
+                expect_mode=args.expect_mode,
             )
 
             if args.verify_db:
@@ -958,6 +959,7 @@ def verify_learning_events(
     recommendation_id: str,
     revision_version_id: str,
     isolated_lifecycle: bool,
+    expect_mode: str,
 ) -> None:
     events = client.get(f"/workspaces/{ctx.workspace_id}/events?limit=500")
     event_subjects = {(event["event_type"], str(event.get("subject_id") or "")) for event in events}
@@ -989,6 +991,23 @@ def verify_learning_events(
     missing = required_event_subjects - event_subjects
     if missing:
         raise SmokeFailure(f"Learning-loop events or subjects are missing: {sorted(missing)}")
+
+    model_runs = client.get(f"/workspaces/{ctx.workspace_id}/model-runs?status=completed&limit=500")
+    model_subjects = {
+        (run["subject_type"], str(run["subject_id"]))
+        for run in model_runs
+        if run["analysis_mode"] == expect_mode
+    }
+    required_model_subjects = {
+        ("pattern_kit", str(pattern["kit"]["id"])),
+        ("viral_kit", str(viral["kit"]["id"])),
+    }
+    missing_model_subjects = required_model_subjects - model_subjects
+    if missing_model_subjects:
+        raise SmokeFailure(
+            f"HTTP model-run query is missing completed {expect_mode} subjects: "
+            f"{sorted(missing_model_subjects)}"
+        )
 
 
 def poll_job(

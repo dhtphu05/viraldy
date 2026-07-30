@@ -47,7 +47,7 @@ async def list_packs(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
-    packs = await CampaignPackService(db).list(workspace_id)
+    packs = await CampaignPackService(db).list_packs(workspace_id)
     return success([pack.model_dump(mode="json") for pack in packs], request_id)
 
 

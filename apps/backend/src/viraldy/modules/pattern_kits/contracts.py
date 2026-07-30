@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
@@ -247,14 +248,26 @@ class PatternAdaptationInstructionV1(PatternKitContractBase):
 
 
 class PatternMetricSummaryV1(PatternKitContractBase):
-    metric_name: str
+    metric_name: str = Field(min_length=1, max_length=100)
     sample_size: int = Field(ge=0)
     median: float | None = None
     mean: float | None = None
     p25: float | None = None
     p75: float | None = None
-    unit: str | None = None
-    source: str
+    unit: str | None = Field(default=None, max_length=100)
+    source: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_statistics(self) -> PatternMetricSummaryV1:
+        if all(value is None for value in (self.median, self.mean, self.p25, self.p75)):
+            raise ValueError("a performance metric requires at least one statistic")
+        if self.p25 is not None and self.p75 is not None and self.p75 < self.p25:
+            raise ValueError("performance metric percentile range is invalid")
+        if self.median is not None and self.p25 is not None and self.median < self.p25:
+            raise ValueError("performance metric median is below p25")
+        if self.median is not None and self.p75 is not None and self.median > self.p75:
+            raise ValueError("performance metric median is above p75")
+        return self
 
 
 class PatternPerformanceSummaryV1(PatternKitContractBase):
@@ -268,9 +281,36 @@ class PatternPerformanceSummaryV1(PatternKitContractBase):
     confidence: PatternConfidenceV1
 
     @model_validator(mode="after")
-    def validate_no_metrics_without_evidence(self) -> PatternPerformanceSummaryV1:
-        if self.evidence_status == "none" and self.metrics:
-            raise ValueError("metrics require directional or supported performance evidence")
+    def validate_evidence_consistency(self) -> PatternPerformanceSummaryV1:
+        if (self.date_range_start is None) != (self.date_range_end is None):
+            raise ValueError("performance date range requires both start and end")
+        if (
+            self.date_range_start is not None
+            and self.date_range_end is not None
+            and self.date_range_end < self.date_range_start
+        ):
+            raise ValueError("performance date range is invalid")
+
+        if self.evidence_status == "none":
+            if self.metrics:
+                raise ValueError("metrics require directional or supported performance evidence")
+            if self.asset_count or self.campaign_count:
+                raise ValueError("evidence counts must be zero when performance evidence is absent")
+            if self.date_range_start is not None:
+                raise ValueError(
+                    "date range requires directional or supported performance evidence"
+                )
+            return self
+
+        if self.asset_count == 0 or not self.metrics:
+            raise ValueError("performance evidence requires assets and metrics")
+        normalized_caveats = [caveat.casefold() for caveat in self.caveats]
+        if self.evidence_status == "directional" and not any(
+            "sample" in caveat for caveat in normalized_caveats
+        ):
+            raise ValueError("directional performance evidence requires a sample-size caveat")
+        if not any("caus" in caveat for caveat in normalized_caveats):
+            raise ValueError("performance evidence requires a non-causal caveat")
         return self
 
 
@@ -328,4 +368,18 @@ class PatternKitV1(PatternKitContractBase):
         for beat in self.sequence:
             if beat.requiredness == "required" and not beat.evidence_refs:
                 raise ValueError("required sequence beats require evidence")
+        if self.performance_summary.evidence_status == "none":
+            payload = self.model_dump(mode="json", exclude={"performance_summary"})
+            if _contains_winner_claim(payload):
+                raise ValueError("winning labels require performance evidence")
         return self
+
+
+def _contains_winner_claim(value: object) -> bool:
+    if isinstance(value, str):
+        return re.search(r"\b(?:winner|winning)\b", value, re.IGNORECASE) is not None
+    if isinstance(value, dict):
+        return any(_contains_winner_claim(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_winner_claim(item) for item in value)
+    return False

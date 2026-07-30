@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,7 @@ from viraldy.modules.feedback.public import FeedbackResponse, FeedbackWriter, Fi
 from viraldy.modules.media_analysis.public import EvidenceItemModel, EvidenceQueries
 from viraldy.modules.pattern_kits.contracts import PatternEvidenceRefV1, PatternKitV1
 from viraldy.modules.pattern_kits.models import PatternKitModel, PatternKitVersionModel
+from viraldy.modules.pattern_kits.performance import validate_supported_performance
 from viraldy.modules.pattern_kits.provider import (
     LivePatternKitProvider,
     PatternEvidenceInput,
@@ -35,7 +38,7 @@ from viraldy.modules.pattern_kits.schemas import (
     PatternKitSummaryResponse,
     PatternKitVersionResponse,
 )
-from viraldy.modules.product_events.public import ProductEventPublisher
+from viraldy.modules.product_events.public import ProductEventPublisher, ProductEventType
 from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError, ConflictError, NotFoundError
@@ -79,6 +82,7 @@ class PatternKitService:
                 model_run_id=model_run.id,
             )
             _validate_create_pattern(pattern, pattern_kit_id, workspace_id, data, sources)
+            validate_supported_performance(pattern.performance_summary, self._settings)
             evidence_links = _validate_and_extract_evidence_links(pattern, sources)
             source_rows = [
                 (source.creative_dna_version_id, source.asset_version_id) for source in sources
@@ -219,6 +223,15 @@ class PatternKitService:
             )
         try:
             _validate_version_pattern(pattern, kit, sources)
+            if (
+                data.pattern is not None
+                and pattern.performance_summary != latest_pattern.performance_summary
+            ):
+                raise AppError(
+                    "PATTERN_KIT_PERFORMANCE_IMMUTABLE",
+                    "User-authored versions cannot replace verified performance evidence.",
+                )
+            validate_supported_performance(pattern.performance_summary, self._settings)
             evidence_links = _validate_and_extract_evidence_links(pattern, sources)
         except AppError as exc:
             if model_run is not None:
@@ -265,6 +278,22 @@ class PatternKitService:
     ) -> PatternKitActionResponse:
         kit = await self._get_kit(workspace_id, pattern_kit_id)
         _validate_action_transition(kit.status, data.action, data.reason)
+        if (
+            kit.kind == "workspace_learned_pattern"
+            and kit.status == "candidate"
+            and data.action == "reviewed"
+            and not data.reason
+        ):
+            latest = await self._repository.get_latest_version(workspace_id, pattern_kit_id)
+            if (
+                latest is None
+                or _pattern_from_version(latest).performance_summary.evidence_status == "none"
+            ):
+                raise AppError(
+                    "PATTERN_KIT_PROMOTION_EVIDENCE_REQUIRED",
+                    "Promoting a learned PatternKit requires a documented seller action "
+                    "or performance evidence.",
+                )
         action = await self._repository.record_action(
             kit=kit,
             version=kit.latest_version,
@@ -340,7 +369,12 @@ class PatternKitService:
         sources: list[PatternSourceInput] = []
         for creative_dna_version_id in creative_dna_version_ids:
             dna_model = await self._dna.get(workspace_id, creative_dna_version_id)
-            if dna_model is None or dna_model.status != "completed":
+            if dna_model is None:
+                raise NotFoundError(
+                    "CREATIVE_DNA_NOT_FOUND",
+                    "Creative DNA version was not found.",
+                )
+            if dna_model.status != "completed":
                 raise AppError(
                     "PATTERN_KIT_SOURCE_INVALID",
                     "One or more Creative DNA versions are unavailable.",
@@ -360,6 +394,7 @@ class PatternKitService:
                 PatternSourceInput(
                     creative_dna_version_id=dna_model.id,
                     asset_version_id=dna_model.asset_version_id,
+                    taxonomy_version=dna_model.taxonomy_version,
                     dna=dna,
                     evidence_by_id=_evidence_by_id(evidence),
                 )
@@ -372,7 +407,7 @@ class PatternKitService:
         workspace_id: UUID,
         pattern_kit_id: UUID,
         input_summary: dict[str, object],
-    ):
+    ) -> AiModelRunModel:
         input_hash = _hash_json(input_summary)
         return await AiModelRunRepository(self._session).create_running(
             workspace_id=workspace_id,
@@ -401,11 +436,11 @@ class PatternKitService:
         workspace_id: UUID,
         version: int,
         user_id: UUID,
-        created_at,
+        created_at: datetime,
         data: CreatePatternKitRequest,
         sources: list[PatternSourceInput],
         model_run_id: UUID,
-    ):
+    ) -> PatternKitV1:
         if self._settings.ai_mode == "fixture":
             return build_fixture_pattern_kit(
                 pattern_kit_id=pattern_kit_id,
@@ -479,7 +514,7 @@ class PatternKitService:
 
     async def _complete_model_run(
         self,
-        model_run,
+        model_run: AiModelRunModel,
         pattern: PatternKitV1,
         evidence_links: list[tuple[UUID, str]],
     ) -> None:
@@ -579,7 +614,7 @@ def _evidence_links(pattern: PatternKitV1) -> list[tuple[UUID, str]]:
     return links
 
 
-def _walk(value: object):
+def _walk(value: object) -> Iterator[object]:
     if isinstance(value, dict):
         yield value
         for item in value.values():
@@ -649,7 +684,7 @@ def _validate_action_transition(
         )
 
 
-def _event_type_for_action(action: str):
+def _event_type_for_action(action: str) -> ProductEventType | None:
     if action == "reviewed":
         return "pattern_kit_reviewed"
     if action == "validated":
@@ -735,6 +770,7 @@ def _source_payloads(sources: list[PatternSourceInput]) -> list[dict[str, object
         {
             "creative_dna_version_id": str(source.creative_dna_version_id),
             "asset_version_id": str(source.asset_version_id),
+            "taxonomy_version": source.taxonomy_version,
             "dna": source.dna.model_dump(mode="json"),
             "evidence": [
                 {

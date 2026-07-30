@@ -21,6 +21,7 @@ from viraldy.modules.ai_gateway.operations import (
     build_ai_operation_fixture,
     get_ai_operation_definition,
 )
+from viraldy.modules.ai_gateway.readiness import ai_readiness
 from viraldy.modules.ai_gateway.repository import _run
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.platform.config.settings import Settings
@@ -38,6 +39,39 @@ def _load_mock_provider() -> ModuleType:
 
 
 mock_openai_provider = _load_mock_provider()
+
+
+def test_live_provider_configuration_is_key_ready() -> None:
+    ready = ai_readiness(
+        Settings(
+            ai_mode="live",
+            ai_provider="openai_compatible",
+            ai_base_url="https://seed-provider.example/v1",
+            ai_api_key="test-api-key",
+            ai_text_model="seed-text-model",
+            ai_vision_model="seed-vision-model",
+            asr_provider="openai_compatible",
+            asr_model="seed-asr-model",
+        )
+    )
+    missing_key = ai_readiness(
+        Settings(
+            ai_mode="live",
+            ai_provider="openai_compatible",
+            ai_base_url="https://seed-provider.example/v1",
+            ai_text_model="seed-text-model",
+            ai_vision_model="seed-vision-model",
+            asr_provider="openai_compatible",
+            asr_model="seed-asr-model",
+        )
+    )
+
+    assert ready.configured is True
+    assert ready.missing == []
+    assert ready.capabilities.text_chat is True
+    assert ready.capabilities.vision_chat is True
+    assert missing_key.configured is False
+    assert missing_key.missing == ["AI_API_KEY"]
 
 
 def test_mock_provider_supports_chat_failure_switches(monkeypatch: pytest.MonkeyPatch) -> None:

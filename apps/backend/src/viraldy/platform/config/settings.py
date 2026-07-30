@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     image_generation_model: str | None = None
     video_generation_model: str | None = None
 
+    # "Supported" remains an evidence label, not a causal or winner claim.
+    pattern_performance_supported_min_asset_count: int = Field(default=10, ge=1)
+    pattern_performance_supported_min_campaign_count: int = Field(default=3, ge=1)
+    pattern_performance_supported_min_metric_sample_size: int = Field(default=10, ge=1)
+
     sentry_dsn: SecretStr | None = None
     otel_exporter_otlp_endpoint: str | None = None
 

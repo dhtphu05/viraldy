@@ -21,6 +21,7 @@ from viraldy.modules.creative_dna.contracts import (
     ReusableMechanismV1,
     RiskDnaV1,
 )
+from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
 from viraldy.modules.creative_dna.repository import CreativeDnaRepository, SyncCreativeDnaRepository
 from viraldy.modules.creative_dna.schemas import CreativeDnaVersionResponse
 from viraldy.modules.creative_dna.taxonomy import (
@@ -94,7 +95,7 @@ class SyncCreativeDnaBuilder:
         reference_id: UUID | None,
         evidence: list[EvidenceItemModel],
         analysis_mode: str,
-    ):
+    ) -> CreativeDnaVersionModel:
         evidence_by_type = _evidence_by_type(evidence)
         dna = _build_creative_dna(evidence_by_type)
         dna_json = dna.model_dump(mode="json")
@@ -379,7 +380,7 @@ def _risk_dna(items: list[EvidenceItemModel]) -> list[RiskDnaV1]:
         risks.append(
             RiskDnaV1(
                 code=f"{risk.upper()}_RISK_CLAIM",
-                severity=risk,  # type: ignore[arg-type]
+                severity=risk,
                 message="Claim requires review against product governance before reuse.",
                 evidence_ids=[item.id],
             )

@@ -3,13 +3,16 @@ from __future__ import annotations
 from uuid import UUID
 
 import structlog
+from sqlalchemy.orm import Session
 
-from viraldy.modules.assets.public import SyncAssetQueries
+from viraldy.modules.assets.public import AssetVersionSnapshot, SyncAssetQueries
 from viraldy.modules.campaign_packs.public import SyncCampaignPackRepository
 from viraldy.modules.creative_dna.service import SyncCreativeDnaBuilder
 from viraldy.modules.creative_domain.schema_versions import TIKTOK_SCORE_SCHEMA_VERSION
+from viraldy.modules.jobs.models import ProcessingJobModel
 from viraldy.modules.jobs.registry import JobType, normalize_job_type
 from viraldy.modules.jobs.repository import WorkerJobRepository
+from viraldy.modules.media_analysis.models import EvidenceItemModel
 from viraldy.modules.media_analysis.service import SyncMediaEvidencePipeline
 from viraldy.modules.preflight.repository import SyncPreflightRepository
 from viraldy.modules.preflight.service import calculate_preflight_result
@@ -138,7 +141,10 @@ def retry_pending_storage_deletions() -> dict[str, int]:
 
 
 def _execute_job(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     job_type = normalize_job_type(job.job_type)
     if job_type == JobType.MEDIA_ANALYSIS.value:
@@ -185,13 +191,17 @@ def _execute_job(
             )
         repo.update_progress(job, 30, "loading_generation_brief")
         session.commit()
+
+        def ensure_active_attempt() -> None:
+            repo.assert_claim_active(job)
+
         output = execute_generation_job(
             session,
             job.workspace_id,
             job.subject_id,
             job.id,
             get_settings(),
-            lambda: repo.assert_claim_active(job),
+            ensure_active_attempt,
         )
         repo.update_progress(job, 90, "persisting_results")
         return output
@@ -218,8 +228,12 @@ def _execute_job(
 
 
 def _process_media(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session, run_type: str
-):
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
+    run_type: str,
+) -> tuple[AssetVersionSnapshot, list[EvidenceItemModel], UUID | None]:
     asset_id = UUID(str(job.input_json.get("asset_id") or job.input_json.get("ugc_asset_id")))
     version_id = UUID(
         str(job.input_json.get("asset_version_id") or job.input_json.get("ugc_asset_version_id"))
@@ -240,7 +254,10 @@ def _process_media(
 
 
 def _analyze_reference(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     loaded, evidence, primary_model_run_id = _process_media(
         job, repo, asset_queries, session, "creative_dna_build"
@@ -281,7 +298,10 @@ def _analyze_reference(
 
 
 def _score_tiktok_asset(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     loaded, evidence, primary_model_run_id = _process_media(
         job, repo, asset_queries, session, "tiktok_score_run"
@@ -325,7 +345,10 @@ def _score_tiktok_asset(
 
 
 def _run_ugc_preflight(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     loaded, evidence, primary_model_run_id = _process_media(
         job, repo, asset_queries, session, "preflight_run"
@@ -410,7 +433,7 @@ def _run_ugc_preflight(
 
 
 def _record_recommendation(
-    session,
+    session: Session,
     workspace_id: UUID,
     subject_type: str,
     subject_id: UUID,

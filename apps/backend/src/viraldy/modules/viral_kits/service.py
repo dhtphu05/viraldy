@@ -224,7 +224,12 @@ class ViralKitService:
                 user_id,
             )
         try:
-            _validate_version_viral_kit(viral_kit, kit)
+            _validate_version_viral_kit(
+                viral_kit,
+                kit,
+                latest_viral_kit,
+                user_supplied=data.viral_kit is not None,
+            )
             _validate_viral_kit_business_rules(viral_kit)
         except AppError as exc:
             if model_run is not None:
@@ -351,9 +356,7 @@ class ViralKitService:
             concept_id=concept.id,
             campaign_pack_id=pack_result.campaign_pack_id,
             campaign_pack_version_id=pack_result.campaign_pack_version_id,
-            compiled_requirements_schema_version=(
-                pack_result.compiled_requirements_schema_version
-            ),
+            compiled_requirements_schema_version=(pack_result.compiled_requirements_schema_version),
             campaign_pack=pack_result.response,
         )
 
@@ -596,7 +599,13 @@ def _validate_create_viral_kit(
         raise AppError("VIRAL_KIT_CONFLICT", "New ViralKits must be ready_for_review.")
 
 
-def _validate_version_viral_kit(viral_kit: ViralKitV1, kit: ViralKitModel) -> None:
+def _validate_version_viral_kit(
+    viral_kit: ViralKitV1,
+    kit: ViralKitModel,
+    previous: ViralKitV1,
+    *,
+    user_supplied: bool,
+) -> None:
     if viral_kit.id != kit.id or viral_kit.workspace_id != kit.workspace_id:
         raise AppError("VIRAL_KIT_CONFLICT", "ViralKit version identity does not match kit.")
     if viral_kit.product.product_id != kit.product_id:
@@ -605,10 +614,87 @@ def _validate_version_viral_kit(viral_kit: ViralKitV1, kit: ViralKitModel) -> No
         raise AppError("VIRAL_KIT_CONFLICT", "ViralKit version number is invalid.")
     if viral_kit.status != "ready_for_review":
         raise AppError("VIRAL_KIT_CONFLICT", "New ViralKit versions must be ready_for_review.")
+    if not _same_product_snapshot(viral_kit, previous):
+        raise AppError(
+            "VIRAL_KIT_PRODUCT_SNAPSHOT_CONFLICT",
+            "ViralKit versions cannot replace the locked Product Context snapshot.",
+        )
+    if viral_kit.provenance.pattern_kit_version_ids != previous.provenance.pattern_kit_version_ids:
+        raise AppError(
+            "VIRAL_KIT_PROVENANCE_CONFLICT",
+            "ViralKit versions cannot replace source PatternKit versions.",
+        )
+    if user_supplied and viral_kit.provenance != previous.provenance:
+        raise AppError(
+            "VIRAL_KIT_PROVENANCE_CONFLICT",
+            "User-authored versions cannot replace model or prompt provenance.",
+        )
+    if user_supplied and viral_kit.constraints.governance != previous.constraints.governance:
+        raise AppError(
+            "VIRAL_KIT_GOVERNANCE_CONFLICT",
+            "User-authored versions cannot replace product governance.",
+        )
 
 
 def _validate_viral_kit_business_rules(viral_kit: ViralKitV1) -> None:
     governance = viral_kit.constraints.governance
+    product_governance = viral_kit.product.snapshot_json.governance
+    required_prohibited_claims = {
+        claim.text for claim in product_governance.claims if claim.rule_type == "prohibited"
+    }
+    if not required_prohibited_claims.issubset(set(governance.prohibited_claims)):
+        raise AppError(
+            "VIRAL_KIT_GOVERNANCE_CONFLICT",
+            "ViralKit governance does not preserve prohibited product claims.",
+        )
+    if not set(product_governance.required_disclosures).issubset(
+        set(governance.required_disclosures)
+    ):
+        raise AppError(
+            "VIRAL_KIT_GOVERNANCE_CONFLICT",
+            "ViralKit governance does not preserve required product disclosures.",
+        )
+    if not set(product_governance.prohibited_content).issubset(set(governance.prohibited_content)):
+        raise AppError(
+            "VIRAL_KIT_GOVERNANCE_CONFLICT",
+            "ViralKit governance does not preserve prohibited product content.",
+        )
+    if not set(product_governance.rights_notes).issubset(set(governance.rights_notes)):
+        raise AppError(
+            "VIRAL_KIT_GOVERNANCE_CONFLICT",
+            "ViralKit governance does not preserve product rights notes.",
+        )
+
+    provenance_ids = viral_kit.provenance.pattern_kit_version_ids
+    if len(provenance_ids) != len(set(provenance_ids)):
+        raise AppError(
+            "VIRAL_KIT_PROVENANCE_CONFLICT",
+            "ViralKit source PatternKit versions must be unique.",
+        )
+    allowed_pattern_ids = set(provenance_ids)
+    match_ids = [match.pattern_kit_version_id for match in viral_kit.pattern_matches]
+    if set(match_ids) != allowed_pattern_ids or len(match_ids) != len(set(match_ids)):
+        raise AppError(
+            "VIRAL_KIT_PROVENANCE_CONFLICT",
+            "ViralKit pattern matches do not match source provenance.",
+        )
+    for concept in viral_kit.concepts:
+        if not set(concept.source_pattern_kit_version_ids).issubset(allowed_pattern_ids):
+            raise AppError(
+                "VIRAL_KIT_PROVENANCE_CONFLICT",
+                "ViralKit concept references an unknown PatternKit version.",
+            )
+    for decision in (
+        viral_kit.adaptation_plan.keep
+        + viral_kit.adaptation_plan.change
+        + viral_kit.adaptation_plan.avoid
+    ):
+        if not set(decision.source_pattern_kit_version_ids).issubset(allowed_pattern_ids):
+            raise AppError(
+                "VIRAL_KIT_PROVENANCE_CONFLICT",
+                "ViralKit adaptation references an unknown PatternKit version.",
+            )
+
     prohibited = set(governance.prohibited_claims + governance.prohibited_content)
     disclosures = set(governance.required_disclosures)
     for concept in viral_kit.concepts:
@@ -630,6 +716,16 @@ def _validate_viral_kit_business_rules(viral_kit: ViralKitV1) -> None:
                 "VIRAL_KIT_GOVERNANCE_CONFLICT",
                 "TikTok Shop product-tag requirement was not preserved.",
             )
+
+
+def _same_product_snapshot(current: ViralKitV1, previous: ViralKitV1) -> bool:
+    return (
+        current.product.product_id == previous.product.product_id
+        and current.product.product_context_schema_version
+        == previous.product.product_context_schema_version
+        and current.product.product_context_version == previous.product.product_context_version
+        and current.product.snapshot_json == previous.product.snapshot_json
+    )
 
 
 def _validate_product_version(product: ProductContextSnapshot, expected_version: int) -> None:

@@ -15,6 +15,7 @@ from viraldy.api.responses.envelope import Envelope, success
 from viraldy.api.routers.health import router as health_router
 from viraldy.api.routers.system import router as system_router
 from viraldy.modules.adaptations.router import router as adaptations_router
+from viraldy.modules.ai_gateway.router import router as ai_model_runs_router
 from viraldy.modules.assets.router import router as assets_router
 from viraldy.modules.campaign_packs.router import router as campaign_packs_router
 from viraldy.modules.creative_dna.router import router as creative_dna_router
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(products_router, prefix=api_v1)
     app.include_router(assets_router, prefix=api_v1)
     app.include_router(jobs_router, prefix=api_v1)
+    app.include_router(ai_model_runs_router, prefix=api_v1)
     app.include_router(recommendations_router, prefix=api_v1)
     app.include_router(product_events_router, prefix=api_v1)
     app.include_router(feedback_router, prefix=api_v1)

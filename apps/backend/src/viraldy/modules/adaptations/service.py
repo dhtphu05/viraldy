@@ -67,7 +67,7 @@ class AdaptationService:
                 product_snapshot_json=product.product_context.model_dump(mode="json"),
             )
             model_repo = AiModelRunRepository(self._session)
-            input_summary = {
+            input_summary: dict[str, object] = {
                 "product_id": str(product.product_id),
                 "creative_dna_version_id": str(dna.id),
                 "objective": data.objective,

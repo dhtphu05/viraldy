@@ -21,6 +21,7 @@ from viraldy.modules.campaign_packs.contracts import (
     StoryboardSceneV1,
 )
 from viraldy.modules.campaign_packs.exporter import build_campaign_pack_export
+from viraldy.modules.campaign_packs.models import CampaignPackModel, CampaignPackVersionModel
 from viraldy.modules.campaign_packs.repository import CampaignPackRepository
 from viraldy.modules.campaign_packs.requirements import (
     compile_campaign_requirements,
@@ -87,7 +88,7 @@ class CampaignPackService:
         await self._session.refresh(version)
         return _pack_response(pack, version)
 
-    async def list(self, workspace_id: UUID) -> list[CampaignPackResponse]:
+    async def list_packs(self, workspace_id: UUID) -> list[CampaignPackResponse]:
         packs = await self._repository.list(workspace_id)
         responses = []
         for pack in packs:
@@ -203,7 +204,10 @@ class CampaignPackService:
         return export
 
 
-def _pack_response(pack, version) -> CampaignPackResponse:
+def _pack_response(
+    pack: CampaignPackModel,
+    version: CampaignPackVersionModel | None,
+) -> CampaignPackResponse:
     return CampaignPackResponse.model_validate(
         {
             "id": pack.id,

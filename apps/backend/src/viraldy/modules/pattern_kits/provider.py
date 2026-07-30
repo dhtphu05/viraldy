@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -54,6 +56,7 @@ class PatternEvidenceInput:
 class PatternSourceInput:
     creative_dna_version_id: UUID
     asset_version_id: UUID
+    taxonomy_version: str
     dna: CreativeDnaV1
     evidence_by_id: dict[UUID, PatternEvidenceInput]
 
@@ -129,7 +132,7 @@ def build_fixture_pattern_kit(
     workspace_id: UUID,
     version: int,
     created_by: UUID,
-    created_at,
+    created_at: datetime,
     request: CreatePatternKitRequest,
     sources: list[PatternSourceInput],
     model_run_id: UUID | None,
@@ -539,7 +542,12 @@ def _refs_for_path(
                     start_ms=evidence.start_ms,
                     end_ms=evidence.end_ms,
                     observation_summary=f"{evidence.evidence_type} supports {feature_path}",
-                    confidence=float(field_payload.get("confidence") or evidence.confidence or 0.5),
+                    confidence=float(
+                        cast(
+                            str | float,
+                            field_payload.get("confidence") or evidence.confidence or 0.5,
+                        )
+                    ),
                 )
             )
     return refs
@@ -643,11 +651,24 @@ def _uncertainties(sources: list[PatternSourceInput]) -> list[str]:
     values: list[str] = []
     for source in sources:
         values.extend(source.dna.uncertainties)
+    for path in (
+        "opening.primary_hook_type",
+        "product.first_appearance_ms",
+        "demo.demo_type",
+        "proof.proof_types",
+        "creator.delivery_style",
+        "editing.pacing",
+        "offer.offer_types",
+        "cta.cta_types",
+    ):
+        observed = {value for source in sources for value in _values([source], path)}
+        if len(observed) > 1:
+            values.append(f"Source Creative DNA versions disagree on {path}.")
     return _unique(values) or ["No performance data is linked yet."]
 
 
 def _taxonomy_version(sources: list[PatternSourceInput]) -> str:
-    versions = _unique([source.dna.schema_version for source in sources])
+    versions = _unique([source.taxonomy_version for source in sources])
     return versions[0] if len(versions) == 1 else ",".join(versions)
 
 
@@ -714,7 +735,7 @@ def _source_type(source: str) -> SourceType:
     if source == "spoken":
         return "asr"
     if source in {"vision", "asr", "ocr", "derived", "human_correction", "performance"}:
-        return source
+        return cast(SourceType, source)
     return "derived"
 
 
@@ -723,7 +744,7 @@ def _first(values: list[str]) -> str | None:
 
 
 def _or_unknown(value: str | None) -> str:
-    return value if value not in (None, "") else "unknown"
+    return value if value else "unknown"
 
 
 def _unique(values: list[str]) -> list[str]:

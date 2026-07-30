@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -14,12 +16,18 @@ from viraldy.modules.creative_dna.service import _build_creative_dna, _evidence_
 from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.feedback.public import FieldFeedbackV1
 from viraldy.modules.media_analysis.public import EvidenceItemModel
-from viraldy.modules.pattern_kits.contracts import PatternKitV1
+from viraldy.modules.pattern_kits.contracts import (
+    PatternEvidenceRefV1,
+    PatternKitV1,
+    PatternMetricSummaryV1,
+    PatternPerformanceSummaryV1,
+)
 from viraldy.modules.pattern_kits.models import (
     PatternKitActionModel,
     PatternKitModel,
     PatternKitVersionModel,
 )
+from viraldy.modules.pattern_kits.performance import validate_supported_performance
 from viraldy.modules.pattern_kits.provider import (
     PatternEvidenceInput,
     PatternSourceInput,
@@ -28,6 +36,7 @@ from viraldy.modules.pattern_kits.provider import (
 from viraldy.modules.pattern_kits.schemas import (
     CreatePatternKitFeedbackRequest,
     CreatePatternKitRequest,
+    CreatePatternKitVersionRequest,
     PatternKitActionRequest,
 )
 from viraldy.modules.pattern_kits.service import PatternKitService
@@ -133,6 +142,7 @@ class FakePatternKitRepository:
         self.source_rows: list[tuple[UUID, UUID]] = []
         self.evidence_links: list[tuple[UUID, str]] = []
         self.actions: list[PatternKitActionModel] = []
+        self.versions: list[PatternKitVersionModel] = []
 
     async def create_kit_with_version(
         self,
@@ -177,6 +187,7 @@ class FakePatternKitRepository:
             created_by_user_id=user_id,
             created_at=now,
         )
+        self.versions.append(self.version)
         return self.kit, self.version
 
     async def get_kit(self, workspace_id: UUID, pattern_kit_id: UUID) -> PatternKitModel | None:
@@ -222,6 +233,39 @@ class FakePatternKitRepository:
         )
         self.actions.append(action_model)
         return action_model
+
+    async def create_version(
+        self,
+        *,
+        kit: PatternKitModel,
+        user_id: UUID,
+        pattern: PatternKitV1,
+        parent_version: int,
+        change_reason: str,
+        source_rows: list[tuple[UUID, UUID]],
+        evidence_links: list[tuple[UUID, str]],
+    ) -> PatternKitVersionModel:
+        now = utc_now()
+        kit.latest_version = parent_version + 1
+        kit.status = pattern.status
+        self.source_rows = source_rows
+        self.evidence_links = evidence_links
+        self.version = PatternKitVersionModel(
+            id=uuid4(),
+            pattern_kit_id=kit.id,
+            workspace_id=kit.workspace_id,
+            version=pattern.version,
+            parent_version=parent_version,
+            change_reason=change_reason,
+            schema_version=pattern.schema_version,
+            pattern_json=pattern.model_dump(mode="json"),
+            overall_confidence=pattern.overall_confidence,
+            model_run_id=pattern.provenance.model_run_id,
+            created_by_user_id=user_id,
+            created_at=now,
+        )
+        self.versions.append(self.version)
+        return self.version
 
 
 class FakeProductEventPublisher:
@@ -302,10 +346,37 @@ def test_fixture_pattern_kit_is_evidence_grounded_without_performance_claims() -
     payload = pattern.model_dump(mode="json")
 
     assert pattern.source.creative_dna_version_ids == [dna_model.id]
+    assert pattern.provenance.taxonomy_version == dna_model.taxonomy_version
     assert pattern.performance_summary.evidence_status == "none"
     assert pattern.opening.evidence_refs
     assert pattern.sequence[0].order == 1
     assert "winning" not in str(payload).lower()
+
+
+def test_multi_source_conflict_is_retained_as_uncertainty() -> None:
+    workspace_id = uuid4()
+    dna_a, evidence_a = _dna_model(workspace_id)
+    dna_b, evidence_b = _dna_model(workspace_id)
+    dna_b.dna_json = copy.deepcopy(dna_b.dna_json)
+    opening = cast(dict[str, object], dna_b.dna_json["opening"])
+    primary_hook = cast(dict[str, object], opening["primary_hook_type"])
+    primary_hook["value"] = "result_first"
+
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=uuid4(),
+        created_at=utc_now(),
+        request=_create_request([dna_a.id, dna_b.id]),
+        sources=[
+            _source_input(dna_a, evidence_a),
+            _source_input(dna_b, evidence_b),
+        ],
+        model_run_id=uuid4(),
+    )
+
+    assert any("opening.primary_hook_type" in uncertainty for uncertainty in pattern.uncertainties)
 
 
 def test_pattern_kit_contract_rejects_non_contiguous_sequence() -> None:
@@ -325,6 +396,130 @@ def test_pattern_kit_contract_rejects_non_contiguous_sequence() -> None:
     payload["sequence"][0]["order"] = 2
 
     with pytest.raises(ValidationError):
+        PatternKitV1.model_validate(payload)
+
+
+def test_pattern_evidence_rejects_inverted_timing() -> None:
+    with pytest.raises(ValidationError, match="end_ms"):
+        PatternEvidenceRefV1(
+            creative_dna_version_id=uuid4(),
+            asset_version_id=uuid4(),
+            evidence_id=uuid4(),
+            feature_path="opening.hook_text",
+            source_type="vision",
+            start_ms=2000,
+            end_ms=1000,
+            observation_summary="Observed hook timing.",
+            confidence=0.8,
+        )
+
+
+def test_performance_summary_rejects_directional_without_sample_caveat() -> None:
+    with pytest.raises(ValidationError, match="sample-size caveat"):
+        PatternPerformanceSummaryV1(
+            evidence_status="directional",
+            asset_count=2,
+            campaign_count=1,
+            date_range_start=date(2026, 1, 1),
+            date_range_end=date(2026, 1, 31),
+            metrics=[
+                PatternMetricSummaryV1(
+                    metric_name="hook_rate",
+                    sample_size=2,
+                    median=0.31,
+                    source="workspace_campaign_export",
+                )
+            ],
+            caveats=["Correlation does not establish causation."],
+            confidence="low",
+        )
+
+
+def test_performance_summary_rejects_invalid_date_range() -> None:
+    with pytest.raises(ValidationError, match="date range"):
+        PatternPerformanceSummaryV1(
+            evidence_status="directional",
+            asset_count=2,
+            campaign_count=1,
+            date_range_start=date(2026, 2, 1),
+            date_range_end=date(2026, 1, 1),
+            metrics=[
+                PatternMetricSummaryV1(
+                    metric_name="hook_rate",
+                    sample_size=2,
+                    median=0.31,
+                    source="workspace_campaign_export",
+                )
+            ],
+            caveats=[
+                "Small sample size; treat this result as directional.",
+                "Correlation does not establish causation.",
+            ],
+            confidence="low",
+        )
+
+
+def test_supported_performance_uses_configured_minimum_samples() -> None:
+    summary = PatternPerformanceSummaryV1(
+        evidence_status="supported",
+        asset_count=9,
+        campaign_count=3,
+        date_range_start=date(2026, 1, 1),
+        date_range_end=date(2026, 1, 31),
+        metrics=[
+            PatternMetricSummaryV1(
+                metric_name="hook_rate",
+                sample_size=9,
+                median=0.31,
+                source="workspace_campaign_export",
+            )
+        ],
+        caveats=["Observed correlation does not establish causation."],
+        confidence="medium",
+    )
+
+    with pytest.raises(AppError, match="PATTERN_KIT_PERFORMANCE_UNSUPPORTED"):
+        validate_supported_performance(
+            summary,
+            Settings(
+                pattern_performance_supported_min_asset_count=10,
+                pattern_performance_supported_min_campaign_count=3,
+                pattern_performance_supported_min_metric_sample_size=10,
+            ),
+        )
+
+    validate_supported_performance(
+        summary.model_copy(
+            update={
+                "asset_count": 10,
+                "metrics": [summary.metrics[0].model_copy(update={"sample_size": 10})],
+            }
+        ),
+        Settings(
+            pattern_performance_supported_min_asset_count=10,
+            pattern_performance_supported_min_campaign_count=3,
+            pattern_performance_supported_min_metric_sample_size=10,
+        ),
+    )
+
+
+def test_pattern_kit_contract_rejects_winner_claim_without_performance() -> None:
+    workspace_id = uuid4()
+    dna_model, evidence = _dna_model(workspace_id)
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=uuid4(),
+        created_at=utc_now(),
+        request=_create_request([dna_model.id], kind="single_asset_abstraction"),
+        sources=[_source_input(dna_model, evidence)],
+        model_run_id=uuid4(),
+    )
+    payload = pattern.model_dump(mode="json")
+    payload["summary"] = "Winning hook structure for this category."
+
+    with pytest.raises(ValidationError, match="winning"):
         PatternKitV1.model_validate(payload)
 
 
@@ -419,6 +614,235 @@ async def test_pattern_kit_service_fails_when_evidence_does_not_resolve(
 
 
 @pytest.mark.asyncio
+async def test_pattern_kit_service_hides_cross_workspace_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.pattern_kits.service as service_module
+
+    workspace_id = uuid4()
+    foreign_dna, foreign_evidence = _dna_model(uuid4())
+    monkeypatch.setattr(
+        service_module,
+        "CreativeDnaRepository",
+        lambda _: FakeCreativeDnaRepository({foreign_dna.id: foreign_dna}),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "EvidenceQueries",
+        lambda _: FakeEvidenceQueries({foreign_dna.asset_version_id: foreign_evidence}),
+    )
+
+    with pytest.raises(AppError, match="CREATIVE_DNA_NOT_FOUND"):
+        await PatternKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create(
+            workspace_id=workspace_id,
+            user_id=uuid4(),
+            data=_create_request(
+                [foreign_dna.id],
+                kind="single_asset_abstraction",
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_user_version_is_append_only_and_emits_version_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.pattern_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=user_id,
+        created_at=utc_now(),
+        request=_create_request([dna.id], kind="single_asset_abstraction"),
+        sources=[_source_input(dna, evidence)],
+        model_run_id=uuid4(),
+    )
+    repository = FakePatternKitRepository()
+    await repository.create_kit_with_version(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        pattern=pattern,
+        source_rows=[(dna.id, dna.asset_version_id)],
+        evidence_links=[(pattern.opening.evidence_refs[0].evidence_id, "opening.hook_text")],
+    )
+    original_payload = copy.deepcopy(repository.versions[0].pattern_json)
+    edited_pattern = pattern.model_copy(update={"summary": "Human-refined structural summary."})
+    events = FakeProductEventPublisher(FakeSession())
+    monkeypatch.setattr(service_module, "PatternKitRepository", lambda _: repository)
+    monkeypatch.setattr(
+        service_module,
+        "CreativeDnaRepository",
+        lambda _: FakeCreativeDnaRepository({dna.id: dna}),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "EvidenceQueries",
+        lambda _: FakeEvidenceQueries({dna.asset_version_id: evidence}),
+    )
+    monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: events)
+
+    created = await PatternKitService(
+        cast(AsyncSession, FakeSession()),
+        Settings(ai_mode="fixture"),
+    ).create_version(
+        workspace_id=workspace_id,
+        pattern_kit_id=pattern.id,
+        user_id=user_id,
+        data=CreatePatternKitVersionRequest(
+            change_reason="Clarify the reusable structure.",
+            pattern=edited_pattern,
+        ),
+    )
+
+    assert created.version == 2
+    assert created.parent_version == 1
+    assert created.change_reason == "Clarify the reusable structure."
+    assert created.pattern.summary == "Human-refined structural summary."
+    assert repository.versions[0].pattern_json == original_payload
+    assert events.records[0]["event_type"] == "pattern_kit_version_created"
+
+
+@pytest.mark.asyncio
+async def test_user_version_rejects_exact_source_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.pattern_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=user_id,
+        created_at=utc_now(),
+        request=_create_request([dna.id], kind="single_asset_abstraction"),
+        sources=[_source_input(dna, evidence)],
+        model_run_id=uuid4(),
+    )
+    repository = FakePatternKitRepository()
+    await repository.create_kit_with_version(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        pattern=pattern,
+        source_rows=[(dna.id, dna.asset_version_id)],
+        evidence_links=[(pattern.opening.evidence_refs[0].evidence_id, "opening.hook_text")],
+    )
+    copied = pattern.model_copy(
+        update={"summary": "My counter was always a mess before this setup."}
+    )
+    monkeypatch.setattr(service_module, "PatternKitRepository", lambda _: repository)
+    monkeypatch.setattr(
+        service_module,
+        "CreativeDnaRepository",
+        lambda _: FakeCreativeDnaRepository({dna.id: dna}),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "EvidenceQueries",
+        lambda _: FakeEvidenceQueries({dna.asset_version_id: evidence}),
+    )
+
+    with pytest.raises(AppError, match="PATTERN_KIT_CONFLICT"):
+        await PatternKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create_version(
+            workspace_id=workspace_id,
+            pattern_kit_id=pattern.id,
+            user_id=user_id,
+            data=CreatePatternKitVersionRequest(
+                change_reason="Do not copy source wording.",
+                pattern=copied,
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_user_version_cannot_self_certify_supported_performance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.pattern_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=user_id,
+        created_at=utc_now(),
+        request=_create_request([dna.id], kind="single_asset_abstraction"),
+        sources=[_source_input(dna, evidence)],
+        model_run_id=uuid4(),
+    )
+    repository = FakePatternKitRepository()
+    await repository.create_kit_with_version(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        pattern=pattern,
+        source_rows=[(dna.id, dna.asset_version_id)],
+        evidence_links=[(pattern.opening.evidence_refs[0].evidence_id, "opening.hook_text")],
+    )
+    fabricated = pattern.model_copy(
+        update={
+            "performance_summary": PatternPerformanceSummaryV1(
+                evidence_status="supported",
+                asset_count=10,
+                campaign_count=3,
+                date_range_start=date(2026, 1, 1),
+                date_range_end=date(2026, 1, 31),
+                metrics=[
+                    PatternMetricSummaryV1(
+                        metric_name="hook_rate",
+                        sample_size=10,
+                        median=0.42,
+                        source="user_supplied",
+                    )
+                ],
+                caveats=["Observed correlation does not establish causation."],
+                confidence="medium",
+            )
+        }
+    )
+    monkeypatch.setattr(service_module, "PatternKitRepository", lambda _: repository)
+    monkeypatch.setattr(
+        service_module,
+        "CreativeDnaRepository",
+        lambda _: FakeCreativeDnaRepository({dna.id: dna}),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "EvidenceQueries",
+        lambda _: FakeEvidenceQueries({dna.asset_version_id: evidence}),
+    )
+
+    with pytest.raises(AppError, match="PATTERN_KIT_PERFORMANCE_IMMUTABLE"):
+        await PatternKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).create_version(
+            workspace_id=workspace_id,
+            pattern_kit_id=pattern.id,
+            user_id=user_id,
+            data=CreatePatternKitVersionRequest(
+                change_reason="Claim unsupported performance.",
+                pattern=fabricated,
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_pattern_kit_action_transition_emits_review_event(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -449,10 +873,11 @@ async def test_pattern_kit_action_transition_emits_review_event(
     monkeypatch.setattr(service_module, "PatternKitRepository", lambda _: repository)
     monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: events)
 
-    action = await PatternKitService(
+    service = PatternKitService(
         cast(AsyncSession, FakeSession()),
         Settings(ai_mode="fixture"),
-    ).record_action(
+    )
+    action = await service.record_action(
         workspace_id=workspace_id,
         pattern_kit_id=pattern.id,
         user_id=user_id,
@@ -463,6 +888,28 @@ async def test_pattern_kit_action_transition_emits_review_event(
     assert repository.kit is not None
     assert repository.kit.status == "reviewed"
     assert events.records[0]["event_type"] == "pattern_kit_reviewed"
+
+    await service.record_action(
+        workspace_id=workspace_id,
+        pattern_kit_id=pattern.id,
+        user_id=user_id,
+        data=PatternKitActionRequest(
+            action="validated",
+            reason="Human reviewer validated the pattern.",
+        ),
+    )
+    await service.record_action(
+        workspace_id=workspace_id,
+        pattern_kit_id=pattern.id,
+        user_id=user_id,
+        data=PatternKitActionRequest(action="archived", reason="Retired after test."),
+    )
+
+    assert repository.kit.status == "archived"
+    assert [event["event_type"] for event in events.records] == [
+        "pattern_kit_reviewed",
+        "pattern_kit_validated",
+    ]
 
 
 @pytest.mark.asyncio
@@ -503,6 +950,47 @@ async def test_pattern_kit_action_rejects_validate_before_review(
             pattern_kit_id=pattern.id,
             user_id=user_id,
             data=PatternKitActionRequest(action="validated", reason="Human validation."),
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_learned_pattern_requires_promotion_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.pattern_kits.service as service_module
+
+    workspace_id = uuid4()
+    user_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=user_id,
+        created_at=utc_now(),
+        request=_create_request([dna.id], kind="workspace_learned_pattern"),
+        sources=[_source_input(dna, evidence)],
+        model_run_id=uuid4(),
+    )
+    repository = FakePatternKitRepository()
+    await repository.create_kit_with_version(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        pattern=pattern,
+        source_rows=[(dna.id, dna.asset_version_id)],
+        evidence_links=[(pattern.opening.evidence_refs[0].evidence_id, "opening.hook_text")],
+    )
+    monkeypatch.setattr(service_module, "PatternKitRepository", lambda _: repository)
+
+    with pytest.raises(AppError, match="PATTERN_KIT_PROMOTION_EVIDENCE_REQUIRED"):
+        await PatternKitService(
+            cast(AsyncSession, FakeSession()),
+            Settings(ai_mode="fixture"),
+        ).record_action(
+            workspace_id=workspace_id,
+            pattern_kit_id=pattern.id,
+            user_id=user_id,
+            data=PatternKitActionRequest(action="reviewed"),
         )
 
 
@@ -654,6 +1142,7 @@ def _source_input(
     return PatternSourceInput(
         creative_dna_version_id=dna_model.id,
         asset_version_id=dna_model.asset_version_id,
+        taxonomy_version=dna_model.taxonomy_version,
         dna=CreativeDnaV1.model_validate(dna_model.dna_json),
         evidence_by_id={
             item.id: PatternEvidenceInput(

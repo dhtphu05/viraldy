@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -55,6 +57,42 @@ class AiModelRunRepository:
         self._session.add(run)
         await self._session.flush()
         return run
+
+    async def list_runs(
+        self,
+        *,
+        workspace_id: UUID,
+        subject_type: str | None = None,
+        subject_id: UUID | None = None,
+        operation: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[AiModelRunModel]:
+        statement = select(AiModelRunModel).where(AiModelRunModel.workspace_id == workspace_id)
+        if subject_type is not None:
+            statement = statement.where(AiModelRunModel.subject_type == subject_type)
+        if subject_id is not None:
+            statement = statement.where(AiModelRunModel.subject_id == subject_id)
+        if operation is not None:
+            statement = statement.where(AiModelRunModel.operation == operation)
+        if status is not None:
+            statement = statement.where(AiModelRunModel.status == status)
+        statement = statement.order_by(
+            AiModelRunModel.created_at.desc(),
+            AiModelRunModel.id.desc(),
+        ).limit(limit)
+        return list((await self._session.scalars(statement)).all())
+
+    async def get_run(
+        self,
+        workspace_id: UUID,
+        model_run_id: UUID,
+    ) -> AiModelRunModel | None:
+        statement = select(AiModelRunModel).where(
+            AiModelRunModel.workspace_id == workspace_id,
+            AiModelRunModel.id == model_run_id,
+        )
+        return cast(AiModelRunModel | None, await self._session.scalar(statement))
 
     async def complete(
         self,

@@ -164,6 +164,7 @@ def _pattern_kit_payload(prompt: str) -> dict[str, Any]:
             PatternSourceInput(
                 creative_dna_version_id=UUID(str(raw_source["creative_dna_version_id"])),
                 asset_version_id=asset_version_id,
+                taxonomy_version=str(raw_source["taxonomy_version"]),
                 dna=CreativeDnaV1.model_validate(raw_source["dna"]),
                 evidence_by_id=evidence_by_id,
             )
