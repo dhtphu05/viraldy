@@ -7,7 +7,7 @@ RUN uv sync --frozen --no-dev || uv sync --no-dev
 COPY apps/backend /app/apps/backend
 RUN uv sync --frozen --no-dev || uv sync --no-dev
 
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/apps/backend/.venv/bin:$PATH"
