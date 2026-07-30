@@ -1,6 +1,6 @@
 # Viraldy Private Beta Tech Freeze Audit
 
-Status: Backend local implementation complete through S8; release freeze still blocked
+Status: Backend technically frozen for supervised private beta
 Branch: `release/private-beta-tech-freeze`
 Baseline commit: `6461380`
 Target release: `v0.1.0-beta-rc1`
@@ -20,7 +20,11 @@ current source code and verification commands prove them.
 - S6 implementation commit SHA: `2257ed4`
 - S7 implementation commit SHA: `6de0066`
 - S8 release-validation implementation SHA: `33c8780`
-- PR URL: pending
+- S9 technical-freeze completion SHA:
+  `73f7d1834378680926e796cc516dd3991d095b81`
+- PR URL: `https://github.com/dhtphu05/viraldy/pull/15`
+- Release tag: `v0.1.0-beta-rc1` points to the final audit commit containing
+  this file.
 
 ## 2. Changed Files By Module
 
@@ -228,6 +232,32 @@ current source code and verification commands prove them.
 - `apps/backend/tests/unit/test_policies.py`
 - `apps/backend/tests/contract/test_openapi.py`
 
+### S9 Technical-Freeze Completion
+
+- `apps/backend/src/viraldy/modules/pattern_kits/performance.py`
+- `apps/backend/src/viraldy/modules/pattern_kits/contracts.py`
+- `apps/backend/src/viraldy/modules/pattern_kits/provider.py`
+- `apps/backend/src/viraldy/modules/pattern_kits/service.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/router.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/service.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/repository.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/schemas.py`
+- `apps/backend/src/viraldy/platform/config/settings.py`
+- `apps/backend/src/viraldy/api/main.py`
+- `apps/backend/scripts/mock_openai_provider.py`
+- `apps/backend/scripts/smoke_mvp_flow.py`
+- Existing typing gaps were corrected in media analysis, Creative DNA,
+  Campaign Pack, adaptations, preflight, TikTok scorer, and worker modules
+  without changing their public behavior.
+
+### S9 Tests
+
+- `apps/backend/tests/unit/test_pattern_kits.py`
+- `apps/backend/tests/unit/test_viral_kits.py`
+- `apps/backend/tests/unit/test_ai_gateway.py`
+- `apps/backend/tests/integration/test_http_auth_tenancy.py`
+- `apps/backend/tests/contract/test_openapi.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -372,11 +402,18 @@ S8 tenant evidence:
 - Campaign Pack export and asset revision endpoints are included in tenant
   checks.
 
-Still pending:
+S9 tenant evidence:
 
-- Exhaustive cross-workspace tests for every mutating PatternKit/ViralKit route;
-  the shared permission boundary and major resource lookup paths are covered.
-- Optional owner-grant restrictions beyond the explicit private beta rule.
+- Every PatternKit and ViralKit mutating route is exercised against a real
+  foreign resource and returns a workspace-scoped `404`.
+- Cross-workspace PatternKit source and ViralKit product inputs return scoped
+  `404`; foreign filter IDs produce empty lists without leaking existence.
+- Viewer reads succeed while PatternKit/ViralKit mutations and model-run export
+  fail with `403`.
+- Positive PatternKit and ViralKit hard deletion is verified.
+
+Optional owner-grant restrictions beyond the explicit private-beta rule are
+outside this release contract.
 
 ## 6. PatternKit Contract Summary
 
@@ -406,13 +443,25 @@ Implemented in S3:
 - PatternKit-local feedback endpoint writes field-level correction through the
   feedback public boundary and emits `pattern_kit_corrected`.
 
-Still pending for PatternKit:
+Completed in S9:
 
-- Live provider qualification against real Dola/Seed-compatible responses.
-  Local OpenAI-compatible mock contract execution passed in S7.
-- Exhaustive mutating-endpoint tenant coverage beyond the shared permission and
-  real foreign-resource lookup tests added in S8.
-- Performance evidence promotion rules for directional/supported labels.
+- `none`, `directional`, and `supported` performance labels have validated
+  evidence contracts. Supported evidence enforces configurable minimum asset,
+  campaign, and metric sample counts.
+- Directional evidence requires a sample-size caveat. Directional and supported
+  evidence require a non-causal caveat.
+- Date ranges, metric names/sources/statistics, sample sizes, and percentile
+  consistency are validated.
+- Winner/winning labels are rejected when no performance evidence exists.
+- Learned-pattern promotion requires explicit seller review or qualifying
+  performance evidence.
+- Multi-source disagreement is preserved in uncertainties, exact-source
+  script reuse is rejected, and source taxonomy versions remain traceable.
+- All mutating PatternKit routes have foreign-tenant tests.
+
+Live provider quality qualification remains planned for the next-month
+calibration phase described by the mission. Configuration key-readiness and the
+OpenAI-compatible provider contract are release-gated and pass.
 
 ## 7. ViralKit Contract Summary
 
@@ -451,13 +500,21 @@ Implemented in S4:
 - ViralKit-local feedback endpoint writes field-level corrections through the
   feedback public boundary.
 
-Still pending for ViralKit:
+Completed in S9:
 
-- Exhaustive mutating-endpoint tenant coverage beyond the shared permission and
-  real foreign-resource lookup tests added in S8.
-- Live provider qualification against real Dola/Seed-compatible responses.
-- Frontend integration for ViralKit list/detail/create/select/pack creation.
-- Generation provider execution for the optional generation brief payloads.
+- Exactly three concepts, pairwise strategic diversity, product grounding,
+  buyer/creator persona separation, hard category constraints, applicability,
+  governance preservation, duplicate rejection, stale Product Context
+  rejection, append-only versions, exact Campaign Pack lineage, and concept
+  actions are covered by unit tests.
+- User-authored versions cannot replace locked Product Context snapshots,
+  PatternKit provenance, model/prompt provenance, or product governance.
+- All mutating ViralKit routes have foreign-tenant tests.
+
+Live provider quality qualification and generated-media quality qualification
+remain next-month calibration work. Frontend PatternKit/ViralKit screens are
+outside this backend completion goal; the existing frontend still passes lint
+and production build.
 
 ## 8. API Endpoint List
 
@@ -540,6 +597,14 @@ Implemented in S8:
 - `POST /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions/{asset_version_id}/complete-upload`
 - `GET /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions`
 - `POST /api/v1/workspaces/{workspace_id}/campaign-packs/{campaign_pack_id}/exports`
+
+Implemented in S9:
+
+- `GET /api/v1/workspaces/{workspace_id}/model-runs`
+- `GET /api/v1/workspaces/{workspace_id}/model-runs/{model_run_id}`
+
+Model-run reads require `data.export`, are workspace-scoped, and expose only
+the safe error field rather than the internal provider error message.
 
 S8 behavior implemented:
 
@@ -815,9 +880,8 @@ Results:
 - S7 full backend ruff: passed.
 - S7 targeted mypy for all changed Python entrypoints/modules/tests: passed,
   `no issues found in 7 source files`.
-- Full-project `mypy src` is not clean: `45 errors in 13 files`. These are
-  existing typing gaps outside the S7 diff and are not represented as a passed
-  release gate.
+- The S7 full-project `mypy src` baseline had `45 errors in 13 files`. S9
+  resolved those gaps; the final strict typecheck is recorded below.
 - S7 Bandit scan: passed after documenting the reviewed ffmpeg/ffprobe
   subprocess boundary; argv is used without a shell, executable paths are
   locally resolved, and calls have a timeout.
@@ -834,9 +898,8 @@ Results:
 - S8 full backend pytest on the final implementation state: `148 passed`,
   coverage `74.60%` against the configured 70% gate.
 - S8 changed-file Ruff lint and format checks: passed.
-- S8 full-project `mypy src`: still `45 errors in 13 files` across 223 checked
-  files, unchanged from the recorded S7 baseline and not represented as a
-  passed release gate.
+- S8 retained the prior `45 errors in 13 files` baseline; S9 resolved the full
+  set without weakening mypy configuration.
 - S8 Bandit: passed. Dependency audit: no known vulnerabilities; the
   unpublished local package was skipped because it is not on PyPI.
 - Frontend lint/build: passed with zero errors. ESLint reports nine existing
@@ -856,12 +919,42 @@ Results:
   also covered by Testcontainers.
 - Final diff whitespace and scoped secret-pattern checks: passed.
 
+S9 final verification on 2026-07-30:
+
+- Full backend pytest: `167 passed`, total coverage `75.76%`; configured gate is
+  70%. One existing Starlette deprecation warning remains.
+- Strict full-project typecheck:
+  `uv run mypy src --no-pretty --no-error-summary` passed with zero errors.
+- Full backend Ruff lint: passed.
+- Ruff formatting for all 26 changed Python files: passed. A full-repository
+  format check still identifies 26 pre-existing files outside this change, so
+  no unrelated formatting rewrite was performed.
+- Clean zero-to-head migration test:
+  `tests/integration/test_migrations.py -q --no-cov` passed (`1 passed`).
+- Explicit no-audio regression suite passed (`2 passed`).
+- Bandit source scan passed.
+- `pip-audit` reported no known vulnerabilities; the unpublished local package
+  was skipped.
+- Frontend lint passed with zero errors and nine existing Fast Refresh
+  warnings. Frontend production build passed with existing chunk-size and
+  Nitro `inlineDynamicImports` warnings.
+- `git diff --check` passed.
+- Scoped secret scan for private keys, OpenAI/GitHub/Slack tokens, and AWS key
+  IDs returned no matches.
+- Live OpenAI-compatible/Seed-style configuration is key-ready when the
+  required provider URL, key, and model IDs are supplied; missing-key
+  configuration is explicitly not ready.
+- Independent final review found three version-integrity bypasses: top-level
+  ViralKit governance replacement, ViralKit Product Context/provenance
+  tampering, and user-authored PatternKit performance self-certification.
+  Four regression tests were added, all three code paths were fixed, and the
+  reviewer confirmed the findings closed before the final gates.
+
 ## 10. CI Result
 
-Not configured for this milestone, per the current release instruction that
-GitHub Actions are not needed. Local gates are recorded above, but they are not
-reported as GitHub CI success. The original goal's `GitHub CI passes` item
-therefore remains incomplete.
+GitHub Actions are explicitly waived by the user for this milestone and were
+not configured. Local gates are recorded above, but they are not represented as
+GitHub CI success. This is a documented release exception, not a technical pass.
 
 ## 11. Fixture And Mock E2E Evidence
 
@@ -875,44 +968,44 @@ an immutable UGC revision, checks required first-party event subjects, then
 hard-deletes the workspace and verifies PostgreSQL audit state plus an empty
 workspace object prefix.
 
-Fixture evidence from 2026-07-30:
+Final fixture evidence from 2026-07-30:
 
 - status: `ok`
-- workspace: `26bf2480-af2b-4a70-89af-66ebc5e6fb82`
-- Quick score: `b48db213-5a5a-4baf-8417-c18d635d8fbd`
-- Creative DNA versions: `0c32b304-5ab9-453d-a72e-8218c8f2a6a7`,
-  `d1f3e3f5-ddc1-4289-b33c-4532f984ff58`
-- PatternKit: `489326b4-3fc8-4d16-8e49-14cf04838ac4`
-- ViralKit: `f97351c4-91cf-4e51-8e1a-fd26e3a8184a`
-- Campaign Pack: `b7331bb8-955a-457a-a70c-b85638ffd32e`
-- Campaign Pack version: `f3496a43-0c4a-4f31-b08e-c30e276cdaca`
-- Preflight: `7a9e6877-31eb-4212-92ec-45e8931dacab`
-- Recommendation: `7f4b5730-2b09-49a1-99a5-6f018a4250e1`
-- UGC revision version: `04c78a11-fe39-4362-9037-199bf5f29ace`
-- completed jobs: `6ca4cefd-f00e-414b-a5b7-de3509f6d8fe`,
-  `683c3605-f04b-454f-9685-f6d64d8e0fb1`,
-  `0541c4dd-c459-45b4-8287-ea4c21d1d75b`,
-  `923f7e62-c71c-454d-bb10-72756b777094`
+- workspace: `be4b9dc0-7605-496c-b365-f05e8db0d326`
+- Quick score: `5e17d088-f852-4c05-82c3-3df5790e0ecf`
+- Creative DNA versions: `4311893f-d7c4-4e02-8cb8-3beb6fca3e82`,
+  `62c4cce6-a873-41dd-95d5-eb416363eab9`
+- PatternKit: `f1e00121-fa26-45b1-9ee1-ed6fefbd1ca6`
+- ViralKit: `b2708b07-8743-42b6-8c5e-d1a30cd8155f`
+- Campaign Pack: `cc520561-f45b-4a15-b957-6185d0e7ad6c`
+- Campaign Pack version: `f5a42333-dd5c-4a82-8c87-dad2bec25b44`
+- Preflight: `62cf1907-0061-481d-a744-7c12b7888bfb`
+- Recommendation: `ce676e98-e85b-4214-a4ed-0834315768ce`
+- UGC revision version: `75af991b-db5c-4944-a66a-02c13531193b`
+- completed jobs: `847d2ce4-d011-4e89-92ac-9b185c9eb708`,
+  `80267a04-bd14-446b-bfd1-30aa5366cba0`,
+  `bd1aeda3-824f-4259-9371-57e9c55463b4`,
+  `2ce07a5f-3eda-4f7a-9d77-0f9754886064`
 - workspace deletion status: `succeeded`
 
-Mock-provider evidence from 2026-07-30:
+Final mock-provider evidence from 2026-07-30:
 
 - status: `ok`
-- workspace: `964a652c-f458-4b8a-ae8c-d5fca10ecb2f`
-- Quick score: `995236a5-e4a9-44cf-832d-7b231e6de367`
-- Creative DNA versions: `65107c64-55cb-4815-ada4-aa74707c8277`,
-  `98967f31-0227-49d6-b0c8-0db6dbb91c76`
-- PatternKit: `f6daf379-b2f6-4f2c-a24b-f8d25891d916`
-- ViralKit: `9dfa0154-7545-447f-8c9f-07e75ffe9396`
-- Campaign Pack: `e7d7077f-7314-4713-8a49-469933846b7b`
-- Campaign Pack version: `77e00580-f879-4157-a878-1caa8dd10c2c`
-- Preflight: `f5157144-3477-4e2c-9c42-6cca7aa09aab`
-- Recommendation: `f23d09d7-9e4d-4b0f-908c-1c95d8acdf83`
-- UGC revision version: `483b526b-ad37-48e8-88cd-8612f838aabe`
-- completed jobs: `fcf9c0af-f9bd-4bc0-9737-0dd0c6574464`,
-  `123ee09e-b855-4d7f-9538-b9955df8a0cf`,
-  `15c6d275-ed49-4ec6-ac6f-52bff85717f6`,
-  `9775a0ea-1be2-4004-b51b-9e376ef3dcee`
+- workspace: `433ed887-9c56-47ef-b837-e7192750c415`
+- Quick score: `cf9056a6-7ddd-471e-8c0e-ddf7c6539da7`
+- Creative DNA versions: `848e1fbc-961f-43cd-9e1b-80bd0131fc75`,
+  `0ba1111e-9927-4ca9-86d0-dadec68d41e4`
+- PatternKit: `e1104344-2143-4aaf-88c1-2a996237904c`
+- ViralKit: `c6fb510f-e1ac-4a41-95b1-1ffc39f77712`
+- Campaign Pack: `da2fdb5a-8543-44e7-abf7-6b6c71219edb`
+- Campaign Pack version: `29874621-fcd3-4419-9336-af32112e9946`
+- Preflight: `7c878680-dea3-43e5-9abd-eedf107286a6`
+- Recommendation: `ee0e5cc1-1154-493d-92f6-ec132649bb46`
+- UGC revision version: `bc57ac64-ae97-4285-826b-add1a94895ef`
+- completed jobs: `ef0ccb04-2c9d-4394-af3c-34d8b3fbc527`,
+  `2c9876a2-fb37-4817-b50d-10f5717bd554`,
+  `bbf1b700-26df-4fb2-aa10-57fa16fc8b5c`,
+  `6bd0ac31-82b6-4103-a69d-cb7904ceb00d`
 - workspace deletion status: `succeeded`
 
 The runs exposed and led to fixes for two real defects: the local-test identity
@@ -921,27 +1014,27 @@ attempted async lazy loading of an expired `updated_at`. The mock provider was
 also extended to return schema-valid PatternKit and ViralKit responses through
 the same OpenAI-compatible HTTP boundary.
 
-Both final runs include the formerly separate lifecycle assertions: workspace
+Both final runs include model-run listing through the workspace-scoped HTTP
+API, in addition to SQL verification. They also include: workspace
 and Product Context creation, revision re-upload, required event verification,
 workspace deletion, deletion audit/storage-batch success, database absence, and
 object-prefix cleanup.
 
 ## 12. Known Limitations
 
-- PatternKit module exists, but live provider qualification, exhaustive
-  mutating-endpoint tenant coverage, and performance-evidence promotion rules
-  remain pending. Mock-provider contract execution and real foreign-resource
-  tenant lookups pass. Source deletion removes dependent
-  PatternKit/ViralKit/Campaign Pack lineage through the hard-deletion cascade.
-- ViralKit module exists, but exhaustive mutating-endpoint tenant coverage,
-  live provider qualification, and frontend integration remain pending.
+- Live Dola/Seed model quality, latency, and cost qualification remains for the
+  next-month data and calibration phase. Provider configuration key-readiness
+  and the OpenAI-compatible contract pass; live mode never falls back silently.
+- Source deletion removes dependent PatternKit/ViralKit/Campaign Pack lineage
+  through the hard-deletion cascade.
 - Feedback module exists for workspace-scoped field-level correction, and
   PatternKit/ViralKit both have resource-local feedback endpoints.
 - Required private-beta product event producers are wired and exercised in both
   final E2E modes. Event persistence is intentionally transactional with the
   action it audits.
-- Generation foundation is implemented, but live Seedream/Seedance provider
-  qualification and real generated-object storage tests remain pending.
+- Generation foundation is implemented, but live Seedream/Seedance output
+  quality qualification and real generated-object storage tests remain in the
+  next-month qualification scope.
 - Product Context still needs expansion to the full private beta section model.
 - Recommendation product snapshots and full source-version metadata remain incomplete.
 - Model-run trace fields and the operation registry are present; existing
@@ -954,9 +1047,9 @@ object-prefix cleanup.
 - Evaluation mode records whether candidates came from fixture, mock, or live
   execution. The harness evaluates captured output and intentionally does not
   call providers itself.
-- Full-project mypy is not clean: `45 errors in 13 files`.
-- GitHub CI is intentionally not configured for this milestone. PR and release
-  tag are pending.
+- Full-project strict mypy is clean.
+- GitHub CI is explicitly waived for this milestone. PR 15 and release tag
+  `v0.1.0-beta-rc1` identify this audited branch state.
 
 ## 13. OIDC Environment Variables
 
@@ -1045,22 +1138,22 @@ Implemented and exercised against clean Testcontainers PostgreSQL:
   malformed workspace-B artifact pointing at a workspace-A asset is rejected
   with `DELETION_TENANT_GRAPH_CONFLICT`; neither tenant's row is deleted.
 
-## 17. Incomplete Items
+## 17. Incomplete And Deferred Items
 
-The backend implementation has completed the local S8 fixture/mock gates, but
-the release is not technically frozen. Remaining items:
+No known backend technical blocker remains for the supervised private-beta
+freeze.
 
-- PatternKit/ViralKit live provider qualification against the intended
-  Dola/Seed-compatible service.
-- Exhaustive cross-workspace tests for every mutating PatternKit/ViralKit
-  endpoint; shared permission and major resource lookup paths already pass.
-- Performance evidence promotion rules for PatternKit
-  directional/supported labels.
-- Frontend integration for the backend ViralKit and Campaign Pack decision
-  workflow.
-- Resolve the 45 full-project mypy errors if a clean typecheck is adopted as a
-  release gate.
-- GitHub CI is intentionally not configured for the current milestone and
-  therefore cannot be marked passed.
-- PR URL and release tag `v0.1.0-beta-rc1` are pending. No tag should be created
-  while the freeze statement remains false.
+- GitHub Actions are explicitly waived by the user; this audit does not claim
+  CI passed.
+- Live Dola/Seed and Seedream/Seedance quality qualification, seller-authorized
+  data collection, intelligence calibration, and small compatibility fixes are
+  intentionally deferred to the next-month phase defined by the mission.
+- Frontend PatternKit/ViralKit product screens are a separate frontend planning
+  scope, not a requirement of this backend completion goal.
+- Release tag `v0.1.0-beta-rc1` identifies the final audited commit.
+
+Permissible completion statement:
+
+> Viraldy backend is technically frozen for supervised private beta. Remaining
+> work is live-model qualification, data collection, intelligence calibration,
+> and small bug fixes.
