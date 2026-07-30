@@ -38,7 +38,7 @@ async def create_upload_session(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.REFERENCE_WRITE, current_user, db
     )
     upload = await asset_service(db, settings).create_upload_session(
         workspace_id,
@@ -58,7 +58,7 @@ async def complete_upload(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.REFERENCE_WRITE, current_user, db
     )
     asset = await asset_service(db, settings).complete_upload(workspace_id, asset_id)
     return success(asset.model_dump(mode="json"), request_id)
@@ -72,7 +72,7 @@ async def list_assets(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     assets = await asset_service(db, settings).list_assets(workspace_id)
     return success([asset.model_dump(mode="json") for asset in assets], request_id)
 
@@ -86,7 +86,7 @@ async def get_asset(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     asset = await asset_service(db, settings).get_asset(workspace_id, asset_id)
     return success(asset.model_dump(mode="json"), request_id)
 
@@ -102,7 +102,7 @@ async def process_asset(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.ANALYSIS_RUN, current_user, db
     )
     job = await asset_service(db, settings).request_processing(
         workspace_id, asset_id, idempotency_key

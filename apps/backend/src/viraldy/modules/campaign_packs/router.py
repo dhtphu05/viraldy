@@ -27,7 +27,7 @@ async def create_pack(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.CAMPAIGN_PACK_WRITE, current_user, db
     )
     pack = await CampaignPackService(db).create(workspace_id, current_user.id, payload)
     return success(pack.model_dump(mode="json"), request_id)
@@ -40,7 +40,7 @@ async def list_packs(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     packs = await CampaignPackService(db).list(workspace_id)
     return success([pack.model_dump(mode="json") for pack in packs], request_id)
 
@@ -53,7 +53,7 @@ async def get_pack(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     pack = await CampaignPackService(db).get(workspace_id, campaign_pack_id)
     return success(pack.model_dump(mode="json"), request_id)
 
@@ -68,7 +68,7 @@ async def update_pack(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.CAMPAIGN_PACK_WRITE, current_user, db
     )
     pack = await CampaignPackService(db).update(workspace_id, campaign_pack_id, payload)
     return success(pack.model_dump(mode="json"), request_id)
@@ -86,7 +86,7 @@ async def create_pack_version(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.CAMPAIGN_PACK_WRITE, current_user, db
     )
     version = await CampaignPackService(db).create_version(
         workspace_id, campaign_pack_id, current_user.id, payload
@@ -102,6 +102,6 @@ async def list_pack_versions(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     versions = await CampaignPackService(db).list_versions(workspace_id, campaign_pack_id)
     return success([version.model_dump(mode="json") for version in versions], request_id)

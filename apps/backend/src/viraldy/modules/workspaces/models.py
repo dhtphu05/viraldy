@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, PrimaryKeyConstraint, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, PrimaryKeyConstraint, String, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,7 +28,13 @@ class WorkspaceModel(Base):
 
 class WorkspaceMemberModel(Base):
     __tablename__ = "workspace_members"
-    __table_args__ = (PrimaryKeyConstraint("workspace_id", "user_id"),)
+    __table_args__ = (
+        PrimaryKeyConstraint("workspace_id", "user_id"),
+        CheckConstraint(
+            "role IN ('owner', 'admin', 'member', 'viewer')",
+            name="ck_workspace_members_role",
+        ),
+    )
 
     workspace_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False

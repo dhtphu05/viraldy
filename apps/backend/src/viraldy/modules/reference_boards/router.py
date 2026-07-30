@@ -32,7 +32,7 @@ async def create_board(
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.REFERENCE_WRITE, current_user, db
     )
     board = await _service(db).create(workspace_id, current_user.id, payload)
     return success(board.model_dump(mode="json"), request_id)
@@ -46,7 +46,7 @@ async def list_boards(
     product_id: UUID | None = None,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     boards = await _service(db).list(workspace_id, product_id)
     return success([board.model_dump(mode="json") for board in boards], request_id)
 
@@ -59,7 +59,7 @@ async def get_board(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     board = await _service(db).get(workspace_id, board_id)
     return success(board.model_dump(mode="json"), request_id)
 
@@ -74,7 +74,7 @@ async def update_board(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.REFERENCE_WRITE, current_user, db
     )
     board = await _service(db).update(workspace_id, board_id, payload)
     return success(board.model_dump(mode="json"), request_id)
@@ -89,7 +89,7 @@ async def delete_board(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.DATA_DELETE, current_user, db
     )
     await _service(db).delete(workspace_id, board_id)
     return success({"deleted": True}, request_id)

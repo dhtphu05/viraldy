@@ -27,7 +27,7 @@ async def create_product(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.PRODUCT_WRITE, current_user, db
     )
     product = await ProductService(db).create_product(workspace_id, current_user.id, payload)
     return success(product.model_dump(mode="json"), request_id)
@@ -40,7 +40,7 @@ async def list_products(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.PRODUCT_READ, current_user, db)
     products = await ProductService(db).list_products(workspace_id)
     return success([product.model_dump(mode="json") for product in products], request_id)
 
@@ -53,7 +53,7 @@ async def get_product(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.PRODUCT_READ, current_user, db)
     product = await ProductService(db).get_product(workspace_id, product_id)
     return success(product.model_dump(mode="json"), request_id)
 
@@ -68,7 +68,7 @@ async def update_product(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.PRODUCT_WRITE, current_user, db
     )
     product = await ProductService(db).update_product(workspace_id, product_id, payload)
     return success(product.model_dump(mode="json"), request_id)
@@ -82,7 +82,7 @@ async def delete_product(
     db: DbSession,
 ) -> Response:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.DATA_DELETE, current_user, db
     )
     await ProductService(db).delete_product(workspace_id, product_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

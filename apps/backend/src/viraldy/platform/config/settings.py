@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     oidc_issuer_url: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: AnyUrl | None = None
+    oidc_allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
+    oidc_jwks_cache_seconds: int = 300
 
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
@@ -82,7 +84,12 @@ class Settings(BaseSettings):
     git_sha: str | None = None
     release_version: str | None = None
 
-    @field_validator("backend_cors_origins", "allowed_upload_mime_types", mode="before")
+    @field_validator(
+        "backend_cors_origins",
+        "allowed_upload_mime_types",
+        "oidc_allowed_algorithms",
+        mode="before",
+    )
     @classmethod
     def parse_csv(cls, value: Any) -> Any:
         if isinstance(value, str):

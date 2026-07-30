@@ -21,7 +21,7 @@ async def get_dna(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     dna = await CreativeDnaService(db).get(workspace_id, dna_version_id)
     return success(dna.model_dump(mode="json"), request_id)
 
@@ -34,6 +34,6 @@ async def latest_reference_dna(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     dna = await CreativeDnaService(db).latest_for_reference(workspace_id, reference_id)
     return success(dna.model_dump(mode="json"), request_id)

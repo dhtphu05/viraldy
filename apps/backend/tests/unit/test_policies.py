@@ -9,12 +9,16 @@ from viraldy.shared.errors.base import AppError, PayloadTooLargeError
 
 def test_workspace_role_permissions() -> None:
     policy = WorkspaceMembershipPolicy()
-    assert policy.has_permission(WorkspaceRole.OWNER, Permission.MANAGE_MEMBERS)
-    assert policy.has_permission(WorkspaceRole.EDITOR, Permission.CREATE_UPDATE_BUSINESS_RESOURCES)
-    assert not policy.has_permission(
-        WorkspaceRole.VIEWER,
-        Permission.CREATE_UPDATE_BUSINESS_RESOURCES,
-    )
+    assert policy.has_permission(WorkspaceRole.OWNER, Permission.DATA_DELETE)
+    assert policy.has_permission(WorkspaceRole.ADMIN, Permission.DATA_EXPORT)
+    assert policy.has_permission(WorkspaceRole.MEMBER, Permission.PRODUCT_WRITE)
+    assert policy.has_permission(WorkspaceRole.MEMBER, Permission.FEEDBACK_WRITE)
+    assert not policy.has_permission(WorkspaceRole.MEMBER, Permission.DATA_EXPORT)
+    assert not policy.has_permission(WorkspaceRole.MEMBER, Permission.DATA_DELETE)
+    assert policy.has_permission(WorkspaceRole.VIEWER, Permission.WORKSPACE_READ)
+    assert policy.has_permission(WorkspaceRole.VIEWER, Permission.PRODUCT_READ)
+    assert not policy.has_permission(WorkspaceRole.VIEWER, Permission.PRODUCT_WRITE)
+    assert not policy.has_permission(WorkspaceRole.VIEWER, Permission.RECOMMENDATION_ACT)
 
 
 def test_upload_declaration_rejects_unknown_mime() -> None:
