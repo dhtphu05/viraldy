@@ -21,6 +21,7 @@ from viraldy.modules.creative_dna.contracts import (
     ReusableMechanismV1,
     RiskDnaV1,
 )
+from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
 from viraldy.modules.creative_dna.repository import CreativeDnaRepository, SyncCreativeDnaRepository
 from viraldy.modules.creative_dna.schemas import CreativeDnaVersionResponse
 from viraldy.modules.creative_dna.taxonomy import (
@@ -28,26 +29,59 @@ from viraldy.modules.creative_dna.taxonomy import (
     CREATIVE_DNA_TAXONOMY_VERSION,
 )
 from viraldy.modules.media_analysis.public import EvidenceItemModel
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.shared.errors.base import NotFoundError
 
 
 class CreativeDnaService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repository = CreativeDnaRepository(session)
 
-    async def get(self, workspace_id: UUID, dna_version_id: UUID) -> CreativeDnaVersionResponse:
+    async def get(
+        self,
+        workspace_id: UUID,
+        dna_version_id: UUID,
+        user_id: UUID,
+    ) -> CreativeDnaVersionResponse:
         dna = await self._repository.get(workspace_id, dna_version_id)
         if dna is None:
             raise NotFoundError("CREATIVE_DNA_NOT_FOUND", "Creative DNA version was not found.")
-        return CreativeDnaVersionResponse.model_validate(dna)
+        response = CreativeDnaVersionResponse.model_validate(dna)
+        await self._record_view(workspace_id, user_id, response)
+        return response
 
     async def latest_for_reference(
-        self, workspace_id: UUID, reference_id: UUID
+        self,
+        workspace_id: UUID,
+        reference_id: UUID,
+        user_id: UUID,
     ) -> CreativeDnaVersionResponse:
         dna = await self._repository.latest_for_reference(workspace_id, reference_id)
         if dna is None:
             raise NotFoundError("CREATIVE_DNA_NOT_FOUND", "Creative DNA version was not found.")
-        return CreativeDnaVersionResponse.model_validate(dna)
+        response = CreativeDnaVersionResponse.model_validate(dna)
+        await self._record_view(workspace_id, user_id, response)
+        return response
+
+    async def _record_view(
+        self,
+        workspace_id: UUID,
+        user_id: UUID,
+        dna: CreativeDnaVersionResponse,
+    ) -> None:
+        await ProductEventPublisher(self._session).record(
+            event_type="creative_dna_viewed",
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            subject_type="creative_dna",
+            subject_id=dna.id,
+            payload_json={
+                "reference_id": str(dna.reference_id) if dna.reference_id else None,
+                "version_number": dna.version_number,
+            },
+        )
+        await self._session.commit()
 
 
 class SyncCreativeDnaBuilder:
@@ -61,7 +95,7 @@ class SyncCreativeDnaBuilder:
         reference_id: UUID | None,
         evidence: list[EvidenceItemModel],
         analysis_mode: str,
-    ):
+    ) -> CreativeDnaVersionModel:
         evidence_by_type = _evidence_by_type(evidence)
         dna = _build_creative_dna(evidence_by_type)
         dna_json = dna.model_dump(mode="json")
@@ -346,7 +380,7 @@ def _risk_dna(items: list[EvidenceItemModel]) -> list[RiskDnaV1]:
         risks.append(
             RiskDnaV1(
                 code=f"{risk.upper()}_RISK_CLAIM",
-                severity=risk,  # type: ignore[arg-type]
+                severity=risk,
                 message="Claim requires review against product governance before reuse.",
                 evidence_ids=[item.id],
             )

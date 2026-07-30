@@ -28,7 +28,7 @@ async def create_score(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.ANALYSIS_RUN, current_user, db
     )
     result = await TikTokScoreService(db, settings).create(workspace_id, payload, idempotency_key)
     return success(result.model_dump(mode="json"), request_id)
@@ -43,6 +43,6 @@ async def get_score(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     run = await TikTokScoreService(db, settings).get(workspace_id, score_run_id)
     return success(run.model_dump(mode="json"), request_id)

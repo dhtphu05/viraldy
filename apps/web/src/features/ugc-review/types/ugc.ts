@@ -168,6 +168,7 @@ export type UgcAsset = {
     thumbSeed: string;
     mediaUrl?: string; // Object URL when locally uploaded (session-only)
     posterUrl?: string;
+    mediaAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
     durationSec: number;
     submittedAt: string;
     reviewedAt?: string;

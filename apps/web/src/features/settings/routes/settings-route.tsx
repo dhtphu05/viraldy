@@ -56,7 +56,11 @@ function SettingsPage() {
                                     Persisted across reloads.
                                 </p>
                             </div>
-                            <Switch checked={collapsed} onCheckedChange={setCollapsed} />
+                            <Switch
+                                checked={collapsed}
+                                onCheckedChange={setCollapsed}
+                                aria-label="Collapse sidebar by default"
+                            />
                         </div>
                     </SurfaceCard>
 

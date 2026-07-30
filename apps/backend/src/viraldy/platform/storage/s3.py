@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 
 from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import Settings
-from viraldy.platform.storage.ports import ObjectMetadata, PresignedUpload
+from viraldy.platform.storage.ports import ObjectMetadata, PresignedUpload, StoredObject
 
 
 class S3StorageAdapter:
@@ -28,6 +28,10 @@ class S3StorageAdapter:
                 s3={"addressing_style": "path" if settings.s3_force_path_style else "auto"}
             ),
         )
+
+    def check_health(self) -> bool:
+        self._client.head_bucket(Bucket=self._settings.s3_bucket)
+        return True
 
     def create_presigned_upload(self, key: str, content_type: str) -> PresignedUpload:
         url = self._client.generate_presigned_url(
@@ -82,3 +86,20 @@ class S3StorageAdapter:
 
     def delete_object(self, key: str) -> None:
         self._client.delete_object(Bucket=self._settings.s3_bucket, Key=key)
+
+    def list_objects(self, prefix: str) -> list[StoredObject]:
+        objects: list[StoredObject] = []
+        paginator = self._client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(
+            Bucket=self._settings.s3_bucket,
+            Prefix=prefix,
+        ):
+            for item in page.get("Contents", []):
+                objects.append(
+                    StoredObject(
+                        key=str(item["Key"]),
+                        last_modified=item["LastModified"],
+                        size_bytes=int(item["Size"]),
+                    )
+                )
+        return objects

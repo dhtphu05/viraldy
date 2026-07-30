@@ -1,4 +1,5 @@
 import type { Campaign } from "@/shared/types";
+import { demoDaysAgo } from "@/shared/mocks/time";
 import type {
     CampaignObjective,
     CampaignMarket,
@@ -21,8 +22,6 @@ export type CampaignSummaryExtras = {
 
 export type SeedCampaign = Campaign & CampaignSummaryExtras;
 
-const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
-
 export const campaigns: SeedCampaign[] = [
     {
         id: "c-1",
@@ -42,7 +41,7 @@ export const campaigns: SeedCampaign[] = [
         referenceCount: 3,
         hookCount: 3,
         deliverables: 6,
-        updatedAt: daysAgo(0.2),
+        updatedAt: demoDaysAgo(0.2),
     },
     {
         id: "c-2",
@@ -62,7 +61,7 @@ export const campaigns: SeedCampaign[] = [
         referenceCount: 2,
         hookCount: 3,
         deliverables: 4,
-        updatedAt: daysAgo(0.5),
+        updatedAt: demoDaysAgo(0.5),
     },
     {
         id: "c-3",
@@ -82,7 +81,7 @@ export const campaigns: SeedCampaign[] = [
         referenceCount: 2,
         hookCount: 3,
         deliverables: 3,
-        updatedAt: daysAgo(1.4),
+        updatedAt: demoDaysAgo(1.4),
     },
     {
         id: "c-4",
@@ -102,6 +101,26 @@ export const campaigns: SeedCampaign[] = [
         referenceCount: 2,
         hookCount: 3,
         deliverables: 2,
-        updatedAt: daysAgo(2.1),
+        updatedAt: demoDaysAgo(2.1),
+    },
+    {
+        id: "c-sofa-cover",
+        packId: "pack-sofa-cover",
+        name: "Sofa Cover TikTok Shop Demo",
+        product: "Quilted Sofa Cover",
+        status: "Testing",
+        activeAssets: 1,
+        ugcScore: 84,
+        gmv: 12840,
+        nextAction: "Scale vertical product demo",
+        objective: "TikTok Shop Affiliate",
+        market: "US",
+        platform: "TikTok Shop",
+        packStatus: "Active",
+        primaryAngle: "Living-room transformation",
+        referenceCount: 1,
+        hookCount: 2,
+        deliverables: 3,
+        updatedAt: demoDaysAgo(0.1),
     },
 ];

@@ -10,6 +10,8 @@ from viraldy.modules.campaign_packs.contracts import CampaignPackBriefV1
 from viraldy.modules.campaign_packs.requirements import CompiledRequirementsSnapshotV2
 from viraldy.modules.products.contracts import ProductContextV1
 
+CampaignPackExportFormat = Literal["json", "text"]
+
 
 class CreateCampaignPackRequest(BaseModel):
     adaptation_run_id: UUID
@@ -23,6 +25,20 @@ class CreateCampaignPackVersionRequest(BaseModel):
 
 class UpdateCampaignPackRequest(BaseModel):
     status: Literal["draft", "ready", "sent", "archived"] | None = None
+
+
+class ExportCampaignPackRequest(BaseModel):
+    format: CampaignPackExportFormat
+
+
+class CampaignPackExportResponse(BaseModel):
+    campaign_pack_id: UUID
+    campaign_pack_version_id: UUID
+    version_number: int = Field(ge=1)
+    format: CampaignPackExportFormat
+    filename: str
+    content_type: str
+    content: str
 
 
 class CampaignPackVersionResponse(BaseModel):
@@ -48,7 +64,7 @@ class CampaignPackResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     product_id: UUID
-    adaptation_run_id: UUID
+    adaptation_run_id: UUID | None
     status: str
     current_version_id: UUID | None
     created_at: datetime

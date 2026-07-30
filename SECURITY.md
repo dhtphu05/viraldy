@@ -22,7 +22,21 @@ Binary media lives in private S3-compatible object storage. Lifecycle, retention
 
 ## Data Deletion
 
-Products and assets use soft deletion in the foundation. Full account and workspace deletion workflows are deferred until retention requirements are finalized.
+Owner/admin hard deletion is workspace-scoped and audited. Resource rows and a
+durable object-cleanup batch are committed in one database transaction before
+object storage deletion starts. Failed object cleanup remains pending and is
+retried by the maintenance worker; it does not restore already-deleted business
+data or leave live rows pointing at objects deleted before a rollback.
+
+The cascade policy removes dependent PatternKit, ViralKit, Campaign Pack,
+analysis, model-run, job, feedback, event, recommendation, and generation data
+when their evidence lineage is deleted. Minimal deletion audit rows have no
+foreign key to the deleted workspace or user and intentionally survive
+workspace deletion.
+
+Retention deletes expired incomplete uploads, removes old unreferenced objects
+under the workspace prefix, and redacts expired model input/output summaries.
+See `docs/runbooks/OBJECT_STORAGE.md` for cutoff and retry behavior.
 
 ## Dependencies
 

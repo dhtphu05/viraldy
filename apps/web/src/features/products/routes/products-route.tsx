@@ -1,16 +1,530 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PlaceholderPage } from "@/widgets/app-shell/placeholder-page";
-import { Package } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AppShell } from "@/widgets/app-shell/app-shell";
+import { PageHeader } from "@/shared/ui/page-header";
+import { SurfaceCard } from "@/shared/ui/surface-card";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { StatusChip } from "@/shared/ui/status-chip";
+import { RightDrawer } from "@/shared/ui/right-drawer";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
+import { seedProducts } from "@/features/products/data/products";
+import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
+import { seedCreators } from "@/features/ugc-review/mocks/creators";
+import type {
+    CreativeReference,
+    ProductCategory,
+    SeedProduct,
+} from "@/features/creative-library/types/creative";
+import type { UgcAsset } from "@/features/ugc-review/types/ugc";
+import {
+    ArrowRight,
+    Images,
+    Megaphone,
+    Package,
+    Search,
+    Sparkles,
+    Video,
+    type LucideIcon,
+} from "lucide-react";
 
 export const Route = createFileRoute("/products")({
-    head: () => ({ meta: [{ title: "Products — Viraldy" }] }),
-    component: () => (
-        <PlaceholderPage
-            title="Products"
-            description="Your TikTok Shop, POD, and cross-border catalog connected to creatives, samples, and performance."
-            icon={Package}
-            emptyTitle="Product catalog coming soon"
-            emptyDescription="Sync products, attach reference creatives, and track sample allocation in the next phase."
-        />
-    ),
+    validateSearch: (search: Record<string, unknown>) => ({
+        productId: typeof search.productId === "string" ? search.productId : undefined,
+    }),
+    head: () => ({ meta: [{ title: "Products - Viraldy" }] }),
+    component: ProductsPage,
 });
+
+const READINESS = ["All", "Ready", "Setup needed", "Out of stock"] as const;
+const RISKS = ["All", "Low", "Medium", "High"] as const;
+const CATEGORIES: ("All" | ProductCategory)[] = [
+    "All",
+    "Home & Kitchen",
+    "Pet",
+    "Beauty",
+    "POD Gifts",
+    "Home Organization",
+];
+
+function ProductsPage() {
+    const search = Route.useSearch();
+    const navigate = useNavigate();
+    const campaigns = useAllCampaigns();
+    const creatives = useAppStore((s) => s.creatives);
+    const ugcAssets = useAppStore((s) => s.ugcAssets);
+    const setDraft = useAppStore((s) => s.setDraft);
+
+    const [query, setQuery] = useState("");
+    const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All");
+    const [readiness, setReadiness] = useState<(typeof READINESS)[number]>("All");
+    const [risk, setRisk] = useState<(typeof RISKS)[number]>("All");
+    const [selectedId, setSelectedId] = useState<string | null>(search.productId ?? null);
+
+    useEffect(() => {
+        if (search.productId && seedProducts.some((product) => product.id === search.productId)) {
+            setSelectedId(search.productId);
+        }
+    }, [search.productId]);
+
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return seedProducts.filter((product) => {
+            if (q && !`${product.name} ${product.category}`.toLowerCase().includes(q)) {
+                return false;
+            }
+            if (category !== "All" && product.category !== category) return false;
+            if (readiness !== "All" && product.readiness !== readiness) return false;
+            if (risk !== "All" && product.fulfillmentRisk !== risk) return false;
+            return true;
+        });
+    }, [category, query, readiness, risk]);
+
+    const selected = seedProducts.find((product) => product.id === selectedId) ?? null;
+    const hasFilters = query || category !== "All" || readiness !== "All" || risk !== "All";
+    const totalCampaigns = campaigns.filter((campaign) =>
+        seedProducts.some((product) => product.name === campaign.product),
+    ).length;
+    const readyCount = seedProducts.filter((product) => product.readiness === "Ready").length;
+    const linkedCreativeCount = creatives.filter((creative) => creative.linkedProductId).length;
+
+    const openProduct = (id: string) => {
+        setSelectedId(id);
+        void navigate({ to: "/products", replace: true, search: { productId: id } });
+    };
+
+    const closeProduct = () => {
+        setSelectedId(null);
+        void navigate({ to: "/products", replace: true, search: {} });
+    };
+
+    const startCampaign = (product: SeedProduct) => {
+        setDraft({ productId: product.id });
+        void navigate({ to: "/campaigns/new" });
+    };
+
+    return (
+        <AppShell>
+            <div className="flex flex-col gap-6">
+                <PageHeader
+                    title="Products"
+                    description="Catalog context for campaign planning, creative reuse, and sample risk."
+                    actions={
+                        <Button
+                            onClick={() => {
+                                const firstReady =
+                                    seedProducts.find((product) => product.readiness === "Ready") ??
+                                    seedProducts[0];
+                                startCampaign(firstReady);
+                            }}
+                        >
+                            <Sparkles className="h-4 w-4" />
+                            Start campaign
+                        </Button>
+                    }
+                />
+
+                <section className="grid gap-3 sm:grid-cols-3">
+                    <Metric label="Products" value={seedProducts.length} hint="Demo catalog" />
+                    <Metric label="Ready to brief" value={readyCount} hint="Low-friction starts" />
+                    <Metric
+                        label="Linked signals"
+                        value={linkedCreativeCount + totalCampaigns}
+                        hint="Creatives + campaigns"
+                    />
+                </section>
+
+                <SurfaceCard padding="sm" className="flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-[220px] flex-1">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+                        <Input
+                            className="pl-8"
+                            aria-label="Search products"
+                            placeholder="Search products, categories..."
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                        />
+                    </div>
+                    <Select
+                        value={category}
+                        onValueChange={(value) => setCategory(value as typeof category)}
+                    >
+                        <SelectTrigger className="w-[170px]" aria-label="Filter by category">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {CATEGORIES.map((item) => (
+                                <SelectItem key={item} value={item}>
+                                    {item === "All" ? "All categories" : item}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={readiness}
+                        onValueChange={(value) => setReadiness(value as typeof readiness)}
+                    >
+                        <SelectTrigger className="w-[160px]" aria-label="Filter by readiness">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {READINESS.map((item) => (
+                                <SelectItem key={item} value={item}>
+                                    {item === "All" ? "All readiness" : item}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={risk} onValueChange={(value) => setRisk(value as typeof risk)}>
+                        <SelectTrigger
+                            className="w-[140px]"
+                            aria-label="Filter by fulfillment risk"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {RISKS.map((item) => (
+                                <SelectItem key={item} value={item}>
+                                    {item === "All" ? "All risks" : `${item} risk`}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {hasFilters && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setQuery("");
+                                setCategory("All");
+                                setReadiness("All");
+                                setRisk("All");
+                            }}
+                        >
+                            Clear filters
+                        </Button>
+                    )}
+                </SurfaceCard>
+
+                {filtered.length === 0 ? (
+                    <SurfaceCard padding="lg">
+                        <EmptyState
+                            icon={Package}
+                            title="No products match these filters"
+                            description="Clear filters or search a broader category to continue campaign planning."
+                            action={
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                        setQuery("");
+                                        setCategory("All");
+                                        setReadiness("All");
+                                        setRisk("All");
+                                    }}
+                                >
+                                    Clear filters
+                                </Button>
+                            }
+                        />
+                    </SurfaceCard>
+                ) : (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {filtered.map((product) => {
+                            const linkedCampaigns = campaigns.filter(
+                                (campaign) => campaign.product === product.name,
+                            );
+                            const linkedCreatives = creatives.filter(
+                                (creative) =>
+                                    creative.linkedProductId === product.id && !creative.archived,
+                            );
+                            return (
+                                <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => openProduct(product.id)}
+                                    className="surface-card-interactive inner-top-highlight overflow-hidden text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                >
+                                    <DemoMediaTile
+                                        mediaUrl={product.imageUrl}
+                                        mediaKind={product.imageUrl ? "image" : undefined}
+                                        alt={product.imageAlt}
+                                        seed={product.colorSeed}
+                                        label={product.category}
+                                        badges={[product.readiness]}
+                                        aspect="16 / 7"
+                                    />
+                                    <div className="flex flex-col gap-4 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-text-primary">
+                                                    {product.name}
+                                                </p>
+                                                <p className="mt-0.5 text-xs text-text-secondary">
+                                                    {product.category} · ${product.price.toFixed(2)}
+                                                </p>
+                                            </div>
+                                            <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-text-tertiary" />
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <StatusChip tone={readinessTone(product.readiness)} dot>
+                                                {product.readiness}
+                                            </StatusChip>
+                                            <StatusChip tone={riskTone(product.fulfillmentRisk)}>
+                                                {product.fulfillmentRisk} risk
+                                            </StatusChip>
+                                        </div>
+                                        <dl className="grid grid-cols-2 gap-3 text-xs">
+                                            <div>
+                                                <dt className="text-text-tertiary">Campaigns</dt>
+                                                <dd className="font-medium text-text-primary">
+                                                    {linkedCampaigns.length}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-text-tertiary">Creatives</dt>
+                                                <dd className="font-medium text-text-primary">
+                                                    {linkedCreatives.length}
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            <ProductDrawer
+                product={selected}
+                campaigns={campaigns.filter((campaign) => selected?.name === campaign.product)}
+                creatives={creatives.filter(
+                    (creative) => selected?.id === creative.linkedProductId && !creative.archived,
+                )}
+                ugcAssets={ugcAssets.filter((asset) => {
+                    const campaign = campaigns.find((item) => item.id === asset.campaignId);
+                    return selected?.name === campaign?.product && !asset.archived;
+                })}
+                open={!!selected}
+                onOpenChange={(open) => {
+                    if (!open) closeProduct();
+                }}
+                onStartCampaign={() => selected && startCampaign(selected)}
+            />
+        </AppShell>
+    );
+}
+
+function Metric({ label, value, hint }: { label: string; value: number; hint: string }) {
+    return (
+        <SurfaceCard padding="md" className="min-h-[104px]">
+            <p className="text-xs font-medium uppercase text-text-tertiary">{label}</p>
+            <p className="mt-2 tabular text-3xl font-semibold text-text-primary">{value}</p>
+            <p className="mt-1 text-xs text-text-secondary">{hint}</p>
+        </SurfaceCard>
+    );
+}
+
+function ProductDrawer({
+    product,
+    campaigns,
+    creatives,
+    ugcAssets,
+    open,
+    onOpenChange,
+    onStartCampaign,
+}: {
+    product: SeedProduct | null;
+    campaigns: ReturnType<typeof useAllCampaigns>;
+    creatives: CreativeReference[];
+    ugcAssets: UgcAsset[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onStartCampaign: () => void;
+}) {
+    if (!product) return null;
+    const nextAction =
+        product.readiness === "Out of stock"
+            ? "Resolve inventory before briefing creators."
+            : product.fulfillmentRisk === "High"
+              ? "Validate fulfillment timing before sample allocation."
+              : creatives.length > 0
+                ? "Start a campaign from linked creative references."
+                : "Import or link reference creatives before launch.";
+
+    return (
+        <RightDrawer
+            open={open}
+            onOpenChange={onOpenChange}
+            title={product.name}
+            description={`${product.category} · $${product.price.toFixed(2)}`}
+            footer={
+                <div className="flex items-center justify-between gap-2">
+                    <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                        Close
+                    </Button>
+                    <Button onClick={onStartCampaign}>
+                        <Sparkles className="h-4 w-4" />
+                        Start campaign
+                    </Button>
+                </div>
+            }
+        >
+            <div className="flex flex-col gap-5">
+                <DemoMediaTile
+                    mediaUrl={product.imageUrl}
+                    mediaKind={product.imageUrl ? "image" : undefined}
+                    alt={product.imageAlt}
+                    seed={product.colorSeed}
+                    label={product.name}
+                    badges={[product.category]}
+                    aspect="16 / 8"
+                    className="rounded-md"
+                />
+                <div className="flex flex-wrap gap-2">
+                    <StatusChip tone={readinessTone(product.readiness)} dot>
+                        {product.readiness}
+                    </StatusChip>
+                    <StatusChip tone={riskTone(product.fulfillmentRisk)}>
+                        {product.fulfillmentRisk} fulfillment risk
+                    </StatusChip>
+                </div>
+                <SurfaceCard padding="sm" className="bg-surface-soft">
+                    <p className="text-xs font-semibold uppercase text-text-tertiary">
+                        Suggested next action
+                    </p>
+                    <p className="mt-1 text-sm text-text-primary">{nextAction}</p>
+                </SurfaceCard>
+                <Section title="Linked campaigns" icon={Megaphone}>
+                    {campaigns.length ? (
+                        campaigns.map((campaign) => (
+                            <div
+                                key={campaign.id}
+                                className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface px-3 py-2 text-sm"
+                            >
+                                <div className="min-w-0">
+                                    <p className="truncate font-medium text-text-primary">
+                                        {campaign.name}
+                                    </p>
+                                    <p className="text-xs text-text-tertiary">
+                                        {campaign.nextAction}
+                                    </p>
+                                </div>
+                                <StatusChip tone={campaign.status === "Live" ? "ok" : "info"}>
+                                    {campaign.status}
+                                </StatusChip>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-sm text-text-secondary">
+                            No active campaign is linked to this product yet.
+                        </p>
+                    )}
+                </Section>
+                <Section title="Linked creatives" icon={Images}>
+                    {creatives.length ? (
+                        creatives.slice(0, 5).map((creative) => (
+                            <div
+                                key={creative.id}
+                                className="rounded-md border border-hairline bg-surface px-3 py-2 text-sm"
+                            >
+                                <p className="truncate font-medium text-text-primary">
+                                    {creative.title}
+                                </p>
+                                <p className="text-xs text-text-tertiary">
+                                    {creative.angle} · {creative.brandOrCreator}
+                                </p>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-sm text-text-secondary">
+                            Link creative references to improve adaptation quality.
+                        </p>
+                    )}
+                </Section>
+                <Section title="Linked UGC" icon={Video}>
+                    {ugcAssets.length ? (
+                        ugcAssets.slice(0, 3).map((asset) => {
+                            const creator = seedCreators.find(
+                                (item) => item.id === asset.creatorId,
+                            );
+                            return (
+                                <div
+                                    key={asset.id}
+                                    className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 rounded-md border border-hairline bg-surface p-2.5 text-sm"
+                                >
+                                    <DemoMediaTile
+                                        mediaUrl={asset.mediaUrl}
+                                        mediaKind="video"
+                                        posterUrl={asset.posterUrl}
+                                        seed={asset.thumbSeed}
+                                        label={asset.objective}
+                                        badges={[`${asset.durationSec}s`]}
+                                        aspect={asset.mediaAspectRatio ?? "3 / 2"}
+                                        fit={
+                                            asset.mediaAspectRatio === "9:16" ? "contain" : "cover"
+                                        }
+                                        className="rounded-md bg-black"
+                                    />
+                                    <div className="min-w-0">
+                                        <p className="line-clamp-2 font-medium text-text-primary">
+                                            {asset.title}
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-text-tertiary">
+                                            {creator?.handle ?? "Creator"} · v
+                                            {asset.submissionVersion}
+                                        </p>
+                                        <StatusChip
+                                            tone={asset.decision === "spark-ready" ? "ok" : "info"}
+                                        >
+                                            {asset.decision.replace(/-/g, " ")}
+                                        </StatusChip>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <p className="text-sm text-text-secondary">
+                            Upload creator drafts to review product fit and Spark readiness.
+                        </p>
+                    )}
+                </Section>
+            </div>
+        </RightDrawer>
+    );
+}
+
+function Section({
+    title,
+    icon: Icon,
+    children,
+}: {
+    title: string;
+    icon: LucideIcon;
+    children: ReactNode;
+}) {
+    return (
+        <section>
+            <div className="mb-2 flex items-center gap-2">
+                <Icon className="h-4 w-4 text-text-tertiary" />
+                <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+            </div>
+            <div className="space-y-2">{children}</div>
+        </section>
+    );
+}
+
+function readinessTone(readiness: SeedProduct["readiness"]) {
+    if (readiness === "Ready") return "ok";
+    if (readiness === "Setup needed") return "warn";
+    return "destructive";
+}
+
+function riskTone(risk: SeedProduct["fulfillmentRisk"]) {
+    if (risk === "Low") return "ok";
+    if (risk === "Medium") return "warn";
+    return "destructive";
+}

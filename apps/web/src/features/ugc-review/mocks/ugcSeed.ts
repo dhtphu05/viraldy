@@ -5,9 +5,7 @@ import type {
     UgcRights,
     UgcActivityEvent,
 } from "@/features/ugc-review/types/ugc";
-
-const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
-const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+import { demoDaysAgo, demoDaysFromNow, demoHoursAgo } from "@/shared/mocks/time";
 
 // ---------------------------------------------------------------------------
 // Assets (11 seeded)
@@ -22,7 +20,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "sunset",
         durationSec: 24,
-        submittedAt: daysAgo(4),
+        submittedAt: demoDaysAgo(4),
         reviewState: "revision-requested",
         decision: "request-revision",
         rightsStatus: "not-checked",
@@ -39,7 +37,7 @@ export const seedUgcAssets: UgcAsset[] = [
         previousVersionId: "u-1",
         thumbSeed: "peach",
         durationSec: 26,
-        submittedAt: daysAgo(2),
+        submittedAt: demoDaysAgo(2),
         reviewState: "new-version",
         decision: "organic-ready",
         rightsStatus: "organic-only",
@@ -56,7 +54,7 @@ export const seedUgcAssets: UgcAsset[] = [
         previousVersionId: "u-2",
         thumbSeed: "coral",
         durationSec: 26,
-        submittedAt: hoursAgo(18),
+        submittedAt: demoHoursAgo(18),
         reviewState: "approved",
         decision: "spark-ready",
         rightsStatus: "complete",
@@ -72,7 +70,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "rose",
         durationSec: 32,
-        submittedAt: daysAgo(3),
+        submittedAt: demoDaysAgo(3),
         reviewState: "revision-requested",
         decision: "request-revision",
         rightsStatus: "missing",
@@ -89,7 +87,7 @@ export const seedUgcAssets: UgcAsset[] = [
         previousVersionId: "u-4",
         thumbSeed: "amber",
         durationSec: 34,
-        submittedAt: hoursAgo(30),
+        submittedAt: demoHoursAgo(30),
         reviewState: "in-review",
         decision: "small-spark-test",
         rightsStatus: "spark-required",
@@ -105,7 +103,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "blush",
         durationSec: 41,
-        submittedAt: hoursAgo(3),
+        submittedAt: demoHoursAgo(3),
         reviewState: "new",
         decision: "awaiting-analysis",
         rightsStatus: "not-checked",
@@ -121,7 +119,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "sand",
         durationSec: 28,
-        submittedAt: hoursAgo(52),
+        submittedAt: demoHoursAgo(52),
         reviewState: "new",
         decision: "awaiting-analysis",
         rightsStatus: "not-checked",
@@ -137,7 +135,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "olive",
         durationSec: 22,
-        submittedAt: hoursAgo(1),
+        submittedAt: demoHoursAgo(1),
         reviewState: "new",
         decision: "processing",
         rightsStatus: "not-checked",
@@ -151,7 +149,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "slate",
         durationSec: 18,
-        submittedAt: daysAgo(1),
+        submittedAt: demoDaysAgo(1),
         reviewState: "new",
         decision: "failed",
         rightsStatus: "not-checked",
@@ -168,7 +166,7 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "wine",
         durationSec: 20,
-        submittedAt: daysAgo(2),
+        submittedAt: demoDaysAgo(2),
         reviewState: "in-review",
         decision: "reject",
         rightsStatus: "missing",
@@ -184,10 +182,29 @@ export const seedUgcAssets: UgcAsset[] = [
         submissionVersion: 1,
         thumbSeed: "moss",
         durationSec: 27,
-        submittedAt: daysAgo(1),
+        submittedAt: demoDaysAgo(1),
         reviewState: "in-review",
         decision: "request-revision",
         rightsStatus: "not-checked",
+        objective: "TikTok Shop affiliate",
+        isDemo: true,
+    },
+    {
+        id: "u-sofa-cover",
+        title: "Sofa Cover Vertical Demo",
+        creatorId: "cr-sofa",
+        campaignId: "c-sofa-cover",
+        submissionVersion: 1,
+        thumbSeed: "sofa",
+        mediaUrl: "/demo-media/sofa-cover-ugc.mp4",
+        posterUrl: "/demo-media/sofa-cover-product.jpg",
+        mediaAspectRatio: "9:16",
+        durationSec: 16,
+        submittedAt: demoHoursAgo(4),
+        reviewedAt: demoHoursAgo(2),
+        reviewState: "approved",
+        decision: "spark-ready",
+        rightsStatus: "complete",
         objective: "TikTok Shop affiliate",
         isDemo: true,
     },
@@ -214,7 +231,7 @@ const analysisFor = (
     opts?: { failed?: boolean; failureReason?: string; confidence?: "Low" | "Medium" | "High" },
 ): UgcAnalysis => ({
     assetId,
-    createdAt: hoursAgo(6),
+    createdAt: demoHoursAgo(6),
     score,
     confidence: opts?.confidence ?? (score >= 80 ? "High" : score >= 60 ? "Medium" : "Low"),
     summary,
@@ -1379,6 +1396,162 @@ export const seedUgcAnalyses: Record<string, UgcAnalysis> = {
             { id: "o-2", timestampSec: 20, text: "Tap the cart →", role: "cta", ctaFlag: true },
         ],
     ),
+    "u-sofa-cover": analysisFor(
+        "u-sofa-cover",
+        84,
+        "Vertical product demo is clear: sofa cover appears immediately, room transformation is visible, and the CTA lands before the final beat.",
+        "The asset shows the product in context from the opening frame, demonstrates fit/coverage, and keeps the product visible for most of the video.",
+        "Use this as the base Spark test. Keep the first-frame product reveal and create two hook variants for pet-owner and renter audiences.",
+        [
+            ["hook", 78, "Opening visual shows the finished living-room setup immediately.", 0.2],
+            ["product-visibility", 92, "Sofa cover is visible from the first frame.", 0.2],
+            [
+                "demo-clarity",
+                86,
+                "Fit and coverage are easy to understand in the vertical frame.",
+                5.2,
+            ],
+            ["authenticity", 80, "Native TikTok watermark and handheld pacing feel organic."],
+            [
+                "problem-solution",
+                82,
+                "Tired-couch problem is implied visually and solved quickly.",
+                1.1,
+            ],
+            ["offer-clarity", 74, "Offer can be stronger with price overlay.", 12.4],
+            ["cta", 82, "CTA has enough time before video ends.", 13.2],
+            ["pack-alignment", 86, "Required product reveal, demo, proof, and CTA are present."],
+            ["shop-readiness", 88, "Asset is ready for TikTok Shop Spark test."],
+            ["compliance", 92, "No risky claims detected."],
+        ],
+        [
+            {
+                requirement: "Product visible in first 3 seconds",
+                detected: "Visible from 00:00",
+                status: "Complete",
+                evidence: "00:00–00:03",
+            },
+            {
+                requirement: "Show fit and room context",
+                detected: "Full sofa setup in vertical frame",
+                status: "Complete",
+                evidence: "00:03–00:09",
+            },
+            {
+                requirement: "Transformation proof",
+                detected: "Before/after living-room framing implied",
+                status: "Complete",
+                evidence: "00:09–00:12",
+            },
+            {
+                requirement: "TikTok Shop CTA",
+                detected: "CTA beat before ending",
+                status: "Complete",
+                evidence: "00:13",
+            },
+            {
+                requirement: "Price or offer overlay",
+                detected: "No explicit price overlay",
+                status: "Needs revision",
+                evidence: "00:12–00:15",
+                action: "Add price or free-shipping overlay.",
+            },
+        ],
+        [
+            { id: "u-sofa-m-1", kind: "hook", timestampSec: 0, label: "First-frame product" },
+            { id: "u-sofa-m-2", kind: "demo", timestampSec: 5.2, label: "Fit demo" },
+            { id: "u-sofa-m-3", kind: "proof", timestampSec: 9.6, label: "Room proof" },
+            { id: "u-sofa-m-4", kind: "offer", timestampSec: 12.4, label: "Offer beat" },
+            { id: "u-sofa-m-5", kind: "cta", timestampSec: 13.2, label: "CTA" },
+        ],
+        [
+            {
+                id: "t-sofa-1",
+                startSec: 0,
+                endSec: 3,
+                text: "My couch looked tired until I put this quilted cover on it.",
+                flags: ["product"],
+            },
+            {
+                id: "t-sofa-2",
+                startSec: 3,
+                endSec: 8,
+                text: "It wraps the seat, arms, and back without slipping.",
+                flags: ["product"],
+            },
+            {
+                id: "t-sofa-3",
+                startSec: 8,
+                endSec: 12,
+                text: "The room looks cleaner and the couch is protected.",
+                flags: ["product"],
+            },
+            {
+                id: "t-sofa-4",
+                startSec: 12,
+                endSec: 16,
+                text: "Tap the cart if you want the sofa cover.",
+                flags: ["cta", "offer"],
+            },
+        ],
+        [
+            {
+                id: "s-sofa-1",
+                number: 1,
+                startSec: 0,
+                endSec: 3,
+                label: "Hook + product",
+                spokenLine: "My couch looked tired…",
+                productVisibility: "Prominent",
+                requirementStatus: "Complete",
+                thumbSeed: "sofa",
+            },
+            {
+                id: "s-sofa-2",
+                number: 2,
+                startSec: 3,
+                endSec: 8,
+                label: "Fit demo",
+                spokenLine: "It wraps the seat, arms, and back.",
+                productVisibility: "Prominent",
+                requirementStatus: "Complete",
+                thumbSeed: "sage",
+            },
+            {
+                id: "s-sofa-3",
+                number: 3,
+                startSec: 8,
+                endSec: 12,
+                label: "Room proof",
+                spokenLine: "The room looks cleaner.",
+                productVisibility: "Prominent",
+                requirementStatus: "Complete",
+                thumbSeed: "olive",
+            },
+            {
+                id: "s-sofa-4",
+                number: 4,
+                startSec: 12,
+                endSec: 16,
+                label: "CTA",
+                spokenLine: "Tap the cart.",
+                onScreenText: "Tap the cart",
+                productVisibility: "Contextual",
+                requirementStatus: "Needs revision",
+                thumbSeed: "amber",
+            },
+        ],
+        [
+            {
+                id: "o-sofa-1",
+                timestampSec: 1,
+                text: "Quilted sofa cover",
+                role: "caption",
+            },
+            { id: "o-sofa-2", timestampSec: 13, text: "Tap the cart", role: "cta", ctaFlag: true },
+        ],
+        { confidence: "High" },
+    ),
     "u-9": analysisFor(
         "u-9",
         0,
@@ -1660,6 +1833,39 @@ export const seedUgcIssues: Record<string, UgcIssue[]> = {
             confidence: "High",
         },
     ],
+    "u-sofa-cover": [
+        {
+            id: "u-sofa-i-p-1",
+            assetId: "u-sofa-cover",
+            severity: "positive",
+            timestampSec: 0,
+            title: "Product visible immediately",
+            why: "The sofa cover is visible from the first frame, so viewers understand the object without waiting.",
+            fix: "Keep the first-frame product shot.",
+            confidence: "High",
+        },
+        {
+            id: "u-sofa-i-p-2",
+            assetId: "u-sofa-cover",
+            severity: "positive",
+            timestampSec: 5.2,
+            title: "Vertical frame supports inspection",
+            why: "The 9:16 crop keeps the sofa cover large enough to inspect fit and texture on mobile.",
+            fix: "Keep this framing for Spark variants.",
+            confidence: "High",
+        },
+        {
+            id: "u-sofa-i-1",
+            assetId: "u-sofa-cover",
+            severity: "improvement",
+            timestampSec: 12.4,
+            title: "Offer overlay could be clearer",
+            why: "The video has a CTA beat but no explicit price or shipping overlay.",
+            packRequirement: "Price or offer overlay before CTA.",
+            fix: "Add a small price or free-shipping overlay before the cart CTA.",
+            confidence: "Medium",
+        },
+    ],
     "u-9": [],
 };
 
@@ -1696,7 +1902,7 @@ export const seedUgcRights: Record<string, UgcRights> = {
         editingAllowed: true,
         durationDays: 90,
         sparkCode: "SPRK-3F2A-KTCH",
-        sparkExpiry: new Date(Date.now() + 60 * 86_400_000).toISOString(),
+        sparkExpiry: demoDaysFromNow(60),
         creatorConfirmed: true,
         notes: "Full paid rights confirmed.",
     },
@@ -1775,6 +1981,19 @@ export const seedUgcRights: Record<string, UgcRights> = {
         editingAllowed: false,
         creatorConfirmed: false,
     },
+    "u-sofa-cover": {
+        organic: true,
+        sparkAllowed: true,
+        metaAllowed: true,
+        websiteAllowed: true,
+        rawFootage: true,
+        editingAllowed: true,
+        durationDays: 90,
+        sparkCode: "SPRK-SOFA-9V16",
+        sparkExpiry: demoDaysFromNow(45),
+        creatorConfirmed: true,
+        notes: "Demo rights complete for Spark and organic tests.",
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -1786,35 +2005,55 @@ export const seedUgcActivity: UgcActivityEvent[] = [
         assetId: "u-3",
         kind: "spark-ready",
         detail: "Kitchen Organizer V3 marked Spark-ready.",
-        at: hoursAgo(4),
+        at: demoHoursAgo(4),
     },
     {
         id: "ua-2",
         assetId: "u-2",
         kind: "approved-organic",
         detail: "Kitchen Organizer V2 approved for organic.",
-        at: hoursAgo(30),
+        at: demoHoursAgo(30),
     },
     {
         id: "ua-3",
         assetId: "u-4",
         kind: "revision-requested",
         detail: "Dog Mom V1 revision requested (compliance).",
-        at: daysAgo(3),
+        at: demoDaysAgo(3),
     },
     {
         id: "ua-4",
         assetId: "u-1",
         kind: "revision-requested",
         detail: "Kitchen Organizer V1 revision requested (hook + CTA).",
-        at: daysAgo(4),
+        at: demoDaysAgo(4),
+    },
+    {
+        id: "ua-sofa",
+        assetId: "u-sofa-cover",
+        kind: "spark-ready",
+        detail: "Sofa Cover vertical demo marked Spark-ready.",
+        at: demoHoursAgo(2),
     },
 ];
 
 // ---------------------------------------------------------------------------
 // Demo asset picks (used by the upload dialog)
 // ---------------------------------------------------------------------------
-export const demoUploadAssets = [
+export const demoUploadAssets: Array<{
+    id: string;
+    title: string;
+    creatorId: string;
+    campaignId?: string;
+    packId?: string;
+    objective: UgcAsset["objective"];
+    durationSec: number;
+    thumbSeed: string;
+    expected: string;
+    mediaUrl?: string;
+    posterUrl?: string;
+    mediaAspectRatio?: UgcAsset["mediaAspectRatio"];
+}> = [
     {
         id: "demo-1",
         title: "Kitchen Organizer Draft V1",
@@ -1878,5 +2117,18 @@ export const demoUploadAssets = [
         durationSec: 26,
         thumbSeed: "peach",
         expected: "organic-ready",
+    },
+    {
+        id: "demo-sofa",
+        title: "Sofa Cover Vertical Demo",
+        creatorId: "cr-sofa",
+        campaignId: "c-sofa-cover",
+        objective: "TikTok Shop affiliate" as const,
+        durationSec: 16,
+        thumbSeed: "sofa",
+        mediaUrl: "/demo-media/sofa-cover-ugc.mp4",
+        posterUrl: "/demo-media/sofa-cover-product.jpg",
+        mediaAspectRatio: "9:16" as const,
+        expected: "spark-ready",
     },
 ];

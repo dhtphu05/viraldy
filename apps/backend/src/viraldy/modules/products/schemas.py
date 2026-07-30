@@ -38,6 +38,7 @@ class ProductResponse(BaseModel):
     metadata_json: dict[str, object]
     product_context: ProductContextV1
     context_schema_version: str
+    product_context_version: int
 
     model_config = {"from_attributes": True}
 
@@ -48,5 +49,6 @@ class ProductSummary(BaseModel):
     name: str
     status: str
     context_schema_version: str | None = None
+    product_context_version: int = 1
 
     model_config = {"from_attributes": True}

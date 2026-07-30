@@ -3,15 +3,20 @@ from __future__ import annotations
 from uuid import UUID
 
 import structlog
+from sqlalchemy.orm import Session
 
-from viraldy.modules.assets.public import SyncAssetQueries
+from viraldy.modules.assets.public import AssetVersionSnapshot, SyncAssetQueries
 from viraldy.modules.campaign_packs.public import SyncCampaignPackRepository
 from viraldy.modules.creative_dna.service import SyncCreativeDnaBuilder
 from viraldy.modules.creative_domain.schema_versions import TIKTOK_SCORE_SCHEMA_VERSION
+from viraldy.modules.jobs.models import ProcessingJobModel
+from viraldy.modules.jobs.registry import JobType, normalize_job_type
 from viraldy.modules.jobs.repository import WorkerJobRepository
+from viraldy.modules.media_analysis.models import EvidenceItemModel
 from viraldy.modules.media_analysis.service import SyncMediaEvidencePipeline
 from viraldy.modules.preflight.repository import SyncPreflightRepository
 from viraldy.modules.preflight.service import calculate_preflight_result
+from viraldy.modules.product_events.public import SyncProductEventPublisher
 from viraldy.modules.recommendations.contracts import (
     RecommendationEvidenceV2,
     RecommendationPayloadV2,
@@ -25,6 +30,7 @@ from viraldy.modules.tiktok_scorer.repository import (
     SyncTikTokScoreRepository,
 )
 from viraldy.modules.tiktok_scorer.scorer import score_tiktok_structure
+from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import get_settings
 from viraldy.platform.database.session import create_worker_session
 from viraldy.shared.errors.base import AppError
@@ -34,7 +40,7 @@ logger = structlog.get_logger(__name__)
 
 
 @celery_app.task(bind=True, autoretry_for=(RuntimeError,), retry_backoff=True, max_retries=2)  # type: ignore[misc]
-def process_mvp_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
+def run_processing_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
     job_uuid = UUID(job_id)
     session = create_worker_session()
     repo = WorkerJobRepository(session)
@@ -47,7 +53,7 @@ def process_mvp_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-
         logger.info("processing_job_started", job_id=job_id, workspace_id=str(job.workspace_id))
         session.commit()
         output = _execute_job(job, repo, asset_queries, session)
-        repo.mark_completed(job, output)
+        repo.mark_succeeded(job, output)
         session.commit()
         logger.info("processing_job_completed", job_id=job_id)
         return output
@@ -55,7 +61,14 @@ def process_mvp_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-
         session.rollback()
         job = repo.load_job(job_uuid)
         if job is not None:
-            repo.mark_failed(job, exc.code, exc.message)
+            try:
+                repo.mark_failed(job, exc.code, exc.message)
+            except AppError as fence_error:
+                session.rollback()
+                if fence_error.code == "JOB_ATTEMPT_SUPERSEDED":
+                    logger.info("processing_job_attempt_superseded", job_id=job_id)
+                    return {"ignored": True, "reason": "job_attempt_superseded"}
+                raise
             session.commit()
         logger.info("processing_job_failed_app_error", job_id=job_id, code=exc.code)
         return {"error_code": exc.code, "error_message": exc.message}
@@ -63,25 +76,78 @@ def process_mvp_job(self, job_id: str) -> dict[str, object]:  # type: ignore[no-
         session.rollback()
         job = repo.load_job(job_uuid)
         if job is not None:
-            if job.attempt_count >= job.max_attempts:
-                repo.mark_failed(job, "PROCESS_ASSET_FAILED", "Asset processing failed.")
-                session.commit()
-            else:
-                repo.mark_retrying(job, "PROCESS_ASSET_RETRY", "Asset processing retry scheduled.")
-                session.commit()
+            try:
+                if job.attempt_count >= job.max_attempts:
+                    repo.mark_failed(job, "PROCESS_ASSET_FAILED", "Asset processing failed.")
+                    session.commit()
+                else:
+                    repo.mark_retrying(
+                        job,
+                        "PROCESS_ASSET_RETRY",
+                        "Asset processing retry scheduled.",
+                    )
+                    session.commit()
+            except AppError as fence_error:
+                session.rollback()
+                if fence_error.code == "JOB_ATTEMPT_SUPERSEDED":
+                    logger.info("processing_job_attempt_superseded", job_id=job_id)
+                    return {"ignored": True, "reason": "job_attempt_superseded"}
+                raise
         logger.exception("processing_job_failed", job_id=job_id)
         raise self.retry(exc=exc) from exc
     finally:
         session.close()
 
 
-process_asset_placeholder = process_mvp_job
+@celery_app.task  # type: ignore[misc]
+def recover_stale_processing_jobs() -> dict[str, object]:
+    from viraldy.modules.jobs.dispatcher import CeleryJobDispatcher
+
+    settings = get_settings()
+    session = create_worker_session()
+    dispatcher = CeleryJobDispatcher()
+    try:
+        retry_ids = WorkerJobRepository(session).recover_stale_jobs(
+            utc_now(),
+            settings.job_stale_after_seconds,
+        )
+        session.commit()
+        for job_id in retry_ids:
+            job = WorkerJobRepository(session).load_job(job_id)
+            if job is None:
+                continue
+            dispatcher.dispatch_job(job.id, job.job_type)
+        return {"recovered_job_ids": [str(job_id) for job_id in retry_ids]}
+    finally:
+        session.close()
+
+
+@celery_app.task  # type: ignore[misc]
+def retry_pending_storage_deletions() -> dict[str, int]:
+    from viraldy.modules.deletion.storage_cleanup import (
+        process_pending_storage_deletions,
+    )
+    from viraldy.platform.storage.s3 import S3StorageAdapter
+
+    settings = get_settings()
+    session = create_worker_session()
+    try:
+        return process_pending_storage_deletions(
+            session,
+            S3StorageAdapter(settings),
+        )
+    finally:
+        session.close()
 
 
 def _execute_job(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
-    if job.job_type == "process_asset":
+    job_type = normalize_job_type(job.job_type)
+    if job_type == JobType.MEDIA_ANALYSIS.value:
         asset_id = UUID(str(job.input_json["asset_id"]))
         asset_version_id = UUID(str(job.input_json["asset_version_id"]))
         repo.update_progress(job, 25, "loading_asset")
@@ -92,7 +158,7 @@ def _execute_job(
         repo.update_progress(job, 40, "probing_media")
         session.commit()
         pipeline_result = SyncMediaEvidencePipeline(session, get_settings()).process_with_metadata(
-            loaded, "process_asset", job.id
+            loaded, "media_analysis", job.id
         )
         repo.update_progress(job, 90, "persisting_results")
         session.commit()
@@ -106,18 +172,68 @@ def _execute_job(
             else None,
             "analysis_mode": get_settings().ai_mode,
         }
-    if job.job_type == "analyze_reference":
+    if job_type == JobType.CREATIVE_DNA_BUILD.value:
         return _analyze_reference(job, repo, asset_queries, session)
-    if job.job_type == "score_tiktok_asset":
+    if job_type == JobType.TIKTOK_SCORE_RUN.value:
         return _score_tiktok_asset(job, repo, asset_queries, session)
-    if job.job_type == "run_ugc_preflight":
+    if job_type == JobType.PREFLIGHT_RUN.value:
         return _run_ugc_preflight(job, repo, asset_queries, session)
+    if job_type in {
+        JobType.STORYBOARD_GENERATE.value,
+        JobType.CONCEPT_VIDEO_GENERATE.value,
+    }:
+        from viraldy.modules.generation.public import execute_generation_job
+
+        if job.subject_type != "generation_run":
+            raise AppError(
+                "GENERATION_JOB_SUBJECT_INVALID",
+                "Generation jobs must target a generation run.",
+            )
+        repo.update_progress(job, 30, "loading_generation_brief")
+        session.commit()
+
+        def ensure_active_attempt() -> None:
+            repo.assert_claim_active(job)
+
+        output = execute_generation_job(
+            session,
+            job.workspace_id,
+            job.subject_id,
+            job.id,
+            get_settings(),
+            ensure_active_attempt,
+        )
+        repo.update_progress(job, 90, "persisting_results")
+        return output
+    if job_type == JobType.RETENTION_CLEANUP.value:
+        from viraldy.modules.deletion.retention import execute_retention_cleanup
+        from viraldy.platform.storage.s3 import S3StorageAdapter
+
+        if job.subject_type != "workspace" or job.subject_id != job.workspace_id:
+            raise AppError(
+                "RETENTION_JOB_SUBJECT_INVALID",
+                "Retention jobs must target their own workspace.",
+            )
+        repo.update_progress(job, 30, "selecting_expired_records")
+        session.commit()
+        output = execute_retention_cleanup(
+            session,
+            job.workspace_id,
+            get_settings(),
+            S3StorageAdapter(get_settings()),
+        )
+        repo.update_progress(job, 90, "persisting_results")
+        return output
     raise RuntimeError(f"unsupported_job_type:{job.job_type}")
 
 
 def _process_media(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session, run_type: str
-):
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
+    run_type: str,
+) -> tuple[AssetVersionSnapshot, list[EvidenceItemModel], UUID | None]:
     asset_id = UUID(str(job.input_json.get("asset_id") or job.input_json.get("ugc_asset_id")))
     version_id = UUID(
         str(job.input_json.get("asset_version_id") or job.input_json.get("ugc_asset_version_id"))
@@ -138,10 +254,13 @@ def _process_media(
 
 
 def _analyze_reference(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     loaded, evidence, primary_model_run_id = _process_media(
-        job, repo, asset_queries, session, "analyze_reference"
+        job, repo, asset_queries, session, "creative_dna_build"
     )
     reference_id = UUID(str(job.input_json["reference_id"]))
     repo.update_progress(job, 72, "building_creative_dna")
@@ -153,6 +272,20 @@ def _analyze_reference(
     reference = SyncReferenceRepository(session).get(job.workspace_id, reference_id)
     if reference is not None:
         reference.status = "analyzed"
+    actor_user_id = job.input_json.get("actor_user_id")
+    SyncProductEventPublisher(session).record(
+        event_type="reference_analyzed",
+        workspace_id=job.workspace_id,
+        actor_user_id=UUID(str(actor_user_id)) if actor_user_id else None,
+        subject_type="reference",
+        subject_id=reference_id,
+        payload_json={
+            "creative_dna_version_id": str(dna.id),
+            "asset_version_id": str(loaded.asset_version_id),
+            "processing_job_id": str(job.id),
+            "analysis_mode": dna.analysis_mode,
+        },
+    )
     repo.update_progress(job, 90, "persisting_results")
     session.commit()
     return {
@@ -165,10 +298,13 @@ def _analyze_reference(
 
 
 def _score_tiktok_asset(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     loaded, evidence, primary_model_run_id = _process_media(
-        job, repo, asset_queries, session, "score_tiktok_asset"
+        job, repo, asset_queries, session, "tiktok_score_run"
     )
     score_run_id = UUID(str(job.input_json["score_run_id"]))
     repo.update_progress(job, 70, "calculating_score")
@@ -209,10 +345,13 @@ def _score_tiktok_asset(
 
 
 def _run_ugc_preflight(
-    job, repo: WorkerJobRepository, asset_queries: SyncAssetQueries, session
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    asset_queries: SyncAssetQueries,
+    session: Session,
 ) -> dict[str, object]:
     loaded, evidence, primary_model_run_id = _process_media(
-        job, repo, asset_queries, session, "run_ugc_preflight"
+        job, repo, asset_queries, session, "preflight_run"
     )
     preflight_run_id = UUID(str(job.input_json["preflight_run_id"]))
     pack_version_id = UUID(str(job.input_json["campaign_pack_version_id"]))
@@ -294,7 +433,7 @@ def _run_ugc_preflight(
 
 
 def _record_recommendation(
-    session,
+    session: Session,
     workspace_id: UUID,
     subject_type: str,
     subject_id: UUID,

@@ -13,6 +13,32 @@ import { createShellSlice } from "./slices/shell-slice";
 import { createUgcReviewSlice } from "./slices/ugc-review-slice";
 import type { AppState } from "./store-types";
 
+function mergeSeededList<T extends { id: string }>(seeded: T[], persisted?: T[]) {
+    if (!persisted) return seeded;
+    const ids = new Set(persisted.map((item) => item.id));
+    return [...persisted, ...seeded.filter((item) => !ids.has(item.id))];
+}
+
+function mergePersistedState(persisted: unknown, current: AppState): AppState {
+    const state = (persisted ?? {}) as Partial<AppState>;
+    return {
+        ...current,
+        ...state,
+        boards: mergeSeededList(current.boards, state.boards),
+        creatives: mergeSeededList(current.creatives, state.creatives),
+        analyses: { ...current.analyses, ...(state.analyses ?? {}) },
+        packs: { ...current.packs, ...(state.packs ?? {}) },
+        ugcAssets: mergeSeededList(current.ugcAssets, state.ugcAssets),
+        ugcAnalyses: { ...current.ugcAnalyses, ...(state.ugcAnalyses ?? {}) },
+        ugcIssues: { ...current.ugcIssues, ...(state.ugcIssues ?? {}) },
+        ugcRights: { ...current.ugcRights, ...(state.ugcRights ?? {}) },
+        perfRecommendations: mergeSeededList(
+            current.perfRecommendations,
+            state.perfRecommendations,
+        ),
+    };
+}
+
 export const useAppStore = create<AppState>()(
     persist(
         (set, get) => ({
@@ -39,6 +65,7 @@ export const useAppStore = create<AppState>()(
                               window.localStorage.setItem(name, JSON.stringify(value)),
                           removeItem: (name) => window.localStorage.removeItem(name),
                       },
+            merge: mergePersistedState,
         },
     ),
 );

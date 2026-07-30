@@ -37,12 +37,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
+    job_stale_after_seconds: int = Field(default=900, ge=60)
 
     auth_mode: AuthMode = AuthMode.LOCAL_TEST
     auth_disabled: bool = False
     oidc_issuer_url: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: AnyUrl | None = None
+    oidc_allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
+    oidc_jwks_cache_seconds: int = 300
 
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
@@ -53,10 +56,13 @@ class Settings(BaseSettings):
     s3_presigned_expiry_seconds: int = 900
 
     max_declared_upload_mb: int = 250
+    max_upload_size_bytes: int | None = Field(default=None, ge=1)
     allowed_upload_mime_types: list[str] = Field(
         default_factory=lambda: ["video/mp4", "video/quicktime", "image/jpeg", "image/png"]
     )
     max_media_duration_seconds: int = 180
+    asset_retention_days: int = Field(default=14, ge=1)
+    model_output_retention_days: int = Field(default=90, ge=1)
 
     ai_mode: str = "fixture"
     ai_provider: str = "openai_compatible"
@@ -75,6 +81,15 @@ class Settings(BaseSettings):
     ai_request_timeout_seconds: int = 120
     ai_max_retries: int = 2
     ai_max_output_tokens: int | None = None
+    image_generation_enabled: bool = False
+    video_generation_enabled: bool = False
+    image_generation_model: str | None = None
+    video_generation_model: str | None = None
+
+    # "Supported" remains an evidence label, not a causal or winner claim.
+    pattern_performance_supported_min_asset_count: int = Field(default=10, ge=1)
+    pattern_performance_supported_min_campaign_count: int = Field(default=3, ge=1)
+    pattern_performance_supported_min_metric_sample_size: int = Field(default=10, ge=1)
 
     sentry_dsn: SecretStr | None = None
     otel_exporter_otlp_endpoint: str | None = None
@@ -82,7 +97,12 @@ class Settings(BaseSettings):
     git_sha: str | None = None
     release_version: str | None = None
 
-    @field_validator("backend_cors_origins", "allowed_upload_mime_types", mode="before")
+    @field_validator(
+        "backend_cors_origins",
+        "allowed_upload_mime_types",
+        "oidc_allowed_algorithms",
+        mode="before",
+    )
     @classmethod
     def parse_csv(cls, value: Any) -> Any:
         if isinstance(value, str):
@@ -126,7 +146,7 @@ class Settings(BaseSettings):
 
     @property
     def max_declared_upload_bytes(self) -> int:
-        return self.max_declared_upload_mb * 1024 * 1024
+        return self.max_upload_size_bytes or self.max_declared_upload_mb * 1024 * 1024
 
     @property
     def public_version(self) -> str:

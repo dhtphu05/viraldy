@@ -17,7 +17,7 @@ export function StepNav({
     const pct = completionPercent(pack);
     if (compact) {
         return (
-            <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
+            <div className="flex snap-x snap-mandatory overflow-x-auto border-b border-divider">
                 {STEPS.map((s, i) => {
                     const done = stepIsComplete(pack, s.id);
                     const active = current === s.id;
@@ -27,17 +27,19 @@ export function StepNav({
                             type="button"
                             onClick={() => onSelect(s.id)}
                             className={cn(
-                                "shrink-0 snap-start rounded-full border px-3 py-1 text-xs transition-colors",
+                                "relative flex shrink-0 snap-start items-center gap-1.5 px-3 py-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                                 active
-                                    ? "border-primary/40 bg-primary-soft text-primary-active"
+                                    ? "font-medium text-primary-active after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary"
                                     : done
-                                      ? "border-hairline/70 bg-ok-soft/60 text-ok"
-                                      : "border-hairline/70 bg-surface text-text-secondary",
+                                      ? "text-ok"
+                                      : "text-text-tertiary",
                             )}
                         >
-                            <span className="mr-1 tabular text-[10px] text-text-tertiary">
-                                {i + 1}
-                            </span>
+                            {done ? (
+                                <Check className="h-3 w-3" aria-hidden />
+                            ) : (
+                                <span className="tabular text-[10px]">{i + 1}</span>
+                            )}
                             {s.short}
                         </button>
                     );
@@ -48,9 +50,7 @@ export function StepNav({
     return (
         <nav aria-label="Campaign steps" className="flex flex-col gap-1">
             <div className="mb-3 px-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                    Progress
-                </p>
+                <p className="text-[10px] font-semibold uppercase text-text-tertiary">Progress</p>
                 <p className="mt-1 text-sm font-medium text-text-primary">{pct}% complete</p>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-muted">
                     <div
@@ -71,18 +71,20 @@ export function StepNav({
                         className={cn(
                             "group grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                             active
-                                ? "bg-primary-soft text-primary-active"
-                                : "text-text-secondary hover:bg-surface-soft hover:text-text-primary",
+                                ? "font-medium text-primary-active"
+                                : done
+                                  ? "text-text-primary hover:bg-surface-soft"
+                                  : "text-text-tertiary hover:bg-surface-soft hover:text-text-primary",
                         )}
                     >
                         <span
                             className={cn(
                                 "grid h-5 w-5 place-items-center rounded-full text-[10px] font-semibold tabular",
                                 done
-                                    ? "bg-ok text-ok-foreground"
+                                    ? "text-ok"
                                     : active
                                       ? "bg-primary text-primary-foreground"
-                                      : "bg-surface-muted text-text-tertiary",
+                                      : "ring-1 ring-divider text-text-tertiary",
                             )}
                         >
                             {done ? (

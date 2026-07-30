@@ -51,4 +51,16 @@ export const seedProducts: SeedProduct[] = [
         linkedCampaignCount: 0,
         colorSeed: "#ffd6a5",
     },
+    {
+        id: "p-sofa-cover",
+        name: "Quilted Sofa Cover",
+        category: "Home & Kitchen",
+        price: 32.9,
+        readiness: "Ready",
+        fulfillmentRisk: "Low",
+        linkedCampaignCount: 1,
+        colorSeed: "#b8c7ad",
+        imageUrl: "/demo-media/sofa-cover-product.jpg",
+        imageAlt: "Light quilted sofa cover shown on a living room couch",
+    },
 ];

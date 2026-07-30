@@ -90,7 +90,7 @@ export function CreatorPreviewDialog({
                 </div>
                 <div className="mt-3 flex flex-col gap-5 rounded-lg border border-hairline/70 bg-surface p-5 text-sm text-text-primary">
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             Product
                         </p>
                         <p className="mt-1 text-base font-semibold">{product?.name ?? "Product"}</p>
@@ -99,7 +99,7 @@ export function CreatorPreviewDialog({
                         </p>
                     </section>
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             Main angle
                         </p>
                         <p className="mt-1">{primaryAngle?.name ?? "—"}</p>
@@ -110,7 +110,7 @@ export function CreatorPreviewDialog({
                         )}
                     </section>
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             Hooks
                         </p>
                         <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm">
@@ -122,7 +122,7 @@ export function CreatorPreviewDialog({
                         </ol>
                     </section>
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             Script
                         </p>
                         <div className="mt-1 space-y-2">
@@ -137,7 +137,7 @@ export function CreatorPreviewDialog({
                         </div>
                     </section>
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             Storyboard
                         </p>
                         <ol className="mt-1 space-y-2">
@@ -163,14 +163,14 @@ export function CreatorPreviewDialog({
                         </ol>
                     </section>
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             CTA
                         </p>
                         <p className="mt-1">{pack.cta.primary}</p>
                     </section>
                     <section className="grid gap-3 sm:grid-cols-2">
                         <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                            <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                                 Do
                             </p>
                             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
@@ -180,7 +180,7 @@ export function CreatorPreviewDialog({
                             </ul>
                         </div>
                         <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                            <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                                 Don't
                             </p>
                             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
@@ -191,7 +191,7 @@ export function CreatorPreviewDialog({
                         </div>
                     </section>
                     <section>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                             Deliverables & rights
                         </p>
                         <p className="mt-1 text-sm">

@@ -3,17 +3,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
-AUTH_TOKEN = "local-test"  # noqa: S105 - documented local-only development token.
+# The isolated runner uses local-test auth and a locally selected ffmpeg executable only.
+# Documented local-only token; production settings reject local-test auth mode.
+AUTH_TOKEN = "local-test"  # noqa: S105  # nosec B105
 EXPECTED_CONCEPT_COUNT = 3
 
 
@@ -21,8 +24,10 @@ EXPECTED_CONCEPT_COUNT = 3
 class SmokeContext:
     workspace_id: str
     product_id: str
+    product_context_version: int
+    primary_category: str
     board_id: str
-    reference_id: str
+    reference_ids: tuple[str, str]
     quick_asset_id: str
     ugc_asset_id: str
 
@@ -55,6 +60,9 @@ class ApiClient:
         headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
         return self._request("POST", path, json=payload, headers=headers)
 
+    def delete(self, path: str) -> None:
+        self._request("DELETE", path)
+
     def upload(self, upload_url: str, path: Path, headers: dict[str, str]) -> None:
         with path.open("rb") as file:
             response = httpx.put(upload_url, content=file.read(), headers=headers, timeout=30.0)
@@ -65,6 +73,8 @@ class ApiClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._client.request(method, path, **kwargs)
+        if response.status_code == 204:
+            return None
         try:
             envelope = response.json()
         except json.JSONDecodeError as exc:
@@ -87,19 +97,66 @@ def main() -> None:
     try:
         readiness = client.get("/system/ai-readiness")
         assert_equal(readiness["mode"], args.expect_mode, "AI readiness mode")
+        identity = client.get("/me")
+        assert_equal(identity["status"], "active", "Authenticated user status")
 
         with TemporaryDirectory(prefix="viraldy-smoke-") as temp_dir:
             media_path = prepare_media(args, Path(temp_dir))
             ctx = load_context(client, args, media_path)
             quick_run, quick_job_id = run_quick_scorer(client, ctx, args, completed_job_ids)
-            dna_id = run_reference_dna(client, ctx, args, completed_job_ids)
-            adaptation = run_adaptation(client, ctx, dna_id, args)
-            pack = run_campaign_pack(client, ctx, adaptation["id"])
-            pack_version_id = run_pack_version(client, ctx, pack["id"], pack["current_version"])
-            run_preflight(client, ctx, pack_version_id, args, completed_job_ids)
+            dna_ids = [
+                run_reference_dna(client, ctx, reference_id, index, args, completed_job_ids)
+                for index, reference_id in enumerate(ctx.reference_ids, start=1)
+            ]
+            pattern = run_pattern_kit(client, ctx, dna_ids, args)
+            viral = run_viral_kit(client, ctx, pattern, args)
+            concept_id, pack_id, pack_version_id = select_concept_and_compile_pack(
+                client,
+                ctx,
+                viral,
+            )
+            preflight_run = run_preflight(
+                client,
+                ctx,
+                pack_version_id,
+                args,
+                completed_job_ids,
+            )
+            recommendation_id = run_learning_loop(
+                client,
+                ctx,
+                pattern,
+                viral,
+                preflight_run,
+                pack_id,
+            )
+            revision_version_id = upload_revision(client, ctx, media_path, args)
+            verify_learning_events(
+                client,
+                ctx,
+                pattern,
+                viral,
+                creative_dna_ids=dna_ids,
+                campaign_pack_id=pack_id,
+                preflight_run_id=str(preflight_run["id"]),
+                recommendation_id=recommendation_id,
+                revision_version_id=revision_version_id,
+                isolated_lifecycle=args.isolated_lifecycle,
+                expect_mode=args.expect_mode,
+            )
 
             if args.verify_db:
-                verify_database(args.expect_mode, completed_job_ids)
+                verify_database(
+                    expect_mode=args.expect_mode,
+                    workspace_id=ctx.workspace_id,
+                    completed_job_ids=completed_job_ids,
+                    pattern_kit_id=pattern["kit"]["id"],
+                    viral_kit_id=viral["kit"]["id"],
+                )
+            deletion_status = "not_requested"
+            if args.isolated_lifecycle:
+                client.delete(f"/workspaces/{ctx.workspace_id}")
+                deletion_status = verify_workspace_deletion(ctx.workspace_id)
 
             print(
                 json.dumps(
@@ -108,10 +165,16 @@ def main() -> None:
                         "mode": args.expect_mode,
                         "workspace_id": ctx.workspace_id,
                         "quick_score_run_id": quick_run["id"],
-                        "creative_dna_version_id": dna_id,
-                        "adaptation_run_id": adaptation["id"],
-                        "campaign_pack_id": pack["id"],
+                        "creative_dna_version_ids": dna_ids,
+                        "pattern_kit_id": pattern["kit"]["id"],
+                        "viral_kit_id": viral["kit"]["id"],
+                        "selected_concept_id": concept_id,
+                        "campaign_pack_id": pack_id,
                         "campaign_pack_version_id": pack_version_id,
+                        "preflight_run_id": preflight_run["id"],
+                        "recommendation_id": recommendation_id,
+                        "revision_asset_version_id": revision_version_id,
+                        "workspace_deletion_status": deletion_status,
                         "completed_job_ids": completed_job_ids,
                     },
                     indent=2,
@@ -144,6 +207,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=90)
     parser.add_argument("--run-id", default=os.getenv("SMOKE_RUN_ID"))
     parser.add_argument("--verify-db", action="store_true")
+    parser.add_argument(
+        "--isolated-lifecycle",
+        action="store_true",
+        help=(
+            "Create an isolated workspace/product, upload all media, create a revision, "
+            "then delete the workspace and verify database/object-storage cleanup."
+        ),
+    )
     parser.add_argument("--product-name", default=os.getenv("SMOKE_PRODUCT_NAME"))
     parser.add_argument(
         "--reference-fixture-id",
@@ -163,6 +234,11 @@ def parse_args() -> argparse.Namespace:
 def load_context(
     client: ApiClient, args: argparse.Namespace, media_path: Path | None
 ) -> SmokeContext:
+    if args.isolated_lifecycle:
+        if media_path is None:
+            raise SmokeFailure("Isolated lifecycle smoke requires a media file.")
+        return create_isolated_context(client, args, media_path)
+
     workspace = first(client.get("/workspaces"), "workspace")
     workspace_id = workspace["id"]
     products = client.get(f"/workspaces/{workspace_id}/products")
@@ -180,6 +256,15 @@ def load_context(
         reference_asset_id = find_fixture_asset(assets, args.reference_fixture_id)
         reference = find_reference_for_asset(references, reference_asset_id)
         quick_asset_id = find_fixture_asset(assets, args.quick_fixture_id)
+        second_reference = find_or_create_reference(
+            client,
+            workspace_id,
+            board["id"],
+            product["id"],
+            references,
+            quick_asset_id,
+            "Fixture comparison reference",
+        )
         ugc_asset_id = find_fixture_asset(assets, args.ugc_fixture_id)
     else:
         if media_path is None:
@@ -188,31 +273,214 @@ def load_context(
         reference_asset_id = upload_asset(
             client, workspace_id, product["id"], media_path, "reference"
         )
-        ugc_asset_id = upload_asset(client, workspace_id, product["id"], media_path, "ugc")
-        reference = client.post(
-            f"/workspaces/{workspace_id}/references",
-            {
-                "board_id": board["id"],
-                "asset_id": reference_asset_id,
-                "product_id": product["id"],
-                "source_platform": "Smoke",
-                "source_url": "https://example.com/viraldy-smoke-reference",
-                "title": f"Smoke {args.expect_mode} reference",
-                "notes": "Uploaded by scripts/smoke_mvp_flow.py.",
-            },
+        second_reference_asset_id = upload_asset(
+            client,
+            workspace_id,
+            product["id"],
+            media_path,
+            "reference-comparison",
         )
+        ugc_asset_id = upload_asset(client, workspace_id, product["id"], media_path, "ugc")
+        reference = create_reference(
+            client,
+            workspace_id,
+            board["id"],
+            product["id"],
+            reference_asset_id,
+            f"Smoke {args.expect_mode} reference",
+        )
+        second_reference = create_reference(
+            client,
+            workspace_id,
+            board["id"],
+            product["id"],
+            second_reference_asset_id,
+            f"Smoke {args.expect_mode} comparison reference",
+        )
+    metadata = product.get("metadata_json") or {}
     return SmokeContext(
         workspace_id=workspace_id,
         product_id=product["id"],
+        product_context_version=int(product.get("product_context_version") or 1),
+        primary_category=str(
+            metadata.get("category") or metadata.get("fixture_category") or "home_organization"
+        ),
         board_id=board["id"],
-        reference_id=reference["id"],
+        reference_ids=(reference["id"], second_reference["id"]),
         quick_asset_id=quick_asset_id,
         ugc_asset_id=ugc_asset_id,
     )
 
 
+def create_isolated_context(
+    client: ApiClient,
+    args: argparse.Namespace,
+    media_path: Path,
+) -> SmokeContext:
+    run_slug = re.sub(r"[^a-z0-9-]+", "-", str(args.run_id).lower()).strip("-")
+    workspace = cast(
+        dict[str, Any],
+        client.post(
+            "/workspaces",
+            {
+                "name": f"Private beta smoke {args.run_id}",
+                "slug": f"smoke-{run_slug[:64]}",
+            },
+        ),
+    )
+    workspace_id = str(workspace["id"])
+    product = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{workspace_id}/products",
+            isolated_product_payload(args.run_id),
+        ),
+    )
+    product_id = str(product["id"])
+    board = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{workspace_id}/reference-boards",
+            {
+                "name": "Private beta creative research",
+                "description": "Isolated fixture/mock E2E reference board.",
+                "product_id": product_id,
+                "board_type": "creative_research",
+            },
+        ),
+    )
+
+    quick_asset_id = upload_asset(
+        client,
+        workspace_id,
+        product_id,
+        media_path,
+        "quick-reference",
+        fixture_id=args.quick_fixture_id if args.expect_mode == "fixture" else None,
+    )
+    reference_asset_id = upload_asset(
+        client,
+        workspace_id,
+        product_id,
+        media_path,
+        "reference",
+        fixture_id=args.reference_fixture_id if args.expect_mode == "fixture" else None,
+    )
+    ugc_asset_id = upload_asset(
+        client,
+        workspace_id,
+        product_id,
+        media_path,
+        "ugc",
+        fixture_id=args.ugc_fixture_id if args.expect_mode == "fixture" else None,
+    )
+    first_reference = create_reference(
+        client,
+        workspace_id,
+        str(board["id"]),
+        product_id,
+        reference_asset_id,
+        f"Isolated {args.expect_mode} primary reference",
+    )
+    second_reference = create_reference(
+        client,
+        workspace_id,
+        str(board["id"]),
+        product_id,
+        quick_asset_id,
+        f"Isolated {args.expect_mode} comparison reference",
+    )
+    metadata = product.get("metadata_json") or {}
+    return SmokeContext(
+        workspace_id=workspace_id,
+        product_id=product_id,
+        product_context_version=int(product["product_context_version"]),
+        primary_category=str(metadata.get("category") or "home_organization"),
+        board_id=str(board["id"]),
+        reference_ids=(str(first_reference["id"]), str(second_reference["id"])),
+        quick_asset_id=quick_asset_id,
+        ugc_asset_id=ugc_asset_id,
+    )
+
+
+def isolated_product_payload(run_id: str) -> dict[str, object]:
+    return {
+        "name": f"CounterSpace Rack E2E {run_id}",
+        "description": "A compact rack that creates observable usable counter space.",
+        "market": "US",
+        "metadata_json": {"category": "home_organization", "test_run_id": run_id},
+        "product_context": {
+            "schema_version": "product_context_v1",
+            "identity": {
+                "name": f"CounterSpace Rack E2E {run_id}",
+                "brand": "Viraldy Test",
+                "category": "home_organization",
+                "subcategory": "counter_storage",
+                "market": "US",
+                "currency": "USD",
+            },
+            "personas": [
+                {
+                    "id": "small_kitchen_shopper",
+                    "label": "Small-kitchen shopper",
+                    "pain_points": ["limited counter space", "visible clutter"],
+                    "desired_outcomes": ["more usable counter space"],
+                    "objections": ["unclear size fit"],
+                    "awareness_stage": "problem_aware",
+                }
+            ],
+            "benefits": [
+                {
+                    "id": "counter_space",
+                    "label": "Creates usable counter space",
+                    "description": "Raises frequently used items above the working surface.",
+                    "proof_available": ["visible before and after counter comparison"],
+                    "claim_strength": "observed",
+                }
+            ],
+            "features": [
+                {
+                    "id": "raised_storage",
+                    "label": "Raised storage surface",
+                    "description": "Keeps items accessible above the counter.",
+                    "visual_demo_possible": True,
+                    "visual_cues": ["clear before and after counter view"],
+                }
+            ],
+            "commercial": {
+                "price": "29.99",
+                "shipping_text": "Use only the current product listing estimate.",
+                "margin_band": "unknown",
+            },
+            "creative": {
+                "primary_angles": ["visible counter reset"],
+                "demonstration_mechanisms": ["before and after counter comparison"],
+                "visual_differentiators": ["product remains visible during setup"],
+                "available_proof": ["observable counter-space result"],
+                "creator_personas": ["home organizer"],
+                "preferred_delivery_styles": ["authentic_review", "demonstration"],
+                "brand_voice": ["clear", "specific"],
+                "prohibited_visuals": ["misleading scale"],
+            },
+            "governance": {
+                "claims": [
+                    {
+                        "id": "no-guaranteed-result",
+                        "text": "Do not guarantee an exact amount of space saved.",
+                        "rule_type": "prohibited",
+                        "severity": "high",
+                    }
+                ],
+                "required_disclosures": ["Product tag identifies the exact listing."],
+                "prohibited_content": ["unsupported superlatives"],
+                "rights_notes": ["Use seller-owned E2E media only."],
+            },
+        },
+    }
+
+
 def prepare_media(args: argparse.Namespace, temp_dir: Path) -> Path | None:
-    if args.expect_mode == "fixture":
+    if args.expect_mode == "fixture" and not args.isolated_lifecycle:
         return None
     if args.media_file:
         path = Path(args.media_file)
@@ -222,7 +490,8 @@ def prepare_media(args: argparse.Namespace, temp_dir: Path) -> Path | None:
     if not args.ffmpeg:
         raise SmokeFailure("ffmpeg is required to generate mock/live smoke media.")
     output = temp_dir / "smoke-video.mp4"
-    subprocess.run(  # noqa: S603 - smoke operator controls the ffmpeg binary path.
+    # Operator-selected local executable, fixed argv, no shell, and a bounded timeout.
+    subprocess.run(  # noqa: S603  # nosec B603
         [
             str(args.ffmpeg),
             "-hide_banner",
@@ -246,14 +515,20 @@ def prepare_media(args: argparse.Namespace, temp_dir: Path) -> Path | None:
             str(output),
         ],
         check=True,
+        timeout=30,
     )
     return output
 
 
 def upload_asset(
-    client: ApiClient, workspace_id: str, product_id: str, media_path: Path, label: str
+    client: ApiClient,
+    workspace_id: str,
+    product_id: str,
+    media_path: Path,
+    label: str,
+    fixture_id: str | None = None,
 ) -> str:
-    asset_type = "reference" if label == "reference" else "ugc"
+    asset_type = "reference" if label.startswith("reference") else "ugc"
     session = client.post(
         f"/workspaces/{workspace_id}/assets/upload-sessions",
         {
@@ -265,14 +540,117 @@ def upload_asset(
         },
     )
     client.upload(session["upload_url"], media_path, session["required_headers"])
-    asset = client.post(f"/workspaces/{workspace_id}/assets/{session['asset_id']}/complete-upload")
-    return asset["id"]
+    asset = cast(
+        dict[str, Any],
+        client.post(f"/workspaces/{workspace_id}/assets/{session['asset_id']}/complete-upload"),
+    )
+    if fixture_id is not None:
+        mark_asset_as_fixture(
+            workspace_id=workspace_id,
+            asset_id=str(asset["id"]),
+            asset_version_id=str(session["asset_version_id"]),
+            fixture_id=fixture_id,
+        )
+    return str(asset["id"])
+
+
+def mark_asset_as_fixture(
+    *,
+    workspace_id: str,
+    asset_id: str,
+    asset_version_id: str,
+    fixture_id: str,
+) -> None:
+    from sqlalchemy import create_engine, text
+
+    url = os.getenv("DATABASE_SYNC_URL")
+    if not url:
+        raise SmokeFailure("DATABASE_SYNC_URL is required to identify uploaded fixture assets.")
+    engine = create_engine(url)
+    try:
+        with engine.begin() as connection:
+            asset_updated = connection.execute(
+                text(
+                    "update assets set metadata_json = "
+                    "coalesce(metadata_json, '{}'::jsonb) || "
+                    "jsonb_build_object('fixture_id', cast(:fixture_id as text)) "
+                    "where id::text = :asset_id and workspace_id::text = :workspace_id"
+                ),
+                {
+                    "workspace_id": workspace_id,
+                    "asset_id": asset_id,
+                    "fixture_id": fixture_id,
+                },
+            ).rowcount
+            version_updated = connection.execute(
+                text(
+                    "update asset_versions set metadata_json = "
+                    "coalesce(metadata_json, '{}'::jsonb) || "
+                    "jsonb_build_object('fixture_id', cast(:fixture_id as text)) "
+                    "where id::text = :version_id and asset_id::text = :asset_id"
+                ),
+                {
+                    "asset_id": asset_id,
+                    "version_id": asset_version_id,
+                    "fixture_id": fixture_id,
+                },
+            ).rowcount
+        if asset_updated != 1 or version_updated != 1:
+            raise SmokeFailure("Failed to identify an uploaded asset/version as a known fixture.")
+    finally:
+        engine.dispose()
+
+
+def create_reference(
+    client: ApiClient,
+    workspace_id: str,
+    board_id: str,
+    product_id: str,
+    asset_id: str,
+    title: str,
+) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{workspace_id}/references",
+            {
+                "board_id": board_id,
+                "asset_id": asset_id,
+                "product_id": product_id,
+                "source_platform": "tiktok",
+                "title": title,
+                "notes": "Created by the private beta fixture/mock E2E smoke flow.",
+            },
+        ),
+    )
+
+
+def find_or_create_reference(
+    client: ApiClient,
+    workspace_id: str,
+    board_id: str,
+    product_id: str,
+    references: list[dict[str, Any]],
+    asset_id: str,
+    title: str,
+) -> dict[str, Any]:
+    for reference in references:
+        if str(reference.get("asset_id")) == asset_id:
+            return reference
+    return create_reference(
+        client,
+        workspace_id,
+        board_id,
+        product_id,
+        asset_id,
+        title,
+    )
 
 
 def run_quick_scorer(
     client: ApiClient, ctx: SmokeContext, args: argparse.Namespace, completed_job_ids: list[str]
 ) -> tuple[dict[str, Any], str]:
-    payload = {
+    payload: dict[str, object] = {
         "asset_id": ctx.quick_asset_id,
         "product_id": ctx.product_id,
         "objective": "generic_structure",
@@ -293,11 +671,16 @@ def run_quick_scorer(
 
 
 def run_reference_dna(
-    client: ApiClient, ctx: SmokeContext, args: argparse.Namespace, completed_job_ids: list[str]
+    client: ApiClient,
+    ctx: SmokeContext,
+    reference_id: str,
+    reference_number: int,
+    args: argparse.Namespace,
+    completed_job_ids: list[str],
 ) -> str:
     result = client.post(
-        f"/workspaces/{ctx.workspace_id}/references/{ctx.reference_id}/analyze",
-        idempotency_key=f"smoke-{args.run_id}-dna",
+        f"/workspaces/{ctx.workspace_id}/references/{reference_id}/analyze",
+        idempotency_key=f"smoke-{args.run_id}-dna-{reference_number}",
     )
     job = poll_job(client, ctx.workspace_id, result["job"]["id"], args.timeout_seconds)
     completed_job_ids.append(job["id"])
@@ -309,57 +692,129 @@ def run_reference_dna(
     return dna_id
 
 
-def run_adaptation(
-    client: ApiClient, ctx: SmokeContext, dna_id: str, args: argparse.Namespace
+def run_pattern_kit(
+    client: ApiClient,
+    ctx: SmokeContext,
+    dna_ids: list[str],
+    args: argparse.Namespace,
 ) -> dict[str, Any]:
-    adaptation = client.post(
-        f"/workspaces/{ctx.workspace_id}/adaptations",
+    pattern = client.post(
+        f"/workspaces/{ctx.workspace_id}/pattern-kits",
         {
-            "product_id": ctx.product_id,
-            "creative_dna_version_id": dna_id,
-            "objective": "tiktok_shop_affiliate_test",
-            "target_market": "US",
-            "target_buyer": {
-                "persona": "small apartment renter",
-                "pain": "limited counter space",
-                "desired_outcome": "faster organization",
-            },
-            "constraints": {"must_avoid": ["exact script copy", "unsupported claims"]},
+            "name": f"Smoke evidence pattern {args.run_id}",
+            "kind": "multi_asset_cluster",
+            "scope": "workspace_private",
+            "source_creative_dna_version_ids": dna_ids,
+            "primary_category": ctx.primary_category,
+            "target_platforms": ["tiktok_shop"],
+            "target_markets": ["US"],
+            "objectives": ["tiktok_shop_affiliate_test"],
+            "extraction_mode": "ai_assisted",
+            "review_notes": "Private beta fixture/mock E2E review.",
         },
     )
-    assert_equal(adaptation["analysis_mode"], args.expect_mode, "Adaptation mode")
-    concepts = (adaptation.get("result_json") or {}).get("concepts") or []
-    assert_equal(len(concepts), EXPECTED_CONCEPT_COUNT, "Adaptation concept count")
-    return adaptation
+    source = pattern["latest_version"]["pattern"]["source"]
+    assert_equal(source["source_asset_count"], len(dna_ids), "PatternKit source count")
+    assert_equal(
+        set(source["creative_dna_version_ids"]),
+        set(dna_ids),
+        "PatternKit Creative DNA lineage",
+    )
+    pattern_kit_id = pattern["kit"]["id"]
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/pattern-kits/{pattern_kit_id}/actions",
+        {"action": "reviewed", "reason": "Smoke reviewer confirmed evidence linkage."},
+    )
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/pattern-kits/{pattern_kit_id}/actions",
+        {"action": "validated", "reason": "Smoke human validation gate."},
+    )
+    reviewed = cast(
+        dict[str, Any],
+        client.get(f"/workspaces/{ctx.workspace_id}/pattern-kits/{pattern_kit_id}"),
+    )
+    assert_equal(reviewed["kit"]["status"], "validated", "PatternKit review status")
+    return reviewed
 
 
-def run_campaign_pack(client: ApiClient, ctx: SmokeContext, adaptation_id: str) -> dict[str, Any]:
+def run_viral_kit(
+    client: ApiClient,
+    ctx: SmokeContext,
+    pattern: dict[str, Any],
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    viral = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{ctx.workspace_id}/viral-kits",
+            {
+                "product_id": ctx.product_id,
+                "expected_product_context_version": ctx.product_context_version,
+                "pattern_kit_version_ids": [pattern["latest_version"]["id"]],
+                "objective": "tiktok_shop_affiliate_test",
+                "platform": "tiktok_shop",
+                "target_market": "US",
+                "concept_count": EXPECTED_CONCEPT_COUNT,
+                "creator_constraints": {
+                    "delivery_style_preferences": ["demonstration"],
+                },
+                "production_constraints": {
+                    "max_duration_ms": 30000,
+                    "required_aspect_ratio": "9:16",
+                },
+                "commercial_constraints": {
+                    "product_tag_required": True,
+                    "shipping_claim_policy": "use_product_context_only",
+                },
+                "notes": f"Private beta {args.expect_mode} E2E {args.run_id}.",
+            },
+        ),
+    )
+    concepts = viral["latest_version"]["viral_kit"]["concepts"]
+    assert_equal(len(concepts), EXPECTED_CONCEPT_COUNT, "ViralKit concept count")
+    if any(concept["buyer_persona_label"] == concept["creator_persona"] for concept in concepts):
+        raise SmokeFailure("ViralKit confused buyer persona with creator persona.")
+    return viral
+
+
+def select_concept_and_compile_pack(
+    client: ApiClient,
+    ctx: SmokeContext,
+    viral: dict[str, Any],
+) -> tuple[str, str, str]:
+    viral_kit_id = viral["kit"]["id"]
+    concept_id = viral["latest_version"]["viral_kit"]["concepts"][0]["id"]
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/viral-kits/{viral_kit_id}/concept-actions",
+        {
+            "concept_id": concept_id,
+            "action": "selected",
+            "reason": "Seller selected the E2E concept for production.",
+        },
+    )
     pack = client.post(
-        f"/workspaces/{ctx.workspace_id}/campaign-packs",
-        {"adaptation_run_id": adaptation_id, "concept_id": "concept_1"},
+        f"/workspaces/{ctx.workspace_id}/viral-kits/{viral_kit_id}"
+        f"/concepts/{concept_id}/campaign-pack",
+        {"rights_note": "Seller-owned fixture/mock media only."},
     )
-    if not pack.get("current_version"):
-        raise SmokeFailure("Campaign Pack was created without a current version.")
-    versions = client.get(f"/workspaces/{ctx.workspace_id}/campaign-packs/{pack['id']}/versions")
-    if len(versions) < 1:
-        raise SmokeFailure("Campaign Pack version history is empty after creation.")
-    return pack
-
-
-def run_pack_version(
-    client: ApiClient, ctx: SmokeContext, pack_id: str, current_version: dict[str, Any]
-) -> str:
-    created = client.post(
-        f"/workspaces/{ctx.workspace_id}/campaign-packs/{pack_id}/versions",
-        {"brief": current_version["brief_json"], "change_note": "Smoke edited version"},
+    if not pack.get("campaign_pack_version_id"):
+        raise SmokeFailure("ViralKit Campaign Pack compile returned no version.")
+    export = client.post(
+        f"/workspaces/{ctx.workspace_id}/campaign-packs/" f"{pack['campaign_pack_id']}/exports",
+        {"format": "json"},
     )
-    versions = client.get(f"/workspaces/{ctx.workspace_id}/campaign-packs/{pack_id}/versions")
-    if len(versions) < 2:
-        raise SmokeFailure("Campaign Pack version history did not retain edited version.")
-    numbers = [version["version_number"] for version in versions]
-    if max(numbers) < 2:
-        raise SmokeFailure("Campaign Pack version numbers did not advance.")
-    return created["id"]
+    assert_equal(
+        export["campaign_pack_version_id"],
+        pack["campaign_pack_version_id"],
+        "Campaign Pack export version",
+    )
+    exported_snapshot = json.loads(export["content"])
+    assert_equal(
+        exported_snapshot["campaign_pack_id"],
+        pack["campaign_pack_id"],
+        "Campaign Pack export snapshot",
+    )
+    return concept_id, pack["campaign_pack_id"], pack["campaign_pack_version_id"]
 
 
 def run_preflight(
@@ -368,7 +823,7 @@ def run_preflight(
     campaign_pack_version_id: str,
     args: argparse.Namespace,
     completed_job_ids: list[str],
-) -> None:
+) -> dict[str, Any]:
     result = client.post(
         f"/workspaces/{ctx.workspace_id}/preflight-runs",
         {"ugc_asset_id": ctx.ugc_asset_id, "campaign_pack_version_id": campaign_pack_version_id},
@@ -376,8 +831,11 @@ def run_preflight(
     )
     job = poll_job(client, ctx.workspace_id, result["job"]["id"], args.timeout_seconds)
     completed_job_ids.append(job["id"])
-    run = client.get(
-        f"/workspaces/{ctx.workspace_id}/preflight-runs/{result['preflight_run']['id']}"
+    run = cast(
+        dict[str, Any],
+        client.get(
+            f"/workspaces/{ctx.workspace_id}/preflight-runs/{result['preflight_run']['id']}"
+        ),
     )
     assert_equal(run["analysis_mode"], args.expect_mode, "Preflight mode")
     assert_range(run["preflight_score"], 0, 100, "Preflight score")
@@ -386,6 +844,170 @@ def run_preflight(
     if run["action_label"] == "spark_ready_pending_rights":
         if "rights" not in run["revision_message"].lower():
             raise SmokeFailure("Spark-ready Preflight did not expose pending-rights wording.")
+    return run
+
+
+def run_learning_loop(
+    client: ApiClient,
+    ctx: SmokeContext,
+    pattern: dict[str, Any],
+    viral: dict[str, Any],
+    preflight_run: dict[str, Any],
+    campaign_pack_id: str,
+) -> str:
+    recommendations = client.get(f"/workspaces/{ctx.workspace_id}/recommendations")
+    recommendation = next(
+        (item for item in recommendations if item.get("subject_id") == preflight_run["id"]),
+        None,
+    )
+    if recommendation is None:
+        raise SmokeFailure("Preflight completed without a recommendation.")
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/recommendations/{recommendation['id']}/actions",
+        {
+            "action_type": "accepted",
+            "metadata_json": {"source": "private_beta_smoke"},
+        },
+    )
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/feedback",
+        {
+            "subject_type": "preflight",
+            "subject_id": preflight_run["id"],
+            "field_path": "revision_message",
+            "feedback_type": "correct",
+            "ai_value_json": preflight_run["revision_message"],
+            "user_value_json": preflight_run["revision_message"],
+            "comment": "E2E reviewer confirmed the revision guidance.",
+        },
+    )
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/pattern-kits/{pattern['kit']['id']}/feedback",
+        {
+            "subject_version": pattern["latest_version"]["version"],
+            "field_path": "adaptation_instructions",
+            "feedback_type": "correct",
+            "comment": "E2E reviewer confirmed the adaptation policy.",
+        },
+    )
+    client.post(
+        f"/workspaces/{ctx.workspace_id}/viral-kits/{viral['kit']['id']}/feedback",
+        {
+            "subject_version": viral["latest_version"]["version"],
+            "field_path": "concepts[0].hook",
+            "feedback_type": "correct",
+            "comment": "E2E reviewer confirmed the selected hook.",
+        },
+    )
+    return str(recommendation["id"])
+
+
+def upload_revision(
+    client: ApiClient,
+    ctx: SmokeContext,
+    media_path: Path | None,
+    args: argparse.Namespace,
+) -> str:
+    if media_path is None:
+        if args.isolated_lifecycle:
+            raise SmokeFailure("Isolated lifecycle smoke requires revision media.")
+        return "not-run"
+    session = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{ctx.workspace_id}/assets/{ctx.ugc_asset_id}" "/versions/upload-sessions",
+            {
+                "filename": f"smoke-revision-{args.run_id}.mp4",
+                "declared_mime_type": "video/mp4",
+                "declared_size_bytes": media_path.stat().st_size,
+            },
+        ),
+    )
+    client.upload(session["upload_url"], media_path, session["required_headers"])
+    version = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{ctx.workspace_id}/assets/{ctx.ugc_asset_id}/versions/"
+            f"{session['asset_version_id']}/complete-upload"
+        ),
+    )
+    assert_equal(version["version_number"], 2, "UGC revision version number")
+    if not version["is_current"]:
+        raise SmokeFailure("Completed UGC revision did not become the current asset version.")
+    if args.expect_mode == "fixture":
+        mark_asset_as_fixture(
+            workspace_id=ctx.workspace_id,
+            asset_id=ctx.ugc_asset_id,
+            asset_version_id=str(version["id"]),
+            fixture_id=args.ugc_fixture_id,
+        )
+    versions = client.get(f"/workspaces/{ctx.workspace_id}/assets/{ctx.ugc_asset_id}/versions")
+    if [item["version_number"] for item in versions[:2]] != [2, 1]:
+        raise SmokeFailure("UGC revision history did not preserve both immutable versions.")
+    return str(version["id"])
+
+
+def verify_learning_events(
+    client: ApiClient,
+    ctx: SmokeContext,
+    pattern: dict[str, Any],
+    viral: dict[str, Any],
+    *,
+    creative_dna_ids: list[str],
+    campaign_pack_id: str,
+    preflight_run_id: str,
+    recommendation_id: str,
+    revision_version_id: str,
+    isolated_lifecycle: bool,
+    expect_mode: str,
+) -> None:
+    events = client.get(f"/workspaces/{ctx.workspace_id}/events?limit=500")
+    event_subjects = {(event["event_type"], str(event.get("subject_id") or "")) for event in events}
+    required_event_subjects = {
+        ("pattern_kit_created", str(pattern["kit"]["id"])),
+        ("pattern_kit_reviewed", str(pattern["kit"]["id"])),
+        ("pattern_kit_validated", str(pattern["kit"]["id"])),
+        ("viral_kit_created", str(viral["kit"]["id"])),
+        ("concept_selected", str(viral["kit"]["id"])),
+        ("campaign_pack_created", campaign_pack_id),
+        ("campaign_pack_exported", campaign_pack_id),
+        ("preflight_viewed", preflight_run_id),
+        ("recommendation_accepted", recommendation_id),
+        ("pattern_kit_corrected", str(pattern["kit"]["id"])),
+        *{("reference_analyzed", reference_id) for reference_id in ctx.reference_ids},
+        *{("creative_dna_viewed", creative_dna_id) for creative_dna_id in creative_dna_ids},
+    }
+    if revision_version_id != "not-run":
+        required_event_subjects.add(("revision_uploaded", ctx.ugc_asset_id))
+    if isolated_lifecycle:
+        required_event_subjects.update(
+            {
+                ("workspace_created", ctx.workspace_id),
+                ("product_created", ctx.product_id),
+                ("ugc_uploaded", ctx.ugc_asset_id),
+                *{("reference_uploaded", reference_id) for reference_id in ctx.reference_ids},
+            }
+        )
+    missing = required_event_subjects - event_subjects
+    if missing:
+        raise SmokeFailure(f"Learning-loop events or subjects are missing: {sorted(missing)}")
+
+    model_runs = client.get(f"/workspaces/{ctx.workspace_id}/model-runs?status=completed&limit=500")
+    model_subjects = {
+        (run["subject_type"], str(run["subject_id"]))
+        for run in model_runs
+        if run["analysis_mode"] == expect_mode
+    }
+    required_model_subjects = {
+        ("pattern_kit", str(pattern["kit"]["id"])),
+        ("viral_kit", str(viral["kit"]["id"])),
+    }
+    missing_model_subjects = required_model_subjects - model_subjects
+    if missing_model_subjects:
+        raise SmokeFailure(
+            f"HTTP model-run query is missing completed {expect_mode} subjects: "
+            f"{sorted(missing_model_subjects)}"
+        )
 
 
 def poll_job(
@@ -393,8 +1015,11 @@ def poll_job(
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        job = client.get(f"/workspaces/{workspace_id}/jobs/{job_id}")
-        if job["status"] == "completed":
+        job = cast(
+            dict[str, Any],
+            client.get(f"/workspaces/{workspace_id}/jobs/{job_id}"),
+        )
+        if job["status"] in {"succeeded", "completed"}:
             return job
         if job["status"] in {"failed", "cancelled"}:
             raise SmokeFailure(
@@ -402,10 +1027,17 @@ def poll_job(
                 f"{job.get('error_code')} {job.get('error_message')}"
             )
         time.sleep(1.0)
-    raise SmokeFailure(f"Job {job_id} did not complete within {timeout_seconds}s.")
+    raise SmokeFailure(f"Job {job_id} did not succeed within {timeout_seconds}s.")
 
 
-def verify_database(expect_mode: str, completed_job_ids: list[str]) -> None:
+def verify_database(
+    *,
+    expect_mode: str,
+    workspace_id: str,
+    completed_job_ids: list[str],
+    pattern_kit_id: str,
+    viral_kit_id: str,
+) -> None:
     from sqlalchemy import create_engine, text
 
     url = os.getenv("DATABASE_SYNC_URL")
@@ -414,22 +1046,121 @@ def verify_database(expect_mode: str, completed_job_ids: list[str]) -> None:
     engine = create_engine(url)
     try:
         with engine.connect() as connection:
-            event_count = connection.execute(
-                text(
-                    "select count(*) from processing_job_events "
-                    "where processing_job_id::text = any(:job_ids)"
-                ),
-                {"job_ids": completed_job_ids},
+            succeeded_job_ids = set(
+                connection.execute(
+                    text(
+                        "select distinct processing_job_id::text from processing_job_events "
+                        "where processing_job_id::text = any(:job_ids) "
+                        "and status in ('succeeded', 'completed')"
+                    ),
+                    {"job_ids": completed_job_ids},
+                ).scalars()
+            )
+            missing_job_events = set(completed_job_ids) - succeeded_job_ids
+            if missing_job_events:
+                raise SmokeFailure(
+                    "Missing terminal processing_job_events for smoke jobs: "
+                    f"{sorted(missing_job_events)}"
+                )
+            completed_model_subjects = set(
+                connection.execute(
+                    text(
+                        "select subject_type from ai_model_runs "
+                        "where workspace_id::text = :workspace_id "
+                        "and analysis_mode = :mode and status = 'completed' "
+                        "and ((subject_type = 'pattern_kit' and subject_id::text = :pattern_id) "
+                        "or (subject_type = 'viral_kit' and subject_id::text = :viral_id))"
+                    ),
+                    {
+                        "workspace_id": workspace_id,
+                        "mode": expect_mode,
+                        "pattern_id": pattern_kit_id,
+                        "viral_id": viral_kit_id,
+                    },
+                ).scalars()
+            )
+            missing_model_subjects = {
+                "pattern_kit",
+                "viral_kit",
+            } - completed_model_subjects
+            if missing_model_subjects:
+                raise SmokeFailure(
+                    f"Missing completed {expect_mode} model runs for: "
+                    f"{sorted(missing_model_subjects)}"
+                )
+    finally:
+        engine.dispose()
+
+
+def verify_workspace_deletion(workspace_id: str) -> str:
+    from sqlalchemy import create_engine, text
+
+    from viraldy.platform.config.settings import get_settings
+    from viraldy.platform.storage.s3 import S3StorageAdapter
+
+    url = os.getenv("DATABASE_SYNC_URL")
+    if not url:
+        raise SmokeFailure("DATABASE_SYNC_URL is required to verify workspace deletion.")
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            workspace_count = connection.execute(
+                text("select count(*) from workspaces where id::text = :workspace_id"),
+                {"workspace_id": workspace_id},
             ).scalar_one()
-            if int(event_count) < len(completed_job_ids):
-                raise SmokeFailure("Missing processing_job_events for completed smoke jobs.")
-            if expect_mode != "fixture":
-                model_runs = connection.execute(
-                    text("select count(*) from ai_model_runs where analysis_mode = :mode"),
-                    {"mode": expect_mode},
-                ).scalar_one()
-                if int(model_runs) < 1:
-                    raise SmokeFailure(f"No ai_model_runs persisted for {expect_mode} mode.")
+            asset_version_count = connection.execute(
+                text(
+                    "select count(*) from asset_versions " "where storage_key like :storage_prefix"
+                ),
+                {"storage_prefix": f"workspaces/{workspace_id}/%"},
+            ).scalar_one()
+            audit = (
+                connection.execute(
+                    text(
+                        "select id::text, status, deleted_object_count, deleted_row_counts_json "
+                        "from deletion_audit_records "
+                        "where workspace_id::text = :workspace_id "
+                        "and resource_type = 'workspace' and resource_id::text = :workspace_id "
+                        "order by created_at desc limit 1"
+                    ),
+                    {"workspace_id": workspace_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if audit is None:
+                raise SmokeFailure("Workspace deletion created no audit record.")
+            batch = (
+                connection.execute(
+                    text(
+                        "select status, deleted_object_count, object_keys_json "
+                        "from storage_deletion_batches "
+                        "where source_type = 'hard_delete' and source_id::text = :audit_id "
+                        "order by created_at desc limit 1"
+                    ),
+                    {"audit_id": audit["id"]},
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if workspace_count != 0 or asset_version_count != 0:
+            raise SmokeFailure("Workspace deletion left workspace-owned database rows behind.")
+        if audit["status"] != "succeeded":
+            raise SmokeFailure(f"Workspace deletion audit is not succeeded: {audit['status']}.")
+        if batch is None or batch["status"] != "succeeded":
+            raise SmokeFailure("Workspace storage deletion batch did not succeed.")
+        if int(batch["deleted_object_count"]) != len(batch["object_keys_json"]):
+            raise SmokeFailure("Workspace storage deletion count does not match its object batch.")
+
+        remaining_objects = S3StorageAdapter(get_settings()).list_objects(
+            f"workspaces/{workspace_id}/"
+        )
+        if remaining_objects:
+            raise SmokeFailure(
+                "Workspace object-storage prefix is not empty after deletion: "
+                f"{[item.key for item in remaining_objects[:5]]}"
+            )
+        return str(audit["status"])
     finally:
         engine.dispose()
 
@@ -437,7 +1168,7 @@ def verify_database(expect_mode: str, completed_job_ids: list[str]) -> None:
 def find_fixture_asset(assets: list[dict[str, Any]], fixture_id: str) -> str:
     for asset in assets:
         if (asset.get("metadata_json") or {}).get("fixture_id") == fixture_id:
-            return asset["id"]
+            return str(asset["id"])
     raise SmokeFailure(f"Missing seeded fixture asset: {fixture_id}")
 
 

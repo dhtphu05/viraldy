@@ -2,9 +2,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
-import { Plus, Sparkles, X, PanelLeft } from "lucide-react";
+import { FolderInput, Images, Megaphone, PanelLeft, Plus, Sparkles, X } from "lucide-react";
 import { useAppStore } from "@/app/store/app-store";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BoardRail } from "@/features/creative-library/components/board-rail";
 import { CreativeToolbar } from "@/features/creative-library/components/creative-toolbar";
 import { CreativeCard } from "@/features/creative-library/components/creative-card";
@@ -15,20 +15,30 @@ import { AdaptToProductDialog } from "@/features/creative-library/components/ada
 import { NewBoardDialog } from "@/features/creative-library/components/new-board-dialog";
 import { MoveToBoardDialog } from "@/features/creative-library/components/move-to-board-dialog";
 import { AnalysisJobsRunner } from "@/features/creative-library/components/analysis-jobs-runner";
+import { ActionTray } from "@/shared/ui/action-tray";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/ui/sheet";
+import { SurfaceCard } from "@/shared/ui/surface-card";
+import { isWithinDemoDays } from "@/shared/mocks/time";
 import type {
     CreativeBoard,
     CreativeFilterState,
     CreativeSort,
 } from "@/features/creative-library/types/creative";
 import { emptyFilterState } from "@/features/creative-library/types/creative";
-import { seedProducts } from "@/features/products/data/products";
-import { Images } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 
 export const Route = createFileRoute("/creative-library/")({
+    validateSearch: (search: Record<string, unknown>) => ({
+        import:
+            search.import === true ||
+            search.import === "true" ||
+            search.import === "1" ||
+            search.import === 1
+                ? true
+                : undefined,
+    }),
     head: () => ({
         meta: [
             { title: "Creative Library — Viraldy" },
@@ -43,10 +53,13 @@ export const Route = createFileRoute("/creative-library/")({
 });
 
 function CreativeLibraryPage() {
+    const routeSearch = Route.useSearch();
     const boards = useAppStore((s) => s.boards);
     const creatives = useAppStore((s) => s.creatives);
     const duplicate = useAppStore((s) => s.duplicateCreative);
     const archive = useAppStore((s) => s.archiveCreative);
+    const campaignDraft = useAppStore((s) => s.campaignDraft);
+    const setDraft = useAppStore((s) => s.setDraft);
 
     const navigate = useNavigate();
 
@@ -65,14 +78,14 @@ function CreativeLibraryPage() {
     const [adaptFor, setAdaptFor] = useState<{ id: string; title: string } | null>(null);
     const [newBoardOpen, setNewBoardOpen] = useState(false);
     const [renameBoard, setRenameBoard] = useState<CreativeBoard | null>(null);
-    const [moveForId, setMoveForId] = useState<string | null>(null);
+    const [moveForIds, setMoveForIds] = useState<string[]>([]);
     const [boardSheetOpen, setBoardSheetOpen] = useState(false);
 
-    const productMap = useMemo(() => {
-        const m = new Map<string, string>();
-        for (const p of seedProducts) m.set(p.id, p.name);
-        return m;
-    }, []);
+    useEffect(() => {
+        const importParam = new URLSearchParams(window.location.search).get("import");
+        if (!routeSearch.import && importParam !== "1" && importParam !== "true") return;
+        setImportOpen(true);
+    }, [routeSearch.import]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -80,9 +93,7 @@ function CreativeLibraryPage() {
         const board = boards.find((b) => b.id === activeBoard);
         if (board) {
             if (board.filter === "recent") {
-                list = list.filter(
-                    (c) => Date.now() - new Date(c.savedAt).getTime() < 7 * 86_400_000,
-                );
+                list = list.filter((c) => isWithinDemoDays(c.savedAt, 7));
             } else if (board.filter === "unassigned") {
                 list = list.filter((c) => c.boardIds.length === 0);
             } else if (!board.filter) {
@@ -169,6 +180,22 @@ function CreativeLibraryPage() {
         setAnalyzeOpen(true);
     }
 
+    function addToCampaign(ids: string[]) {
+        if (ids.length === 0) return;
+        setDraft({
+            referenceCreativeIds: Array.from(
+                new Set([...(campaignDraft.referenceCreativeIds ?? []), ...ids]),
+            ),
+        });
+        toast.success(
+            ids.length === 1 ? "Creative added to draft" : `${ids.length} creatives added`,
+            {
+                description: "Opening the campaign draft.",
+            },
+        );
+        void navigate({ to: "/campaigns/new" });
+    }
+
     function handleCardAction(id: string, action: string) {
         const c = creatives.find((x) => x.id === id);
         if (!c) return;
@@ -183,12 +210,10 @@ function CreativeLibraryPage() {
                 setAdaptFor({ id, title: c.title });
                 break;
             case "add-to-campaign":
-                toast("Add to campaign", {
-                    description: "Campaign Pack composer arrives in the next phase.",
-                });
+                addToCampaign([id]);
                 break;
             case "move-board":
-                setMoveForId(id);
+                setMoveForIds([id]);
                 break;
             case "duplicate":
                 duplicate(id);
@@ -217,26 +242,10 @@ function CreativeLibraryPage() {
                     title="Creative Library"
                     description="Save, decode, and reuse creative patterns for your products and campaigns."
                     actions={
-                        <>
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => openAnalyze(selectedEligible)}
-                                disabled={selectedEligible.length === 0}
-                            >
-                                <Sparkles className="h-4 w-4" />
-                                Analyze selected
-                                {selectedEligible.length > 0 && (
-                                    <span className="ml-1 rounded-full bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-active">
-                                        {selectedEligible.length}
-                                    </span>
-                                )}
-                            </Button>
-                            <Button size="sm" onClick={() => setImportOpen(true)}>
-                                <Plus className="h-4 w-4" />
-                                Import creative
-                            </Button>
-                        </>
+                        <Button size="sm" onClick={() => setImportOpen(true)}>
+                            <Plus className="h-4 w-4" />
+                            Import creative
+                        </Button>
                     }
                 />
 
@@ -255,7 +264,7 @@ function CreativeLibraryPage() {
 
                     {/* Main */}
                     <div className="flex min-w-0 flex-1 flex-col gap-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                             <Button
                                 variant="secondary"
                                 size="sm"
@@ -370,11 +379,11 @@ function CreativeLibraryPage() {
 
                         {/* Grid */}
                         {emptyBoard && (
-                            <div className="surface-card inner-top-highlight p-10">
+                            <SurfaceCard padding="lg">
                                 <EmptyState
                                     icon={Images}
-                                    title="Build this board with useful creative references"
-                                    description="Import an ad, creator video, or UGC example, then analyze its Creative DNA."
+                                    title="Build your creative memory"
+                                    description="Import a reference or creator video, then analyze its Creative DNA."
                                     action={
                                         <Button size="sm" onClick={() => setImportOpen(true)}>
                                             <Plus className="h-4 w-4" />
@@ -382,10 +391,10 @@ function CreativeLibraryPage() {
                                         </Button>
                                     }
                                 />
-                            </div>
+                            </SurfaceCard>
                         )}
                         {emptyFilter && (
-                            <div className="surface-card inner-top-highlight p-10">
+                            <SurfaceCard padding="lg">
                                 <EmptyState
                                     title="No creatives match these filters"
                                     description="Try clearing filters or searching the whole library."
@@ -414,7 +423,7 @@ function CreativeLibraryPage() {
                                         </div>
                                     }
                                 />
-                            </div>
+                            </SurfaceCard>
                         )}
                         {!emptyBoard && !emptyFilter && (
                             <div className={cn("grid gap-4", gridCols)}>
@@ -425,16 +434,60 @@ function CreativeLibraryPage() {
                                         selected={selected.has(c.id)}
                                         selectable={selectMode}
                                         compact={view === "compact"}
-                                        productLabel={
-                                            c.linkedProductId
-                                                ? productMap.get(c.linkedProductId)
-                                                : undefined
-                                        }
                                         onToggleSelect={() => toggleSelected(c.id)}
                                         onAction={(a) => handleCardAction(c.id, a)}
                                     />
                                 ))}
                             </div>
+                        )}
+
+                        {selectedArr.length > 0 && (
+                            <ActionTray
+                                context={
+                                    <span className="font-medium text-text-primary">
+                                        {selectedArr.length} creative
+                                        {selectedArr.length === 1 ? "" : "s"} selected
+                                    </span>
+                                }
+                                primaryAction={
+                                    <Button
+                                        size="sm"
+                                        onClick={() => openAnalyze(selectedEligible)}
+                                        disabled={selectedEligible.length === 0}
+                                    >
+                                        <Sparkles className="h-4 w-4" />
+                                        Analyze Creative DNA
+                                    </Button>
+                                }
+                                secondaryAction={
+                                    <>
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => addToCampaign(selectedArr)}
+                                        >
+                                            <Megaphone className="h-4 w-4" />
+                                            Add to campaign
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => setMoveForIds(selectedArr)}
+                                        >
+                                            <FolderInput className="h-4 w-4" />
+                                            Move to board
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            aria-label="Clear selection"
+                                            onClick={() => setSelected(new Set())}
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </>
+                                }
+                            />
                         )}
                     </div>
                 </div>
@@ -449,7 +502,16 @@ function CreativeLibraryPage() {
             />
             <ImportCreativeDialog
                 open={importOpen}
-                onOpenChange={setImportOpen}
+                onOpenChange={(open) => {
+                    setImportOpen(open);
+                    if (!open && routeSearch.import) {
+                        void navigate({
+                            to: "/creative-library",
+                            replace: true,
+                            search: { import: undefined },
+                        });
+                    }
+                }}
                 defaultBoardId={activeBoard}
             />
             <AnalyzeDnaDialog
@@ -479,11 +541,11 @@ function CreativeLibraryPage() {
                 renameBoardId={renameBoard?.id}
                 initialName={renameBoard?.name}
             />
-            {moveForId && (
+            {moveForIds.length > 0 && (
                 <MoveToBoardDialog
-                    open={!!moveForId}
-                    onOpenChange={(v) => !v && setMoveForId(null)}
-                    creativeId={moveForId}
+                    open={moveForIds.length > 0}
+                    onOpenChange={(v) => !v && setMoveForIds([])}
+                    creativeIds={moveForIds}
                 />
             )}
             <Sheet open={boardSheetOpen} onOpenChange={setBoardSheetOpen}>

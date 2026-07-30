@@ -10,3 +10,4 @@ class CurrentUser:
     external_auth_id: str
     email: str
     display_name: str | None
+    status: str

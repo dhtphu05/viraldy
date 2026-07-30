@@ -2,6 +2,7 @@ import { RightDrawer } from "@/shared/ui/right-drawer";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
 import { Separator } from "@/shared/ui/separator";
+import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 import type { PerfRecommendation } from "@/features/performance/types/performance";
 import { decisionTone } from "@/features/performance/lib/performanceEngine";
 import { useAppStore } from "@/app/store/app-store";
@@ -35,8 +36,11 @@ export function EvidenceDrawer({
     onGenerateVariants?: (rec: PerfRecommendation) => void;
 }) {
     const accept = useAppStore((s) => s.acceptPerfRec);
+    const unaccept = useAppStore((s) => s.unacceptPerfRec);
     const dismiss = useAppStore((s) => s.dismissPerfRec);
+    const undismiss = useAppStore((s) => s.undismissPerfRec);
     const snooze = useAppStore((s) => s.snoozePerfRec);
+    const unsnooze = useAppStore((s) => s.unsnoozePerfRec);
     const markReview = useAppStore((s) => s.markPerfReviewStarted);
     if (!rec) return null;
     return (
@@ -47,7 +51,7 @@ export function EvidenceDrawer({
             description={`${rec.kind} · ${rec.object}`}
             size="lg"
             footer={
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -60,7 +64,12 @@ export function EvidenceDrawer({
                                     key={r}
                                     onClick={() => {
                                         dismiss(rec.id, r);
-                                        toast.success(`Dismissed: ${r}`);
+                                        toast.success(`Dismissed: ${r}`, {
+                                            action: {
+                                                label: "Undo",
+                                                onClick: () => undismiss(rec.id),
+                                            },
+                                        });
                                         onOpenChange(false);
                                     }}
                                 >
@@ -73,7 +82,12 @@ export function EvidenceDrawer({
                                         rec.id,
                                         new Date(Date.now() + 3 * 86_400_000).toISOString(),
                                     );
-                                    toast.success("Snoozed 3 days");
+                                    toast.success("Snoozed 3 days", {
+                                        action: {
+                                            label: "Undo",
+                                            onClick: () => unsnooze(rec.id),
+                                        },
+                                    });
                                     onOpenChange(false);
                                 }}
                             >
@@ -89,7 +103,7 @@ export function EvidenceDrawer({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         {onGenerateVariants && rec.group === "Scale" && (
                             <Button
                                 size="sm"
@@ -103,7 +117,12 @@ export function EvidenceDrawer({
                             size="sm"
                             onClick={() => {
                                 accept(rec.id);
-                                toast.success("Recommendation accepted");
+                                toast.success("Recommendation accepted", {
+                                    action: {
+                                        label: "Undo",
+                                        onClick: () => unaccept(rec.id),
+                                    },
+                                });
                                 onOpenChange(false);
                             }}
                         >
@@ -114,6 +133,20 @@ export function EvidenceDrawer({
             }
         >
             <div className="space-y-5">
+                {rec.mediaUrl && (
+                    <DemoMediaTile
+                        mediaUrl={rec.mediaUrl}
+                        mediaKind={rec.mediaKind}
+                        posterUrl={rec.posterUrl}
+                        seed={rec.objectId ?? rec.id}
+                        label={rec.object}
+                        badges={[rec.mediaAspectRatio ?? "media", rec.objectType]}
+                        aspect={rec.mediaAspectRatio ?? "16 / 9"}
+                        fit={rec.mediaAspectRatio === "9:16" ? "contain" : "cover"}
+                        controls={rec.mediaKind === "video"}
+                        className="rounded-md bg-black"
+                    />
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                     <StatusChip tone={decisionTone[rec.group]}>{rec.kind}</StatusChip>
                     <StatusChip
@@ -130,7 +163,10 @@ export function EvidenceDrawer({
                 </div>
 
                 <Section title="Business impact">
-                    <p className="text-sm text-text-primary">{rec.estimatedImpact}</p>
+                    <p className="text-sm text-text-primary">
+                        <span className="font-medium">Demo scenario estimate:</span>{" "}
+                        {rec.estimatedImpact}
+                    </p>
                 </Section>
 
                 <Section title="Reason">
@@ -152,7 +188,7 @@ export function EvidenceDrawer({
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {rec.supportingMetrics.map((m) => (
                             <div key={m.label} className="rounded-md border border-hairline p-2.5">
-                                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">
+                                <p className="text-[10px] uppercase text-text-tertiary">
                                     {m.label}
                                 </p>
                                 <p className="tabular text-sm font-semibold text-text-primary">
@@ -195,9 +231,7 @@ export function EvidenceDrawer({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div>
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-text-tertiary">
-                {title}
-            </p>
+            <p className="mb-1.5 text-xs font-medium uppercase text-text-tertiary">{title}</p>
             {children}
         </div>
     );

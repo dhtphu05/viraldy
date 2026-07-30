@@ -38,7 +38,7 @@ export function EmptyState({
 export function LoadingState({ label = "Loading" }: { label?: string }) {
     return (
         <div className="flex items-center justify-center gap-2 p-8 text-sm text-text-tertiary">
-            <span className="h-3 w-3 animate-pulse rounded-full bg-text-tertiary/60" />
+            <span className="h-3 w-3 rounded-full bg-text-tertiary/60" />
             {label}…
         </div>
     );

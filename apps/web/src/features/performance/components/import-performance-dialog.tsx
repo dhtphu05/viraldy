@@ -20,6 +20,7 @@ import {
     canonicalFields,
     requiredFields,
 } from "@/features/performance/lib/performanceEngine";
+import { humanizeLabel } from "@/shared/lib/display";
 import { toast } from "sonner";
 import { UploadCloud, FileText, Sparkles, CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -159,7 +160,7 @@ export function ImportPerformanceDialog({
                                 <Textarea
                                     id="paste"
                                     className="mt-2 h-40 font-mono text-xs"
-                                    placeholder="asset_name,gmv,orders&#10;Kitchen Organizer UGC V3,4920,246"
+                                    placeholder="Asset Name,GMV,Orders&#10;Kitchen Organizer UGC V3,4920,246"
                                     value={pasted}
                                     onChange={(e) => setPasted(e.target.value)}
                                 />
@@ -209,7 +210,7 @@ export function ImportPerformanceDialog({
                                                     key={h}
                                                     className="px-3 py-2 text-left font-medium"
                                                 >
-                                                    {h}
+                                                    {humanizeLabel(h)}
                                                 </th>
                                             ))}
                                         </tr>
@@ -237,8 +238,8 @@ export function ImportPerformanceDialog({
                         <div className="space-y-3">
                             <p className="text-sm font-medium">Map fields</p>
                             <p className="text-xs text-text-tertiary">
-                                Match your columns to Viraldy fields. Required: asset_name, gmv,
-                                orders.
+                                Match your columns to Viraldy fields. Required: Asset name, GMV,
+                                Orders.
                             </p>
                             <div className="space-y-2">
                                 {parsed.headers.map((h) => (
@@ -246,7 +247,7 @@ export function ImportPerformanceDialog({
                                         key={h}
                                         className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-hairline px-3 py-2"
                                     >
-                                        <span className="truncate text-sm">{h}</span>
+                                        <span className="truncate text-sm">{humanizeLabel(h)}</span>
                                         <span className="text-text-tertiary">→</span>
                                         <Select
                                             value={
@@ -266,7 +267,7 @@ export function ImportPerformanceDialog({
                                                 <SelectItem value="__ignore">Ignore</SelectItem>
                                                 {canonicalFields.map((f) => (
                                                     <SelectItem key={f} value={f}>
-                                                        {f}
+                                                        {humanizeLabel(f)}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -355,7 +356,7 @@ export function ImportPerformanceDialog({
 
                 <DialogFooter className="flex items-center justify-between gap-2 border-t border-hairline bg-surface-soft/40 px-6 py-3">
                     <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                        <FileText className="h-3.5 w-3.5" /> Step: {step}
+                        <FileText className="h-3.5 w-3.5" /> Step: {humanizeLabel(step)}
                     </div>
                     <div className="flex items-center gap-2">
                         {step !== "source" && (

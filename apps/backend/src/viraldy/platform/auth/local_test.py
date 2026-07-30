@@ -10,6 +10,6 @@ class LocalTestTokenVerifier:
             raise UnauthorizedError()
         return VerifiedToken(
             external_auth_id="local-test-user",
-            email="local@viraldy.test",
+            email="local@viraldy.example.com",
             display_name="Local Viraldy User",
         )

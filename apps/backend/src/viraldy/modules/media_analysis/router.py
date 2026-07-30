@@ -31,7 +31,7 @@ async def get_media_analysis(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     asset = await AssetRepository(db).get(workspace_id, asset_id)
     if asset is None:
         raise NotFoundError("ASSET_NOT_FOUND", "Asset was not found.")

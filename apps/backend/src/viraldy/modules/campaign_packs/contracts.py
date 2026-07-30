@@ -137,5 +137,8 @@ class CampaignPackBriefV1(CampaignPackContractBase):
     dont: list[str] = Field(default_factory=list)
     rights_note: RightsNoteV1
     revision_checklist: list[str] = Field(default_factory=list)
-    source_adaptation_run_id: UUID
+    source_adaptation_run_id: UUID | None = None
+    source_viral_kit_id: UUID | None = None
+    source_viral_kit_version: int | None = Field(default=None, ge=1)
+    source_pattern_kit_version_ids: list[UUID] = Field(default_factory=list)
     source_concept_id: str

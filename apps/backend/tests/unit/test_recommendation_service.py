@@ -77,6 +77,15 @@ class FakeRecommendationRepository:
         return self.action_id
 
 
+class FakeProductEventPublisher:
+    def __init__(self, session: FakeSession) -> None:
+        self.session = session
+        self.records: list[dict[str, object]] = []
+
+    async def record(self, **kwargs: object) -> None:
+        self.records.append(kwargs)
+
+
 class MissingRecommendationRepository:
     def __init__(self, session: FakeSession) -> None:
         self.session = session
@@ -97,7 +106,9 @@ async def test_recommendation_service_records_valid_action(
 
     session = FakeSession()
     repository = FakeRecommendationRepository(session)
+    event_publisher = FakeProductEventPublisher(session)
     monkeypatch.setattr(service_module, "RecommendationRepository", lambda _: repository)
+    monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: event_publisher)
     workspace_id = uuid4()
     recommendation_id = uuid4()
     user_id = uuid4()
@@ -120,7 +131,41 @@ async def test_recommendation_service_records_valid_action(
         "accepted",
         {"source": "unit-test"},
     )
+    assert event_publisher.records == [
+        {
+            "event_type": "recommendation_accepted",
+            "workspace_id": workspace_id,
+            "actor_user_id": user_id,
+            "subject_type": "recommendation",
+            "subject_id": recommendation_id,
+            "payload_json": {"action_id": str(repository.action_id)},
+        }
+    ]
     assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_recommendation_service_accepts_ignored_without_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import viraldy.modules.recommendations.service as service_module
+
+    session = FakeSession()
+    repository = FakeRecommendationRepository(session)
+    event_publisher = FakeProductEventPublisher(session)
+    monkeypatch.setattr(service_module, "RecommendationRepository", lambda _: repository)
+    monkeypatch.setattr(service_module, "ProductEventPublisher", lambda _: event_publisher)
+
+    await RecommendationService(cast(AsyncSession, session)).record_action(
+        workspace_id=uuid4(),
+        recommendation_id=uuid4(),
+        user_id=uuid4(),
+        data=RecordRecommendationActionRequest(action_type="ignored"),
+    )
+
+    assert repository.recorded is not None
+    assert repository.recorded[3] == "ignored"
+    assert event_publisher.records == []
 
 
 @pytest.mark.asyncio
@@ -159,7 +204,7 @@ async def test_recommendation_service_rejects_invalid_action(
             workspace_id=uuid4(),
             recommendation_id=uuid4(),
             user_id=uuid4(),
-            data=RecordRecommendationActionRequest(action_type="unknown"),
+            data=RecordRecommendationActionRequest(action_type="dismissed"),
         )
 
 

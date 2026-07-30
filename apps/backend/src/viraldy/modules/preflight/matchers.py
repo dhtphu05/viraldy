@@ -940,8 +940,7 @@ def _spoken_text_items(facts: EvidenceFacts) -> list[tuple[EvidenceItemModel, st
 
 def _overlay_text_items(facts: EvidenceFacts) -> list[tuple[EvidenceItemModel, str]]:
     items = [
-        (item, _clean_text(item.value_json.get("text")))
-        for item in facts.items("on_screen_text")
+        (item, _clean_text(item.value_json.get("text"))) for item in facts.items("on_screen_text")
     ]
     for item in facts.items("cta_signal", "offer_signal", "hook_signal"):
         if text := _clean_text(item.value_json.get("overlay_text")):
@@ -1036,9 +1035,9 @@ def _evaluation(
 ) -> RequirementEvaluationV2:
     return RequirementEvaluationV2(
         requirement_id=requirement.id,
-        status=status,  # type: ignore[arg-type]
+        status=status,
         score=max(0, min(100, score)),
-        confidence=confidence,  # type: ignore[arg-type]
+        confidence=confidence,
         reason=reason,
         evidence_ids=list(dict.fromkeys(evidence_ids)),
         expected=expected,

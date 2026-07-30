@@ -1,24 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Volume2, VolumeX } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
-import {
-    thumbnailGradient,
-    thumbnailAccent,
-    formatDuration,
-} from "@/features/creative-library/lib/creative-visuals";
+import { Film, Pause, Play, Volume2, VolumeX } from "lucide-react";
+
+import { formatDuration } from "@/features/creative-library/lib/creative-visuals";
 import type {
     CreativeReference,
     DnaTimelineMarker,
 } from "@/features/creative-library/types/creative";
+import { cn } from "@/shared/lib/utils";
+import { normalizeAspectRatio } from "@/shared/lib/media-aspect";
+import { EvidenceTimeline, type EvidenceMarkerKind } from "@/shared/ui/evidence-timeline";
+import { SurfaceCard } from "@/shared/ui/surface-card";
 
-const kindColor: Record<DnaTimelineMarker["kind"], string> = {
-    hook: "var(--primary)",
-    reveal: "var(--info)",
-    demo: "var(--ok)",
-    proof: "var(--ok)",
-    offer: "var(--warn)",
-    cta: "var(--info)",
-    risk: "var(--destructive)",
+const markerKinds: Record<DnaTimelineMarker["kind"], EvidenceMarkerKind> = {
+    hook: "hook",
+    reveal: "product",
+    demo: "demo",
+    proof: "proof",
+    offer: "offer",
+    cta: "cta",
+    risk: "risk",
 };
 
 export function MediaPlayer({
@@ -38,20 +38,29 @@ export function MediaPlayer({
 }) {
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(true);
+    const videoRef = useRef<HTMLVideoElement>(null);
     const rafRef = useRef<number | null>(null);
     const lastTsRef = useRef<number | null>(null);
+    const hasVideo = creative.mediaKind === "video" && !!creative.mediaUrl;
+    const hasImage = creative.mediaKind === "image" && !!creative.mediaUrl;
+    const stillUrl =
+        !hasVideo &&
+        (creative.posterUrl ?? creative.thumbnailUrl ?? (hasImage ? creative.mediaUrl : undefined));
+    const hasSimulatedPlayback = !hasVideo && !stillUrl;
+    const safeDuration = Math.max(creative.durationSec, 0.1);
 
     useEffect(() => {
+        if (!hasSimulatedPlayback) return;
         if (!playing) {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             lastTsRef.current = null;
             return;
         }
-        const tick = (ts: number) => {
-            if (lastTsRef.current == null) lastTsRef.current = ts;
-            const dt = (ts - lastTsRef.current) / 1000;
-            lastTsRef.current = ts;
-            const next = currentTime + dt;
+        const tick = (timestamp: number) => {
+            if (lastTsRef.current == null) lastTsRef.current = timestamp;
+            const elapsed = (timestamp - lastTsRef.current) / 1000;
+            lastTsRef.current = timestamp;
+            const next = currentTime + elapsed;
             if (next >= creative.durationSec) {
                 onTimeChange(creative.durationSec);
                 setPlaying(false);
@@ -64,62 +73,133 @@ export function MediaPlayer({
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [playing, currentTime, creative.durationSec, onTimeChange]);
+    }, [creative.durationSec, currentTime, hasSimulatedPlayback, onTimeChange, playing]);
 
-    const pct = (currentTime / creative.durationSec) * 100;
-    const accent = thumbnailAccent(creative.thumbSeed);
+    useEffect(() => {
+        if (!hasVideo || !videoRef.current) return;
+        videoRef.current.muted = muted;
+    }, [hasVideo, muted]);
+
+    useEffect(() => {
+        if (!hasVideo || !videoRef.current) return;
+        if (Math.abs(videoRef.current.currentTime - currentTime) > 0.35) {
+            videoRef.current.currentTime = currentTime;
+        }
+    }, [currentTime, hasVideo]);
+
+    function seekTo(value: number) {
+        const next = Math.min(creative.durationSec, Math.max(0, value));
+        onTimeChange(next);
+        if (videoRef.current && Math.abs(videoRef.current.currentTime - next) > 0.2) {
+            videoRef.current.currentTime = next;
+        }
+    }
+
+    function togglePlayback() {
+        if (hasSimulatedPlayback) {
+            setPlaying((previous) => !previous);
+            return;
+        }
+        if (!videoRef.current) return;
+        if (videoRef.current.paused) void videoRef.current.play();
+        else videoRef.current.pause();
+    }
+
+    const progress = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
+    const mediaAspect = normalizeAspectRatio(creative.mediaAspectRatio, "16 / 9");
+    const vertical = creative.mediaAspectRatio === "9:16";
+    const playable = hasVideo || hasSimulatedPlayback;
 
     return (
-        <div className="surface-card inner-top-highlight overflow-hidden">
+        <SurfaceCard padding="none" className="min-w-0 overflow-hidden">
             <div
-                className="relative w-full"
-                style={{
-                    aspectRatio: "16 / 9",
-                    backgroundImage: thumbnailGradient(creative.thumbSeed),
-                }}
+                className={cn(
+                    "group relative w-full overflow-hidden bg-black",
+                    vertical && "mx-auto max-w-[420px]",
+                )}
+                style={{ aspectRatio: mediaAspect }}
             >
-                <div
-                    aria-hidden
-                    className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.35),transparent_55%)]"
-                />
-                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute left-4 top-4 flex items-center gap-2">
-                    <span className="rounded-md bg-black/45 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white backdrop-blur-sm">
+                {hasVideo ? (
+                    <video
+                        ref={videoRef}
+                        src={creative.mediaUrl}
+                        poster={creative.posterUrl ?? creative.thumbnailUrl}
+                        className="h-full w-full object-contain"
+                        muted={muted}
+                        playsInline
+                        preload="metadata"
+                        aria-label={`${creative.title} video`}
+                        onPlay={() => setPlaying(true)}
+                        onPause={() => setPlaying(false)}
+                        onEnded={() => setPlaying(false)}
+                        onTimeUpdate={(event) => onTimeChange(event.currentTarget.currentTime)}
+                    />
+                ) : stillUrl ? (
+                    <img
+                        src={stillUrl}
+                        alt={creative.title}
+                        className="h-full w-full object-contain"
+                    />
+                ) : (
+                    <div className="absolute inset-0 grid place-items-center bg-surface-muted text-text-tertiary">
+                        <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="grid h-14 w-14 place-items-center rounded-full bg-surface">
+                                <Film className="h-6 w-6" aria-hidden />
+                            </span>
+                            <span className="text-sm font-medium text-text-secondary">
+                                Preview unavailable
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-black/20" />
+                <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5">
+                    <span className="rounded-md bg-black/55 px-2 py-0.5 text-[11px] font-medium uppercase text-white">
                         {creative.platform}
                     </span>
-                    <span className="rounded-md bg-black/45 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                    <span className="rounded-md bg-black/55 px-2 py-0.5 text-[11px] font-medium tabular text-white">
                         {formatDuration(creative.durationSec)}
                     </span>
+                    {creative.mediaAspectRatio && (
+                        <span className="rounded-md bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white">
+                            {creative.mediaAspectRatio}
+                        </span>
+                    )}
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setPlaying((p) => !p)}
-                    aria-label={playing ? "Pause" : "Play"}
-                    className="absolute inset-0 grid place-items-center focus-visible:outline-none"
-                >
-                    <span
-                        className={cn(
-                            "grid h-14 w-14 place-items-center rounded-full bg-white/90 text-text-primary shadow-lg transition-opacity",
-                            playing && "opacity-0 group-hover:opacity-100",
-                        )}
+
+                {playable && (
+                    <button
+                        type="button"
+                        onClick={togglePlayback}
+                        aria-label={playing ? "Pause" : "Play"}
+                        className="absolute inset-0 grid place-items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
-                        {playing ? (
-                            <Pause className="h-5 w-5" />
-                        ) : (
-                            <Play className="h-5 w-5 fill-current" />
-                        )}
-                    </span>
-                </button>
+                        <span
+                            className={cn(
+                                "grid h-14 w-14 place-items-center rounded-full bg-white/90 text-text-primary shadow-floating-card transition-opacity",
+                                playing &&
+                                    "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+                            )}
+                        >
+                            {playing ? (
+                                <Pause className="h-5 w-5" />
+                            ) : (
+                                <Play className="h-5 w-5 fill-current" />
+                            )}
+                        </span>
+                    </button>
+                )}
             </div>
 
-            {/* Controls */}
-            <div className="flex flex-col gap-3 p-3.5">
+            <div className="flex min-w-0 flex-col gap-3 p-3.5">
                 <div className="flex items-center gap-3 text-sm">
                     <button
                         type="button"
-                        onClick={() => setPlaying((p) => !p)}
+                        onClick={togglePlayback}
                         aria-label={playing ? "Pause" : "Play"}
-                        className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        disabled={!playable}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:bg-surface-muted disabled:text-text-disabled"
                     >
                         {playing ? (
                             <Pause className="h-3.5 w-3.5" />
@@ -130,76 +210,62 @@ export function MediaPlayer({
                     <span className="tabular text-xs text-text-secondary">
                         {formatDuration(currentTime)} / {formatDuration(creative.durationSec)}
                     </span>
-                    <button
-                        type="button"
-                        onClick={() => setMuted((m) => !m)}
-                        aria-label={muted ? "Unmute" : "Mute"}
-                        aria-pressed={!muted}
-                        className="ml-auto grid h-8 w-8 place-items-center rounded-md text-text-tertiary hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                        {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                    </button>
+                    {hasVideo && (
+                        <button
+                            type="button"
+                            onClick={() => setMuted((previous) => !previous)}
+                            aria-label={muted ? "Unmute" : "Mute"}
+                            aria-pressed={!muted}
+                            className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-text-tertiary hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            {muted ? (
+                                <VolumeX className="h-4 w-4" />
+                            ) : (
+                                <Volume2 className="h-4 w-4" />
+                            )}
+                        </button>
+                    )}
                 </div>
 
-                {/* Timeline */}
-                <div className="relative pt-3">
+                <div className="relative py-2" aria-label="Media scrubber">
                     <div className="relative h-1.5 rounded-full bg-surface-muted">
                         <div
-                            className="absolute inset-y-0 left-0 rounded-full"
-                            style={{ width: `${pct}%`, backgroundColor: accent }}
+                            className="absolute inset-y-0 left-0 rounded-full bg-primary"
+                            style={{ width: `${progress}%` }}
                         />
                     </div>
                     <input
                         type="range"
                         min={0}
-                        max={creative.durationSec}
+                        max={safeDuration}
                         step={0.1}
-                        value={currentTime}
-                        aria-label="Seek"
-                        onChange={(e) => onTimeChange(Number(e.target.value))}
-                        className="absolute inset-x-0 top-2 h-4 w-full cursor-pointer opacity-0"
+                        value={Math.min(currentTime, safeDuration)}
+                        aria-label="Seek media"
+                        disabled={!!stillUrl}
+                        onChange={(event) => seekTo(Number(event.target.value))}
+                        className="absolute inset-x-0 top-0 h-5 w-full cursor-pointer opacity-0 disabled:cursor-default"
                     />
-                    {/* Markers */}
-                    {markers.map((m) => {
-                        const left = Math.min(
-                            100,
-                            Math.max(0, (m.at / creative.durationSec) * 100),
-                        );
-                        const active = m.id === activeMarkerId;
-                        return (
-                            <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => {
-                                    onTimeChange(m.at);
-                                    onMarkerClick?.(m.id);
-                                }}
-                                aria-label={`${m.label} at ${formatDuration(m.at)}`}
-                                className={cn(
-                                    "group/marker absolute -translate-x-1/2 focus-visible:outline-none",
-                                )}
-                                style={{ left: `${left}%`, top: "10px" }}
-                            >
-                                <span
-                                    className={cn(
-                                        "block h-3.5 w-3.5 rounded-full border-2 border-surface transition-transform",
-                                        active && "scale-125",
-                                    )}
-                                    style={{ backgroundColor: kindColor[m.kind] }}
-                                />
-                                <span
-                                    className={cn(
-                                        "pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 whitespace-nowrap rounded-md bg-surface px-2 py-0.5 text-[10px] font-medium text-text-primary opacity-0 shadow-sm-card transition-opacity group-hover/marker:opacity-100 group-focus-visible/marker:opacity-100",
-                                        active && "opacity-100",
-                                    )}
-                                >
-                                    {m.label} · {formatDuration(m.at)}
-                                </span>
-                            </button>
-                        );
-                    })}
                 </div>
+
+                {markers.length > 0 && (
+                    <EvidenceTimeline
+                        className="rounded-xl"
+                        duration={safeDuration}
+                        currentTime={currentTime}
+                        activeId={activeMarkerId}
+                        markers={markers.map((marker) => ({
+                            id: marker.id,
+                            at: marker.at,
+                            label: marker.label,
+                            kind: markerKinds[marker.kind],
+                        }))}
+                        onSeek={(time, marker) => {
+                            seekTo(time);
+                            onMarkerClick?.(marker.id);
+                        }}
+                    />
+                )}
             </div>
-        </div>
+        </SurfaceCard>
     );
 }

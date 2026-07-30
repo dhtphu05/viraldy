@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1
 
@@ -32,8 +32,8 @@ def fixture_media_contract(
         raise ValueError("unsupported_fixture")
 
     scenario = _fixture_scenario(fixture_id)
-    first_product_ms = int(scenario["product_first_ms"])
-    cta_ms = int(scenario["cta_ms"])
+    first_product_ms = int(cast(int, scenario["product_first_ms"]))
+    cta_ms = int(cast(int, scenario["cta_ms"]))
 
     observation_bundle = _fixture_observation_bundle(scenario)
     return deepcopy(
@@ -251,8 +251,8 @@ def _fixture_scenarios() -> dict[str, dict[str, object]]:
 
 
 def _fixture_observation_bundle(scenario: dict[str, object]) -> MediaObservationBundleV1:
-    first_product_ms = int(scenario["product_first_ms"])
-    cta_ms = int(scenario["cta_ms"])
+    first_product_ms = int(cast(int, scenario["product_first_ms"]))
+    cta_ms = int(cast(int, scenario["cta_ms"]))
     payload = {
         "schema_version": "media_observation_v1",
         "duration_ms": 28000,

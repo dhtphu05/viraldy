@@ -21,7 +21,7 @@ async def list_recommendations(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     recommendations = await RecommendationService(db).list_recommendations(workspace_id)
     return success(
         [recommendation.model_dump(mode="json") for recommendation in recommendations],
@@ -37,7 +37,7 @@ async def get_recommendation(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     recommendation = await RecommendationService(db).get_recommendation(
         workspace_id, recommendation_id
     )
@@ -55,7 +55,12 @@ async def record_recommendation_action(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(
+        workspace_id,
+        Permission.RECOMMENDATION_ACT,
+        current_user,
+        db,
+    )
     action = await RecommendationService(db).record_action(
         workspace_id,
         recommendation_id,

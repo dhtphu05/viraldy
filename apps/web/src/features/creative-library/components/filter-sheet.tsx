@@ -212,9 +212,7 @@ export function FilterSheet({
 function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                {title}
-            </p>
+            <p className="mb-2 text-[10px] font-semibold uppercase text-text-tertiary">{title}</p>
             <div className="flex flex-col gap-1.5">{children}</div>
         </div>
     );

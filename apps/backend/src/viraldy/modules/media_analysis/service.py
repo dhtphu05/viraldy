@@ -3,12 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -160,7 +160,7 @@ class SyncMediaEvidencePipeline:
 
             metadata = self.probe_local_file(source_path)
             self._update_version_metadata(snapshot.asset_version_id, metadata)
-            has_audio = int(metadata.get("audio_stream_count") or 0) > 0
+            has_audio = int(cast(int, metadata.get("audio_stream_count") or 0)) > 0
 
             thumbnail_path = work_dir / "thumbnail.jpg"
             audio_path = work_dir / "audio.wav"
@@ -186,7 +186,7 @@ class SyncMediaEvidencePipeline:
             frame_paths = _sample_frames(
                 source_path,
                 frame_dir,
-                int(metadata["duration_ms"]),
+                int(cast(int, metadata["duration_ms"])),
                 snapshot.workspace_id,
                 snapshot.asset_id,
                 snapshot.asset_version_id,
@@ -240,7 +240,7 @@ class SyncMediaEvidencePipeline:
             else:
                 ocr = provider.extract_ocr(uploaded_frames, self._product_context_json(snapshot))
                 ocr_run_id = None
-            scenes = _detect_scenes(int(metadata["duration_ms"]))
+            scenes = _detect_scenes(int(cast(int, metadata["duration_ms"])))
             observations, vision_run_id = self._tracked_provider_call(
                 snapshot,
                 processing_job_id,
@@ -258,7 +258,7 @@ class SyncMediaEvidencePipeline:
                     transcript,
                     ocr,
                     self._product_context_json(snapshot),
-                    int(metadata["duration_ms"]),
+                    int(cast(int, metadata["duration_ms"])),
                 ),
             )
             contract = _live_contract(
@@ -384,9 +384,9 @@ class SyncMediaEvidencePipeline:
         version = self._session.execute(
             select(AssetVersionModel).where(AssetVersionModel.id == asset_version_id)
         ).scalar_one()
-        version.duration_ms = int(metadata["duration_ms"])
-        version.width = int(metadata["width"])
-        version.height = int(metadata["height"])
+        version.duration_ms = int(cast(int, metadata["duration_ms"]))
+        version.width = int(cast(int, metadata["width"]))
+        version.height = int(cast(int, metadata["height"]))
         version.metadata_json = {**version.metadata_json, "media": metadata}
         version.validation_status = "processed"
 
@@ -797,7 +797,10 @@ def _time_fields(time_range: TimeRangeV1) -> dict[str, int]:
 def _optional_time_fields(time_range: TimeRangeV1 | None) -> dict[str, int | None]:
     if time_range is None:
         return {"start_ms": None, "end_ms": None}
-    return _time_fields(time_range)
+    return {
+        "start_ms": time_range.start_ms,
+        "end_ms": time_range.end_ms,
+    }
 
 
 def _frame_storage_key(value: dict[str, Any]) -> object:
@@ -841,7 +844,8 @@ def _run_subprocess(
     args: list[str], error_code: str, message: str
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(  # noqa: S603
+        # Executables are resolved locally and callers build fixed argument lists.
+        return subprocess.run(  # noqa: S603  # nosec B603
             args,
             check=True,
             capture_output=True,

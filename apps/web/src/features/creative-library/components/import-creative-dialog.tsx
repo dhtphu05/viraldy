@@ -13,7 +13,7 @@ import { Textarea } from "@/shared/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Link2, Upload, FileVideo, X, ImageIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -28,6 +28,8 @@ import type {
 import { thumbnailGradient } from "@/features/creative-library/lib/creative-visuals";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/shared/lib/utils";
+import { DisabledActionHint } from "@/shared/ui/disabled-action-hint";
+import { captureVideoPoster, posterForDemoUploadFilename } from "@/shared/lib/demo-media";
 
 const urlSchema = z.object({
     url: z
@@ -39,6 +41,14 @@ const urlSchema = z.object({
     notes: z.string().optional(),
 });
 type UrlValues = z.infer<typeof urlSchema>;
+
+type FileMeta = {
+    kind: "image" | "video";
+    width?: number;
+    height?: number;
+    durationSec?: number;
+    aspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
+};
 
 const demoOptions: {
     id: string;
@@ -144,6 +154,9 @@ export function ImportCreativeDialog({
     const [tab, setTab] = useState("url");
     const [file, setFile] = useState<File | null>(null);
     const [fileUrl, setFileUrl] = useState<string | null>(null);
+    const transferredUrlRef = useRef<string | null>(null);
+    const [fileMeta, setFileMeta] = useState<FileMeta | null>(null);
+    const [posterUrl, setPosterUrl] = useState<string | undefined>();
     const [fileErr, setFileErr] = useState<string | null>(null);
     const [demoId, setDemoId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -167,18 +180,39 @@ export function ImportCreativeDialog({
             setTab("url");
             setFile(null);
             setFileErr(null);
+            setFileMeta(null);
+            setPosterUrl(undefined);
             setDemoId(null);
+            transferredUrlRef.current = null;
             form.reset({ url: "", platform: "TikTok", board: defaultBoard, notes: "" });
         } else if (fileUrl) {
-            URL.revokeObjectURL(fileUrl);
+            if (transferredUrlRef.current !== fileUrl) URL.revokeObjectURL(fileUrl);
+            transferredUrlRef.current = null;
             setFileUrl(null);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
+    useEffect(() => {
+        if (!fileUrl || fileMeta?.kind !== "video") {
+            setPosterUrl(undefined);
+            return;
+        }
+        let active = true;
+        void captureVideoPoster(fileUrl).then((poster) => {
+            if (active) {
+                setPosterUrl(poster ?? (file ? posterForDemoUploadFilename(file.name) : undefined));
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, [file, fileMeta?.kind, fileUrl]);
+
     function handleFile(f: File | null) {
         if (!f) {
             setFile(null);
+            setFileMeta(null);
             if (fileUrl) URL.revokeObjectURL(fileUrl);
             setFileUrl(null);
             return;
@@ -195,8 +229,27 @@ export function ImportCreativeDialog({
         }
         setFileErr(null);
         setFile(f);
+        setFileMeta({ kind: f.type.startsWith("image/") ? "image" : "video" });
         if (fileUrl) URL.revokeObjectURL(fileUrl);
         setFileUrl(URL.createObjectURL(f));
+    }
+
+    function updateMediaMeta(
+        kind: "image" | "video",
+        width: number,
+        height: number,
+        durationSec?: number,
+    ) {
+        const ratio = width / Math.max(1, height);
+        const aspectRatio: FileMeta["aspectRatio"] =
+            Math.abs(ratio - 1) < 0.08
+                ? "1:1"
+                : ratio < 0.8
+                  ? "9:16"
+                  : ratio > 1.4
+                    ? "16:9"
+                    : "4:5";
+        setFileMeta({ kind, width, height, durationSec, aspectRatio });
     }
 
     function finish(cr: CreativeReference, message: string) {
@@ -204,6 +257,13 @@ export function ImportCreativeDialog({
         toast.success(message, { description: cr.title });
         onOpenChange(false);
         onImported?.(cr);
+    }
+
+    function openImportedCreative(cr: CreativeReference) {
+        setTimeout(
+            () => navigate({ to: "/creative-library/$creativeId", params: { creativeId: cr.id } }),
+            60,
+        );
     }
 
     async function submitUrl(v: UrlValues) {
@@ -227,10 +287,7 @@ export function ImportCreativeDialog({
         };
         setSubmitting(false);
         finish(cr, "Reference imported");
-        setTimeout(
-            () => navigate({ to: "/creative-library/$creativeId", params: { creativeId: cr.id } }),
-            60,
-        );
+        openImportedCreative(cr);
     }
 
     function submitFile() {
@@ -244,7 +301,13 @@ export function ImportCreativeDialog({
             title: file.name.replace(/\.[^.]+$/, ""),
             hookExcerpt: "Uploaded reference — analyze to extract the hook.",
             platform: "UGC",
-            durationSec: 22,
+            durationSec: Math.round(fileMeta?.durationSec ?? 22),
+            mediaKind: fileMeta?.kind ?? (file.type.startsWith("image/") ? "image" : "video"),
+            mediaUrl: fileUrl ?? undefined,
+            posterUrl: file.type.startsWith("video/")
+                ? (posterUrl ?? posterForDemoUploadFilename(file.name))
+                : undefined,
+            mediaAspectRatio: fileMeta?.aspectRatio,
             brandOrCreator: "Local upload",
             angle: "Testimonial",
             category: "Home & Kitchen",
@@ -254,8 +317,13 @@ export function ImportCreativeDialog({
             savedAt: now,
             thumbSeed: "amber",
         };
+        if (fileUrl) transferredUrlRef.current = fileUrl;
         finish(cr, "File imported");
+        openImportedCreative(cr);
     }
+
+    const fileBlocker =
+        tab === "file" ? (!file ? "Choose an image or video file first." : fileErr) : null;
 
     function submitDemo() {
         const d = demoOptions.find((x) => x.id === demoId);
@@ -276,6 +344,7 @@ export function ImportCreativeDialog({
             thumbSeed: d.seed,
         };
         finish(cr, "Demo creative added");
+        openImportedCreative(cr);
     }
 
     return (
@@ -405,13 +474,41 @@ export function ImportCreativeDialog({
                                 </label>
 
                                 {file && (
-                                    <div className="flex items-center gap-3 rounded-md border border-hairline bg-surface p-3">
-                                        <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-md bg-surface-muted">
+                                    <div className="grid gap-3 rounded-md border border-hairline bg-surface p-3 sm:grid-cols-[168px_minmax(0,1fr)]">
+                                        <div className="grid min-h-[150px] place-items-center overflow-hidden rounded-md bg-black">
                                             {fileUrl && file.type.startsWith("image/") ? (
                                                 <img
                                                     src={fileUrl}
-                                                    alt=""
-                                                    className="h-full w-full object-cover"
+                                                    alt="Selected creative preview"
+                                                    className="h-full w-full object-contain"
+                                                    onLoad={(event) =>
+                                                        updateMediaMeta(
+                                                            "image",
+                                                            event.currentTarget.naturalWidth,
+                                                            event.currentTarget.naturalHeight,
+                                                        )
+                                                    }
+                                                />
+                                            ) : fileUrl && file.type.startsWith("video/") ? (
+                                                <video
+                                                    src={fileUrl}
+                                                    poster={
+                                                        posterUrl ??
+                                                        posterForDemoUploadFilename(file.name)
+                                                    }
+                                                    className="h-full w-full object-contain"
+                                                    controls
+                                                    muted
+                                                    playsInline
+                                                    preload="metadata"
+                                                    onLoadedMetadata={(event) =>
+                                                        updateMediaMeta(
+                                                            "video",
+                                                            event.currentTarget.videoWidth,
+                                                            event.currentTarget.videoHeight,
+                                                            event.currentTarget.duration,
+                                                        )
+                                                    }
                                                 />
                                             ) : file.type.startsWith("video/") ? (
                                                 <FileVideo className="h-5 w-5 text-text-tertiary" />
@@ -427,6 +524,20 @@ export function ImportCreativeDialog({
                                                 {(file.size / (1024 * 1024)).toFixed(1)} MB ·{" "}
                                                 {file.type || "unknown"}
                                             </p>
+                                            {fileMeta && (
+                                                <p className="mt-1 text-xs text-text-secondary">
+                                                    {fileMeta.kind} ·{" "}
+                                                    {fileMeta.width && fileMeta.height
+                                                        ? `${fileMeta.width}×${fileMeta.height}`
+                                                        : "reading dimensions"}
+                                                    {fileMeta.durationSec
+                                                        ? ` · ${Math.round(fileMeta.durationSec)}s`
+                                                        : ""}
+                                                    {fileMeta.aspectRatio
+                                                        ? ` · ${fileMeta.aspectRatio}`
+                                                        : ""}
+                                                </p>
+                                            )}
                                         </div>
                                         <Button
                                             type="button"
@@ -502,14 +613,16 @@ export function ImportCreativeDialog({
                         </Button>
                     )}
                     {tab === "file" && (
-                        <Button
-                            type="button"
-                            onClick={submitFile}
-                            disabled={!file}
-                            className="min-w-[140px]"
-                        >
-                            Import creative
-                        </Button>
+                        <DisabledActionHint reason={fileBlocker} className="items-end">
+                            <Button
+                                type="button"
+                                onClick={submitFile}
+                                disabled={!!fileBlocker}
+                                className="min-w-[140px]"
+                            >
+                                Import creative
+                            </Button>
+                        </DisabledActionHint>
                     )}
                     {tab === "demo" && (
                         <Button

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.assets.public import AssetRepository
 from viraldy.modules.jobs.public import get_existing_idempotent_job, request_mvp_job
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.products.public import ProductLookupPort
 from viraldy.modules.reference_boards.public import ReferenceBoardRepository
 from viraldy.modules.references.repository import ReferenceRepository
@@ -50,6 +51,18 @@ class ReferenceService:
             data.title,
             data.notes,
         )
+        await ProductEventPublisher(self._session).record(
+            event_type="reference_uploaded",
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            subject_type="reference",
+            subject_id=reference.id,
+            payload_json={
+                "asset_id": str(reference.asset_id),
+                "product_id": str(reference.product_id) if reference.product_id else None,
+                "source_platform": reference.source_platform,
+            },
+        )
         await self._session.commit()
         await self._session.refresh(reference)
         return ReferenceResponse.model_validate(reference)
@@ -68,13 +81,14 @@ class ReferenceService:
         self,
         workspace_id: UUID,
         reference_id: UUID,
+        user_id: UUID,
         idempotency_key: str | None,
     ) -> AnalyzeReferenceResponse:
         reference = await self._repository.get(workspace_id, reference_id)
         if reference is None:
             raise NotFoundError("REFERENCE_NOT_FOUND", "Reference was not found.")
         existing_job = await get_existing_idempotent_job(
-            self._session, workspace_id, "analyze_reference", idempotency_key
+            self._session, workspace_id, "creative_dna_build", idempotency_key
         )
         if existing_job is not None:
             return AnalyzeReferenceResponse(
@@ -92,11 +106,12 @@ class ReferenceService:
             workspace_id,
             "reference",
             reference_id,
-            "analyze_reference",
+            "creative_dna_build",
             {
                 "reference_id": str(reference_id),
                 "asset_id": str(reference.asset_id),
                 "asset_version_id": str(version.id),
+                "actor_user_id": str(user_id),
             },
             idempotency_key,
         )

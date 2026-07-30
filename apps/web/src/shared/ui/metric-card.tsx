@@ -10,7 +10,7 @@ export function MetricCard({ metric, className }: { metric: Metric; className?: 
             className={cn("flex min-h-[116px] flex-col justify-between gap-2 px-4 py-4", className)}
         >
             <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-xs font-medium uppercase tracking-wide text-text-tertiary">
+                <p className="truncate text-xs font-medium uppercase text-text-tertiary">
                     {metric.label}
                 </p>
                 {metric.delta && (
@@ -18,7 +18,7 @@ export function MetricCard({ metric, className }: { metric: Metric; className?: 
                 )}
             </div>
             <div className="flex items-baseline gap-2">
-                <span className="tabular text-[28px] font-semibold leading-none tracking-tight text-text-primary">
+                <span className="tabular text-[28px] font-semibold leading-none text-text-primary">
                     {metric.value}
                 </span>
             </div>

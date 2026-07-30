@@ -30,7 +30,7 @@ def ai_readiness(settings: Settings) -> AiReadiness:
         missing.append("AI_PROVIDER")
     if settings.asr_provider != "openai_compatible":
         missing.append("ASR_PROVIDER")
-    required = {
+    required: dict[str, object | None] = {
         "AI_BASE_URL": settings.ai_base_url,
         "AI_TEXT_MODEL": settings.ai_text_model,
         "AI_VISION_MODEL": settings.ai_vision_model,

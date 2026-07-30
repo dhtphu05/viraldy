@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UgcReviewRouteImport } from './routes/ugc-review'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ProductsRouteImport } from './routes/products'
+import { Route as ProductionRouteImport } from './routes/production'
 import { Route as PerformanceRouteImport } from './routes/performance'
 import { Route as MvpRouteImport } from './routes/mvp'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -19,6 +20,7 @@ import { Route as CreativeLibraryRouteImport } from './routes/creative-library'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as UgcReviewIndexRouteImport } from './routes/ugc-review.index'
+import { Route as PerformanceIndexRouteImport } from './routes/performance.index'
 import { Route as CreativeLibraryIndexRouteImport } from './routes/creative-library.index'
 import { Route as CampaignsIndexRouteImport } from './routes/campaigns.index'
 import { Route as UgcReviewAssetIdRouteImport } from './routes/ugc-review.$assetId'
@@ -40,6 +42,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductionRoute = ProductionRouteImport.update({
+  id: '/production',
+  path: '/production',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerformanceRoute = PerformanceRouteImport.update({
@@ -76,6 +83,11 @@ const UgcReviewIndexRoute = UgcReviewIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => UgcReviewRoute,
+} as any)
+const PerformanceIndexRoute = PerformanceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PerformanceRoute,
 } as any)
 const CreativeLibraryIndexRoute = CreativeLibraryIndexRouteImport.update({
   id: '/',
@@ -121,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
+  '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
   '/ugc-review': typeof UgcReviewRouteWithChildren
@@ -131,13 +144,14 @@ export interface FileRoutesByFullPath {
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
   '/campaigns/': typeof CampaignsIndexRoute
   '/creative-library/': typeof CreativeLibraryIndexRoute
+  '/performance/': typeof PerformanceIndexRoute
   '/ugc-review/': typeof UgcReviewIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/mvp': typeof MvpRoute
-  '/performance': typeof PerformanceRouteWithChildren
+  '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
@@ -147,6 +161,7 @@ export interface FileRoutesByTo {
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
   '/campaigns': typeof CampaignsIndexRoute
   '/creative-library': typeof CreativeLibraryIndexRoute
+  '/performance': typeof PerformanceIndexRoute
   '/ugc-review': typeof UgcReviewIndexRoute
 }
 export interface FileRoutesById {
@@ -157,6 +172,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
+  '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
   '/ugc-review': typeof UgcReviewRouteWithChildren
@@ -167,6 +183,7 @@ export interface FileRoutesById {
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
   '/campaigns/': typeof CampaignsIndexRoute
   '/creative-library/': typeof CreativeLibraryIndexRoute
+  '/performance/': typeof PerformanceIndexRoute
   '/ugc-review/': typeof UgcReviewIndexRoute
 }
 export interface FileRouteTypes {
@@ -178,6 +195,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/mvp'
     | '/performance'
+    | '/production'
     | '/products'
     | '/settings'
     | '/ugc-review'
@@ -188,13 +206,14 @@ export interface FileRouteTypes {
     | '/ugc-review/$assetId'
     | '/campaigns/'
     | '/creative-library/'
+    | '/performance/'
     | '/ugc-review/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/dashboard'
     | '/mvp'
-    | '/performance'
+    | '/production'
     | '/products'
     | '/settings'
     | '/campaigns/$campaignId'
@@ -204,6 +223,7 @@ export interface FileRouteTypes {
     | '/ugc-review/$assetId'
     | '/campaigns'
     | '/creative-library'
+    | '/performance'
     | '/ugc-review'
   id:
     | '__root__'
@@ -213,6 +233,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/mvp'
     | '/performance'
+    | '/production'
     | '/products'
     | '/settings'
     | '/ugc-review'
@@ -223,6 +244,7 @@ export interface FileRouteTypes {
     | '/ugc-review/$assetId'
     | '/campaigns/'
     | '/creative-library/'
+    | '/performance/'
     | '/ugc-review/'
   fileRoutesById: FileRoutesById
 }
@@ -233,6 +255,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   MvpRoute: typeof MvpRoute
   PerformanceRoute: typeof PerformanceRouteWithChildren
+  ProductionRoute: typeof ProductionRoute
   ProductsRoute: typeof ProductsRoute
   SettingsRoute: typeof SettingsRoute
   UgcReviewRoute: typeof UgcReviewRouteWithChildren
@@ -259,6 +282,13 @@ declare module '@tanstack/react-router' {
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/production': {
+      id: '/production'
+      path: '/production'
+      fullPath: '/production'
+      preLoaderRoute: typeof ProductionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/performance': {
@@ -309,6 +339,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/ugc-review/'
       preLoaderRoute: typeof UgcReviewIndexRouteImport
       parentRoute: typeof UgcReviewRoute
+    }
+    '/performance/': {
+      id: '/performance/'
+      path: '/'
+      fullPath: '/performance/'
+      preLoaderRoute: typeof PerformanceIndexRouteImport
+      parentRoute: typeof PerformanceRoute
     }
     '/creative-library/': {
       id: '/creative-library/'
@@ -394,10 +431,12 @@ const CreativeLibraryRouteWithChildren = CreativeLibraryRoute._addFileChildren(
 
 interface PerformanceRouteChildren {
   PerformanceCampaignIdRoute: typeof PerformanceCampaignIdRoute
+  PerformanceIndexRoute: typeof PerformanceIndexRoute
 }
 
 const PerformanceRouteChildren: PerformanceRouteChildren = {
   PerformanceCampaignIdRoute: PerformanceCampaignIdRoute,
+  PerformanceIndexRoute: PerformanceIndexRoute,
 }
 
 const PerformanceRouteWithChildren = PerformanceRoute._addFileChildren(
@@ -425,6 +464,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   MvpRoute: MvpRoute,
   PerformanceRoute: PerformanceRouteWithChildren,
+  ProductionRoute: ProductionRoute,
   ProductsRoute: ProductsRoute,
   SettingsRoute: SettingsRoute,
   UgcReviewRoute: UgcReviewRouteWithChildren,

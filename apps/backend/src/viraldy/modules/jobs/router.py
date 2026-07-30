@@ -20,7 +20,7 @@ async def list_jobs(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     jobs = await JobService(db).list_jobs(workspace_id)
     return success([job.model_dump(mode="json") for job in jobs], request_id)
 
@@ -33,6 +33,6 @@ async def get_job(
     db: DbSession,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     job = await JobService(db).get_job(workspace_id, job_id)
     return success(job.model_dump(mode="json"), request_id)

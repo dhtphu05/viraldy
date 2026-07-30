@@ -7,7 +7,7 @@ def ensure_transition(current: str, target: str) -> None:
     allowed = {
         "queued": {"dispatching", "running", "cancelled"},
         "dispatching": {"running", "queued", "failed"},
-        "running": {"retrying", "completed", "failed", "cancelled"},
+        "running": {"retrying", "succeeded", "failed", "cancelled"},
         "retrying": {"running", "failed"},
     }
     if target not in allowed.get(current, set()):

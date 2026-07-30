@@ -17,21 +17,26 @@ export function MoveToBoardDialog({
     open,
     onOpenChange,
     creativeId,
+    creativeIds,
 }: {
     open: boolean;
     onOpenChange: (v: boolean) => void;
-    creativeId: string;
+    creativeId?: string;
+    creativeIds?: string[];
 }) {
     const allBoards = useAppStore((s) => s.boards);
     const boards = useMemo(() => allBoards.filter((b) => !b.system), [allBoards]);
     const move = useAppStore((s) => s.moveCreativeToBoard);
     const [choice, setChoice] = useState<string | null>(null);
+    const ids = creativeIds ?? (creativeId ? [creativeId] : []);
 
     function confirm() {
-        if (!choice) return;
-        move(creativeId, choice);
+        if (!choice || ids.length === 0) return;
+        ids.forEach((id) => move(id, choice));
         onOpenChange(false);
-        toast.success("Added to board");
+        toast.success(
+            ids.length === 1 ? "Added to board" : `${ids.length} creatives added to board`,
+        );
     }
 
     return (
@@ -39,9 +44,16 @@ export function MoveToBoardDialog({
             <DialogContent className="sm:max-w-[420px]">
                 <DialogHeader>
                     <DialogTitle>Move to board</DialogTitle>
-                    <DialogDescription>Pick a destination board.</DialogDescription>
+                    <DialogDescription>
+                        Pick a destination for{" "}
+                        {ids.length === 1 ? "this creative" : `${ids.length} creatives`}.
+                    </DialogDescription>
                 </DialogHeader>
-                <ul className="max-h-64 overflow-y-auto rounded-md border border-hairline/70">
+                <ul
+                    role="radiogroup"
+                    aria-label="Destination board"
+                    className="max-h-64 overflow-y-auto rounded-md border border-control-border"
+                >
                     {boards.length === 0 ? (
                         <li className="p-4 text-sm text-text-tertiary">No custom boards yet.</li>
                     ) : (
@@ -52,8 +64,10 @@ export function MoveToBoardDialog({
                                     <button
                                         type="button"
                                         onClick={() => setChoice(b.id)}
+                                        role="radio"
+                                        aria-checked={active}
                                         className={cn(
-                                            "flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+                                            "flex min-h-11 w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                                             active
                                                 ? "bg-primary-softer text-text-primary"
                                                 : "hover:bg-surface-soft",
@@ -72,8 +86,8 @@ export function MoveToBoardDialog({
                     <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button type="button" disabled={!choice} onClick={confirm}>
-                        Move
+                    <Button type="button" disabled={!choice || ids.length === 0} onClick={confirm}>
+                        Move to board
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -42,6 +42,10 @@ export type PerfAsset = {
     cogs: number;
     createdAt: string;
     ageDays: number;
+    mediaKind?: "image" | "video";
+    mediaUrl?: string;
+    posterUrl?: string;
+    mediaAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
     isImprovedVersion?: boolean;
     fatigueSignal?: "none" | "monitor" | "prepare-refresh" | "high" | "stop-scaling";
     ctrTrendPct?: number; // e.g. -0.28
@@ -89,6 +93,10 @@ export type PerfRecommendation = {
     estimatedImpact: string;
     confidence: Confidence;
     nextAction: string;
+    mediaKind?: "image" | "video";
+    mediaUrl?: string;
+    posterUrl?: string;
+    mediaAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
     assumptions?: string[];
     missingData?: string[];
     risks?: string[];

@@ -20,7 +20,17 @@ class ObjectMetadata:
     checksum_sha256: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class StoredObject:
+    key: str
+    last_modified: datetime
+    size_bytes: int
+
+
 class StoragePort(Protocol):
+    def check_health(self) -> bool:
+        raise NotImplementedError
+
     def create_presigned_upload(self, key: str, content_type: str) -> PresignedUpload:
         raise NotImplementedError
 
@@ -40,4 +50,7 @@ class StoragePort(Protocol):
         raise NotImplementedError
 
     def delete_object(self, key: str) -> None:
+        raise NotImplementedError
+
+    def list_objects(self, prefix: str) -> list[StoredObject]:
         raise NotImplementedError

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from viraldy.modules.assets.models import AssetModel, AssetVersionModel
 from viraldy.modules.identity.models import UserModel
@@ -31,12 +34,16 @@ def main() -> None:
         if user is None:
             user = UserModel(
                 external_auth_id="local-test-user",
-                email="local@viraldy.test",
+                email="local@viraldy.example.com",
                 display_name="Local Viraldy User",
                 status="active",
             )
             session.add(user)
             session.flush()
+        else:
+            user.email = "local@viraldy.example.com"
+            user.display_name = "Local Viraldy User"
+            user.status = "active"
 
         workspace = session.execute(
             select(WorkspaceModel).where(WorkspaceModel.slug == "local-viraldy")
@@ -179,10 +186,10 @@ def main() -> None:
 
 
 def _ensure_fixture_asset(
-    session,
-    workspace_id,
-    product_id,
-    user_id,
+    session: Session,
+    workspace_id: UUID,
+    product_id: UUID,
+    user_id: UUID,
     title: str,
     fixture_id: str,
 ) -> AssetModel:
@@ -226,7 +233,12 @@ def _ensure_fixture_asset(
     return asset
 
 
-def _ensure_category_fixture_pack(session, workspace_id, board_id, user_id) -> None:
+def _ensure_category_fixture_pack(
+    session: Session,
+    workspace_id: UUID,
+    board_id: UUID,
+    user_id: UUID,
+) -> None:
     fixtures = [
         (
             "GlowPass Beauty Tool",
@@ -323,9 +335,9 @@ def _ensure_category_fixture_pack(session, workspace_id, board_id, user_id) -> N
 
 
 def _ensure_product(
-    session,
-    workspace_id,
-    user_id,
+    session: Session,
+    workspace_id: UUID,
+    user_id: UUID,
     name: str,
     description: str,
     market: str,
@@ -423,12 +435,12 @@ def _fixture_product_context(
 
 
 def _ensure_reference(
-    session,
-    workspace_id,
-    board_id,
-    product_id,
-    asset_id,
-    user_id,
+    session: Session,
+    workspace_id: UUID,
+    board_id: UUID,
+    product_id: UUID,
+    asset_id: UUID,
+    user_id: UUID,
     title: str,
     fixture_id: str,
 ) -> None:

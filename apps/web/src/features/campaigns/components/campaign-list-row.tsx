@@ -5,6 +5,7 @@ import type { SeedCampaign } from "@/features/campaigns/mocks/campaigns";
 import type { CampaignPackStatus } from "@/features/campaigns/types/campaign";
 import type { MetricTone } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
+import { RelativeTime } from "@/shared/ui/relative-time";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,18 +23,6 @@ const packStatusTone: Record<CampaignPackStatus, MetricTone> = {
     Completed: "ok",
     Archived: "neutral",
 };
-
-function timeAgo(iso?: string) {
-    if (!iso) return "—";
-    const diffMs = Date.now() - new Date(iso).getTime();
-    const mins = Math.round(diffMs / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.round(hrs / 24);
-    return `${days}d ago`;
-}
 
 export function CampaignListRow({
     campaign,
@@ -56,7 +45,7 @@ export function CampaignListRow({
     return (
         <div
             className={cn(
-                "group grid w-full grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-soft/60 sm:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_120px_120px_minmax(0,1.4fr)_auto]",
+                "group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-3 text-left transition-colors hover:bg-surface-soft/60 md:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_120px_120px_minmax(0,1.4fr)_auto]",
                 className,
             )}
         >
@@ -71,7 +60,7 @@ export function CampaignListRow({
                     {campaign.market ? ` · ${campaign.market}` : ""}
                 </p>
             </Link>
-            <div className="min-w-0">
+            <div className="col-start-1 row-start-2 mt-2 min-w-0 md:col-start-auto md:row-start-auto md:mt-0">
                 <StatusChip tone={packStatusTone[status]} dot>
                     {status}
                 </StatusChip>
@@ -81,25 +70,32 @@ export function CampaignListRow({
                     </p>
                 )}
             </div>
-            <div className="hidden min-w-0 sm:block">
+            <div className="hidden min-w-0 xl:block">
                 <p className="truncate text-sm text-text-primary">{campaign.primaryAngle ?? "—"}</p>
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Angle</p>
+                <p className="text-[10px] uppercase text-text-tertiary">Angle</p>
             </div>
-            <div className="hidden sm:block">
+            <div className="hidden xl:block">
                 <p className="tabular text-sm text-text-primary">
                     {campaign.referenceCount ?? 0} refs · {campaign.hookCount ?? 0} hooks
                 </p>
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">
+                <p className="text-[10px] uppercase text-text-tertiary">
                     {campaign.deliverables ?? 0} deliverables
                 </p>
             </div>
-            <div className="hidden min-w-0 sm:block">
-                <p className="truncate text-sm text-text-primary">{campaign.nextAction}</p>
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">
-                    {timeAgo(campaign.updatedAt)}
+            <Link
+                to="/campaigns/$campaignId"
+                params={{ campaignId: campaign.id }}
+                className="col-start-1 row-start-3 mt-2 min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:col-start-auto md:row-start-auto md:mt-0"
+            >
+                <p className="flex items-center gap-1 text-sm font-semibold text-primary-active">
+                    <span className="truncate">{campaign.nextAction}</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 </p>
-            </div>
-            <div className="flex items-center gap-1">
+                <p className="text-[10px] uppercase text-text-tertiary">
+                    <RelativeTime value={campaign.updatedAt} />
+                </p>
+            </Link>
+            <div className="col-start-2 row-span-3 row-start-1 flex items-center md:col-start-auto md:row-span-1 md:row-start-auto">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button
@@ -126,14 +122,6 @@ export function CampaignListRow({
                         )}
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <Link
-                    to="/campaigns/$campaignId"
-                    params={{ campaignId: campaign.id }}
-                    className="grid h-8 w-8 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary"
-                    aria-label={`Open ${campaign.name}`}
-                >
-                    <ChevronRight className="h-4 w-4" />
-                </Link>
             </div>
         </div>
     );

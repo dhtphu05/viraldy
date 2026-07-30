@@ -27,7 +27,7 @@ async def create_adaptation(
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+        workspace_id, Permission.VIRAL_KIT_WRITE, current_user, db
     )
     run = await AdaptationService(db, settings).create(workspace_id, current_user.id, payload)
     return success(run.model_dump(mode="json"), request_id)
@@ -42,6 +42,6 @@ async def get_adaptation(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
     run = await AdaptationService(db, settings).get(workspace_id, adaptation_id)
     return success(run.model_dump(mode="json"), request_id)

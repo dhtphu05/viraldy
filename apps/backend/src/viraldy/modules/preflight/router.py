@@ -27,9 +27,7 @@ async def create_preflight(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
-    )
+    await require_workspace_permission(workspace_id, Permission.PREFLIGHT_RUN, current_user, db)
     result = await PreflightService(db, settings).create(workspace_id, payload, idempotency_key)
     return success(result.model_dump(mode="json"), request_id)
 
@@ -43,6 +41,6 @@ async def get_preflight(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
-    run = await PreflightService(db, settings).get(workspace_id, preflight_run_id)
+    await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
+    run = await PreflightService(db, settings).get(workspace_id, preflight_run_id, current_user.id)
     return success(run.model_dump(mode="json"), request_id)

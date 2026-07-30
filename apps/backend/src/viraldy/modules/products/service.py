@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.products.contracts import (
     ProductContextV1,
     build_minimal_product_context,
@@ -44,6 +45,18 @@ class ProductService:
             product_context_json=product_context_to_json(product_context),
             context_schema_version=product_context.schema_version,
             created_by_user_id=user_id,
+        )
+        await ProductEventPublisher(self._session).record(
+            event_type="product_created",
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            subject_type="product",
+            subject_id=product.id,
+            payload_json={
+                "name": product.name,
+                "context_schema_version": product.context_schema_version,
+                "product_context_version": product.product_context_version,
+            },
         )
         await self._session.commit()
         return _response_from_product(product)
@@ -86,6 +99,9 @@ class ProductService:
             updated_context = current.model_copy(update={"identity": identity})
             values["product_context_json"] = product_context_to_json(updated_context)
             values["context_schema_version"] = updated_context.schema_version
+        if "product_context_json" in values:
+            current_version = int(getattr(product, "product_context_version", 1) or 1)
+            values["product_context_version"] = current_version + 1
 
         product = await self._repository.update_product(workspace_id, product_id, values)
         if product is None:
@@ -154,6 +170,7 @@ def _response_from_product(product: ProductModel) -> ProductResponse:
         metadata_json=product.metadata_json,
         product_context=context,
         context_schema_version=product.context_schema_version or context.schema_version,
+        product_context_version=int(getattr(product, "product_context_version", 1) or 1),
     )
 
 

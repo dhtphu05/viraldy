@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -48,6 +48,12 @@ class SceneContract(BaseModel):
     scenes: list[SceneItem]
 
 
+class _TranscriptSegmentPayload(TypedDict):
+    start_ms: int
+    end_ms: int
+    text: str
+
+
 class LiveAnalysisProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -74,13 +80,14 @@ class LiveAnalysisProvider:
             },
         )
         payload = response.payload
-        segments = [
+        raw_segments = cast(list[dict[str, object]], payload.get("segments", []))
+        segments: list[_TranscriptSegmentPayload] = [
             {
-                "start_ms": round(float(segment.get("start", 0)) * 1000),
-                "end_ms": round(float(segment.get("end", 0)) * 1000),
+                "start_ms": round(float(cast(str | int | float, segment.get("start", 0))) * 1000),
+                "end_ms": round(float(cast(str | int | float, segment.get("end", 0))) * 1000),
                 "text": str(segment.get("text", "")).strip(),
             }
-            for segment in payload.get("segments", [])
+            for segment in raw_segments
             if str(segment.get("text", "")).strip()
         ]
         contract = TranscriptContract(

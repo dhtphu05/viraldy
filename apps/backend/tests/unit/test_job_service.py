@@ -25,12 +25,8 @@ class FakeDispatcher:
         self.dispatched: list[UUID] = []
         self.mvp_dispatched: list[UUID] = []
 
-    def dispatch_process_asset(self, job_id: UUID) -> DispatchResult:
+    def dispatch_job(self, job_id: UUID, job_type: str) -> DispatchResult:
         self.dispatched.append(job_id)
-        return DispatchResult(task_id="task-1", dispatched=True)
-
-    def dispatch_mvp_job(self, job_id: UUID) -> DispatchResult:
-        self.mvp_dispatched.append(job_id)
         return DispatchResult(task_id="task-1", dispatched=True)
 
 
@@ -61,7 +57,7 @@ class FakeJobRepository:
             workspace_id=workspace_id,
             subject_type="asset",
             subject_id=asset_id,
-            job_type="process_asset",
+            job_type="media_analysis",
             queue_name="default",
             status="queued",
             progress=0,
@@ -174,7 +170,7 @@ async def test_job_service_does_not_dispatch_existing_idempotent_job(
         workspace_id=uuid4(),
         subject_type="asset",
         subject_id=uuid4(),
-        job_type="process_asset",
+        job_type="media_analysis",
         queue_name="default",
         status="queued",
         progress=0,

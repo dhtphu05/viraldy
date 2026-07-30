@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
+from typing import Literal
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -25,3 +30,41 @@ class ProviderResponse(BaseModel):
     http_status: int
     provider_request_id: str | None
     latency_ms: int
+
+
+AiModelRunStatus = Literal["pending", "running", "completed", "failed"]
+
+
+class AiModelRunResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    processing_job_id: UUID | None
+    subject_type: str
+    subject_id: UUID
+    capability: str
+    operation: str
+    analysis_mode: str
+    provider: str
+    model: str
+    prompt_version: str | None
+    response_schema_version: str
+    schema_version: str
+    status: AiModelRunStatus
+    attempt: int
+    attempt_count: int
+    request_hash: str
+    input_hash: str
+    input_summary_json: dict[str, object]
+    output_summary_json: dict[str, object]
+    usage_json: dict[str, object]
+    estimated_cost: Decimal | None
+    latency_ms: int | None
+    http_status: int | None
+    provider_request_id: str | None
+    error_code: str | None
+    safe_error_message: str | None
+    started_at: datetime
+    completed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

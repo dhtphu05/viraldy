@@ -3,13 +3,17 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, Response, status
 
 from viraldy.api.dependencies.auth import CurrentUserDep, DbSession, require_workspace_permission
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
-from viraldy.modules.assets.schemas import CreateUploadSessionRequest
+from viraldy.modules.assets.schemas import (
+    CreateAssetRevisionUploadSessionRequest,
+    CreateUploadSessionRequest,
+)
 from viraldy.modules.assets.service import AssetService
+from viraldy.modules.deletion.public import DeletionResourceType, DeletionService
 from viraldy.modules.products.public import ProductQueries
 from viraldy.platform.auth.policy import Permission
 from viraldy.platform.config.settings import Settings, get_settings
@@ -37,9 +41,7 @@ async def create_upload_session(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
-    )
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_WRITE, current_user, db)
     upload = await asset_service(db, settings).create_upload_session(
         workspace_id,
         current_user.id,
@@ -57,11 +59,88 @@ async def complete_upload(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_WRITE, current_user, db)
+    asset = await asset_service(db, settings).complete_upload(
+        workspace_id,
+        asset_id,
+        current_user.id,
     )
-    asset = await asset_service(db, settings).complete_upload(workspace_id, asset_id)
     return success(asset.model_dump(mode="json"), request_id)
+
+
+@router.post(
+    "/{asset_id}/versions/upload-sessions",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope,
+)
+async def create_revision_upload_session(
+    workspace_id: UUID,
+    asset_id: UUID,
+    payload: CreateAssetRevisionUploadSessionRequest,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    settings: SettingsDep,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    await require_workspace_permission(
+        workspace_id,
+        Permission.REFERENCE_WRITE,
+        current_user,
+        db,
+    )
+    upload = await asset_service(db, settings).create_revision_upload_session(
+        workspace_id,
+        asset_id,
+        payload,
+    )
+    return success(upload.model_dump(mode="json"), request_id)
+
+
+@router.post(
+    "/{asset_id}/versions/{asset_version_id}/complete-upload",
+    response_model=Envelope,
+)
+async def complete_revision_upload(
+    workspace_id: UUID,
+    asset_id: UUID,
+    asset_version_id: UUID,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    settings: SettingsDep,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    await require_workspace_permission(
+        workspace_id,
+        Permission.REFERENCE_WRITE,
+        current_user,
+        db,
+    )
+    version = await asset_service(db, settings).complete_revision_upload(
+        workspace_id,
+        asset_id,
+        asset_version_id,
+        current_user.id,
+    )
+    return success(version.model_dump(mode="json"), request_id)
+
+
+@router.get("/{asset_id}/versions", response_model=Envelope)
+async def list_asset_versions(
+    workspace_id: UUID,
+    asset_id: UUID,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    settings: SettingsDep,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    await require_workspace_permission(
+        workspace_id,
+        Permission.REFERENCE_READ,
+        current_user,
+        db,
+    )
+    versions = await asset_service(db, settings).list_versions(workspace_id, asset_id)
+    return success([version.model_dump(mode="json") for version in versions], request_id)
 
 
 @router.get("", response_model=Envelope)
@@ -72,7 +151,7 @@ async def list_assets(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     assets = await asset_service(db, settings).list_assets(workspace_id)
     return success([asset.model_dump(mode="json") for asset in assets], request_id)
 
@@ -86,7 +165,7 @@ async def get_asset(
     settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(workspace_id, Permission.READ, current_user, db)
+    await require_workspace_permission(workspace_id, Permission.REFERENCE_READ, current_user, db)
     asset = await asset_service(db, settings).get_asset(workspace_id, asset_id)
     return success(asset.model_dump(mode="json"), request_id)
 
@@ -101,10 +180,31 @@ async def process_asset(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    await require_workspace_permission(
-        workspace_id, Permission.CREATE_UPDATE_BUSINESS_RESOURCES, current_user, db
-    )
+    await require_workspace_permission(workspace_id, Permission.ANALYSIS_RUN, current_user, db)
     job = await asset_service(db, settings).request_processing(
         workspace_id, asset_id, idempotency_key
     )
     return success(job.model_dump(mode="json"), request_id)
+
+
+@router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_asset(
+    workspace_id: UUID,
+    asset_id: UUID,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    settings: SettingsDep,
+) -> Response:
+    await require_workspace_permission(
+        workspace_id,
+        Permission.DATA_DELETE,
+        current_user,
+        db,
+    )
+    await DeletionService(db, S3StorageAdapter(settings)).delete(
+        workspace_id=workspace_id,
+        resource_type=DeletionResourceType.ASSET,
+        resource_id=asset_id,
+        user_id=current_user.id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

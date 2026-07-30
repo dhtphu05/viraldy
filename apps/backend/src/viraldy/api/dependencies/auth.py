@@ -11,7 +11,12 @@ from viraldy.modules.workspaces.public import get_workspace_member_role
 from viraldy.platform.auth.current_user import CurrentUser
 from viraldy.platform.auth.local_test import LocalTestTokenVerifier
 from viraldy.platform.auth.oidc import OidcTokenVerifier
-from viraldy.platform.auth.policy import Permission, WorkspaceMembershipPolicy, WorkspaceRole
+from viraldy.platform.auth.policy import (
+    Permission,
+    WorkspaceMembershipPolicy,
+    WorkspaceRole,
+    normalize_workspace_role,
+)
 from viraldy.platform.auth.token_verifier import TokenVerifier
 from viraldy.platform.config.settings import AuthMode, Settings, get_settings
 from viraldy.platform.database.session import get_async_session
@@ -53,7 +58,10 @@ async def require_workspace_permission(
     role_value = await get_workspace_member_role(db, workspace_id, user.id)
     if role_value is None:
         raise ForbiddenError()
-    role = WorkspaceRole(role_value)
+    try:
+        role = normalize_workspace_role(role_value)
+    except ValueError as exc:
+        raise ForbiddenError() from exc
     if not WorkspaceMembershipPolicy().has_permission(role, permission):
         raise ForbiddenError()
     return role

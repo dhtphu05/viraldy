@@ -1,7 +1,6 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
-import { PageHeader } from "@/shared/ui/page-header";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
@@ -18,21 +17,16 @@ import type {
     ActivityEvent,
     AngleConcept,
     CampaignPack,
-    CampaignPackStatus,
     Hook,
     HookType,
     ScriptBlock,
     StoryboardScene,
 } from "@/features/campaigns/types/campaign";
-import { StepNav } from "@/features/campaigns/components/step-nav";
-import { EvidencePanel } from "@/features/campaigns/components/evidence-panel";
+import { CampaignDetailHeader } from "@/features/campaigns/components/campaign-detail-header";
+import { CampaignOverview } from "@/features/campaigns/components/campaign-overview";
+import { CampaignPackWorkspace } from "@/features/campaigns/components/campaign-pack-workspace";
 import { CreatorPreviewDialog } from "@/features/campaigns/components/creator-preview-dialog";
-import {
-    STEPS,
-    readinessState,
-    stepIsComplete,
-    completionPercent,
-} from "@/features/campaigns/lib/campaignSteps";
+import { STEPS, readinessState, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
 import type { StepId } from "@/features/campaigns/types/campaign";
 import {
     generateAngles,
@@ -49,8 +43,6 @@ import {
 import {
     Sparkles,
     Play,
-    ArrowLeft,
-    ChevronRight,
     Lock,
     Unlock,
     Trash2,
@@ -60,9 +52,22 @@ import {
     Eye,
     AlertTriangle,
     Check,
+    ChevronDown,
+    ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { DecisionBanner } from "@/shared/ui/decision-banner";
+import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
+import { cn } from "@/shared/lib/utils";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/shared/ui/alert-dialog";
 
 export const Route = createFileRoute("/campaigns/$campaignId")({
     head: ({ loaderData }) => {
@@ -100,17 +105,6 @@ function useCampaignAndPack(campaignId: string) {
     return { summary, pack };
 }
 
-const STATUS_TONE: Record<CampaignPackStatus, "ok" | "warn" | "info" | "neutral" | "destructive"> =
-    {
-        Draft: "neutral",
-        "Ready for creator": "info",
-        "Creator production": "info",
-        "Awaiting UGC": "warn",
-        Active: "ok",
-        Completed: "ok",
-        Archived: "neutral",
-    };
-
 function CampaignDetail() {
     const { campaignId } = Route.useParams();
     const navigate = useNavigate();
@@ -123,6 +117,7 @@ function CampaignDetail() {
     const rename = useAppStore((s) => s.renameCampaign);
     const reviewWarning = useAppStore((s) => s.reviewWarning);
     const activityAll = useAppStore((s) => s.campaignActivity);
+    const ugcAssets = useAppStore((s) => s.ugcAssets);
     const autosaveAt = useAppStore((s) => (pack ? s.packAutosaveAt[pack.id] : undefined));
 
     const [tab, setTab] = useState<"overview" | "pack" | "assets" | "activity">("overview");
@@ -143,6 +138,10 @@ function CampaignDetail() {
     const product = seedProducts.find((p) => p.id === pack.productId);
     const readiness = readinessState(pack);
     const activity = activityAll.filter((e) => e.campaignId === campaignId).slice(0, 30);
+    const nextIncomplete = STEPS.find((item) => !stepIsComplete(pack, item.id));
+    const hasCampaignAssets = ugcAssets.some(
+        (asset) => asset.campaignId === campaignId && !asset.archived,
+    );
 
     function patch(next: Partial<CampaignPack>, activityEvent?: Parameters<typeof addActivity>[0]) {
         if (!pack) return;
@@ -153,130 +152,54 @@ function CampaignDetail() {
         if (activityEvent) addActivity(activityEvent);
     }
 
-    const readinessTone =
-        readiness.state === "Creator-ready"
-            ? "ok"
-            : readiness.state === "Needs review"
-              ? "warn"
-              : readiness.state === "Blocked"
-                ? "destructive"
-                : "neutral";
+    const saveLabel =
+        saveState === "saving"
+            ? "Saving…"
+            : autosaveAt
+              ? `Saved locally · ${new Date(autosaveAt).toLocaleTimeString()}`
+              : "Saved locally";
+
+    function openNextAction() {
+        if (readiness.state === "Creator-ready") {
+            setPreviewOpen(true);
+            return;
+        }
+        setTab("pack");
+        setStep(nextIncomplete?.id ?? "review");
+    }
 
     return (
         <AppShell>
             <div className="flex flex-col gap-6">
-                <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                    <Link to="/campaigns" className="hover:text-text-primary">
-                        Campaigns
-                    </Link>
-                    <ChevronRight className="h-3 w-3" />
-                    <span className="truncate text-text-secondary">{pack.name}</span>
-                </div>
-
-                <PageHeader
-                    title={pack.name}
-                    description={`${product?.name ?? "Product"} · ${pack.objective} · ${pack.market} · ${pack.platform}`}
-                    actions={
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs text-text-tertiary">
-                                {saveState === "saving"
-                                    ? "Saving…"
-                                    : autosaveAt
-                                      ? `Saved locally · ${new Date(autosaveAt).toLocaleTimeString()}`
-                                      : "Draft"}
-                            </span>
-                            <StatusChip tone={STATUS_TONE[pack.status]} dot>
-                                {pack.status}
-                            </StatusChip>
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setPreviewOpen(true)}
-                            >
-                                <Eye className="h-4 w-4" />
-                                Preview
-                            </Button>
-                            <Button
-                                size="sm"
-                                onClick={() => {
-                                    setTab("pack");
-                                    setStep("product");
-                                }}
-                            >
-                                Continue editing
-                            </Button>
-                        </div>
+                <CampaignDetailHeader
+                    pack={pack}
+                    productName={product?.name ?? "Product"}
+                    saveLabel={saveLabel}
+                    primaryActionLabel={
+                        readiness.state === "Creator-ready"
+                            ? "Preview for creator"
+                            : `Continue: ${nextIncomplete?.label ?? "Review"}`
                     }
+                    onPrimaryAction={openNextAction}
+                    onDuplicate={() => {
+                        const newId = duplicate(campaignId);
+                        if (newId)
+                            navigate({
+                                to: "/campaigns/$campaignId",
+                                params: { campaignId: newId },
+                            });
+                    }}
+                    onRename={(name) => {
+                        rename(campaignId, name);
+                        patch({ name });
+                        toast.success("Renamed");
+                    }}
+                    onArchive={() => {
+                        archive(campaignId);
+                        toast.success("Campaign archived");
+                    }}
+                    onStatusChange={(status) => setPackStatus(pack.id, status)}
                 />
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            const newId = duplicate(campaignId);
-                            if (newId)
-                                navigate({
-                                    to: "/campaigns/$campaignId",
-                                    params: { campaignId: newId },
-                                });
-                        }}
-                    >
-                        <Copy className="h-4 w-4" />
-                        Duplicate
-                    </Button>
-                    <Select
-                        value={pack.status}
-                        onValueChange={(v) => {
-                            if (pack) setPackStatus(pack.id, v as CampaignPackStatus);
-                        }}
-                    >
-                        <SelectTrigger className="h-8 w-[190px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {(
-                                [
-                                    "Draft",
-                                    "Ready for creator",
-                                    "Creator production",
-                                    "Awaiting UGC",
-                                    "Active",
-                                    "Completed",
-                                    "Archived",
-                                ] as CampaignPackStatus[]
-                            ).map((s) => (
-                                <SelectItem key={s} value={s}>
-                                    {s}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            const name = window.prompt("Rename campaign", pack.name);
-                            if (name?.trim()) {
-                                rename(campaignId, name.trim());
-                                patch({ name: name.trim() });
-                                toast.success("Renamed");
-                            }
-                        }}
-                    >
-                        Rename
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            archive(campaignId);
-                            toast.success("Campaign archived");
-                        }}
-                    >
-                        Archive
-                    </Button>
-                </div>
 
                 <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
                     <TabsList>
@@ -287,39 +210,63 @@ function CampaignDetail() {
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-6">
-                        <OverviewTab
+                        <CampaignOverview
                             pack={pack}
                             readinessState={readiness.state}
-                            readinessTone={readinessTone}
                             reasons={readiness.reasons}
-                            onOpenEditor={() => setTab("pack")}
                             activity={activity}
+                            onContinue={(nextStep) => {
+                                setTab("pack");
+                                setStep(nextStep);
+                            }}
+                            onPreview={() => setPreviewOpen(true)}
                         />
                     </TabsContent>
 
                     <TabsContent value="pack" className="mt-6">
-                        <WorkspaceLayout
+                        <CampaignPackWorkspace
                             pack={pack}
                             step={step}
                             onStep={setStep}
-                            onPatch={patch}
-                            campaignId={campaignId}
-                            onReviewWarning={(id) => reviewWarning(pack.id, id)}
-                        />
+                            onPreview={() => setPreviewOpen(true)}
+                        >
+                            <StepSection
+                                pack={pack}
+                                step={step}
+                                onPatch={patch}
+                                campaignId={campaignId}
+                                onReviewWarning={(id) => reviewWarning(pack.id, id)}
+                            />
+                        </CampaignPackWorkspace>
                     </TabsContent>
 
                     <TabsContent value="assets" className="mt-6">
-                        <SurfaceCard padding="lg">
+                        <div className="border-y border-divider bg-surface p-7">
                             <EmptyState
-                                title="No assets uploaded yet"
-                                description="Once the creator delivers, review UGC and mark approved assets. UGC Review integrates here in a future release."
+                                title={
+                                    hasCampaignAssets
+                                        ? "Campaign UGC is ready to review"
+                                        : "No creator drafts uploaded yet"
+                                }
+                                description={
+                                    hasCampaignAssets
+                                        ? "Review campaign assets, evidence, and publishing readiness in UGC Review."
+                                        : "Upload the creator draft to review execution, claims, and publishing readiness."
+                                }
                                 action={
-                                    <Button variant="secondary" asChild>
-                                        <Link to="/ugc-review">Open UGC Review</Link>
+                                    <Button asChild>
+                                        <Link
+                                            to="/ugc-review"
+                                            search={{ campaignId, upload: true }}
+                                        >
+                                            {hasCampaignAssets
+                                                ? "Review campaign UGC"
+                                                : "Upload creator draft"}
+                                        </Link>
                                     </Button>
                                 }
                             />
-                        </SurfaceCard>
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="activity" className="mt-6">
@@ -361,184 +308,6 @@ function CampaignDetail() {
     );
 }
 
-// -------------------- Overview --------------------
-
-function OverviewTab({
-    pack,
-    readinessState,
-    readinessTone,
-    reasons,
-    onOpenEditor,
-    activity,
-}: {
-    pack: CampaignPack;
-    readinessState: string;
-    readinessTone: "ok" | "warn" | "info" | "neutral" | "destructive";
-    reasons: string[];
-    onOpenEditor: () => void;
-    activity: { id: string; detail: string; at: string }[];
-}) {
-    const primaryAngle = pack.angleOptions.find((a) => a.id === pack.primaryAngleId);
-    const hooks = pack.hookOptions.filter((h) => pack.selectedHookIds.includes(h.id));
-    const nextIncomplete = STEPS.find((s) => !stepIsComplete(pack, s.id));
-    return (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="flex flex-col gap-6">
-                <SurfaceCard
-                    padding="md"
-                    className={`border-l-4 ${readinessTone === "ok" ? "border-l-ok" : readinessTone === "warn" ? "border-l-warn" : readinessTone === "destructive" ? "border-l-destructive" : "border-l-hairline"}`}
-                >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="min-w-0">
-                            <StatusChip tone={readinessTone} dot>
-                                {readinessState}
-                            </StatusChip>
-                            <p className="mt-2 text-lg font-semibold text-text-primary">
-                                {completionPercent(pack)}% of the Campaign Pack complete
-                            </p>
-                            <p className="mt-0.5 text-sm text-text-secondary">
-                                {readinessState === "Creator-ready"
-                                    ? "This brief is ready to send to a creator."
-                                    : (reasons[0] ?? "Continue editing to reach creator-ready.")}
-                            </p>
-                        </div>
-                        <Button onClick={onOpenEditor}>
-                            {nextIncomplete
-                                ? `Continue: ${nextIncomplete.label}`
-                                : "Open Campaign Pack"}
-                        </Button>
-                    </div>
-                </SurfaceCard>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <SurfaceCard padding="md">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                            Angle
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-text-primary">
-                            {primaryAngle?.name ?? "—"}
-                        </p>
-                        {primaryAngle && (
-                            <p className="mt-1 text-xs text-text-secondary">
-                                {primaryAngle.buyerProblem}
-                            </p>
-                        )}
-                    </SurfaceCard>
-                    <SurfaceCard padding="md">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                            Hooks
-                        </p>
-                        {hooks.length === 0 ? (
-                            <p className="mt-1 text-sm text-text-tertiary">No hooks selected</p>
-                        ) : (
-                            <ol className="mt-1 space-y-0.5 text-sm">
-                                {hooks.map((h) => (
-                                    <li key={h.id} className="truncate">
-                                        • {h.text}
-                                    </li>
-                                ))}
-                            </ol>
-                        )}
-                    </SurfaceCard>
-                    <SurfaceCard padding="md">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                            Deliverables
-                        </p>
-                        <p className="mt-1 text-sm text-text-primary">
-                            {pack.deliverables.numberOfVideos} ×{" "}
-                            {pack.deliverables.targetDurationSec}s {pack.deliverables.aspectRatio}
-                        </p>
-                        <p className="mt-0.5 text-xs text-text-secondary">
-                            {pack.deliverables.revisionRounds} revision(s)
-                            {pack.deliverables.rawFootageRequired ? " · raw footage required" : ""}
-                        </p>
-                    </SurfaceCard>
-                    <SurfaceCard padding="md">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                            Rights
-                        </p>
-                        <p className="mt-1 text-sm text-text-primary">
-                            {pack.rights.tiktokSpark ? "Spark" : "No Spark"} ·{" "}
-                            {pack.rights.usageDurationDays} days
-                        </p>
-                        <p className="mt-0.5 text-xs text-text-secondary">
-                            TikTok Organic: {pack.rights.tiktokOrganic ? "yes" : "no"} · Meta:{" "}
-                            {pack.rights.metaAds ? "yes" : "no"}
-                        </p>
-                    </SurfaceCard>
-                </div>
-
-                {activity.length > 0 && (
-                    <SurfaceCard padding="md">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                            Recent activity
-                        </p>
-                        <ul className="mt-2 flex flex-col divide-y divide-hairline/60">
-                            {activity.slice(0, 5).map((e) => (
-                                <li
-                                    key={e.id}
-                                    className="flex items-center justify-between gap-3 py-2 text-sm"
-                                >
-                                    <span className="truncate">{e.detail}</span>
-                                    <span className="tabular text-xs text-text-tertiary">
-                                        {new Date(e.at).toLocaleTimeString()}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                    </SurfaceCard>
-                )}
-            </div>
-
-            <EvidencePanel pack={pack} />
-        </div>
-    );
-}
-
-// -------------------- Workspace layout --------------------
-
-function WorkspaceLayout({
-    pack,
-    step,
-    onStep,
-    onPatch,
-    campaignId,
-    onReviewWarning,
-}: {
-    pack: CampaignPack;
-    step: StepId;
-    onStep: (id: StepId) => void;
-    onPatch: (next: Partial<CampaignPack>, activity?: Omit<ActivityEvent, "id" | "at">) => void;
-    campaignId: string;
-    onReviewWarning: (warningId: string) => void;
-}) {
-    return (
-        <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
-            <aside className="lg:sticky lg:top-20 lg:self-start">
-                <div className="lg:hidden">
-                    <StepNav pack={pack} current={step} onSelect={onStep} compact />
-                </div>
-                <div className="hidden lg:block">
-                    <StepNav pack={pack} current={step} onSelect={onStep} />
-                </div>
-            </aside>
-            <div className="min-w-0">
-                <StepSection
-                    pack={pack}
-                    step={step}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onStep={onStep}
-                    onReviewWarning={onReviewWarning}
-                />
-            </div>
-            <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
-                <EvidencePanel pack={pack} />
-            </aside>
-        </div>
-    );
-}
-
 // -------------------- Step sections --------------------
 
 function StepSection(props: {
@@ -546,83 +315,36 @@ function StepSection(props: {
     step: StepId;
     onPatch: WorkspaceLayoutProps["onPatch"];
     campaignId: string;
-    onStep: (id: StepId) => void;
     onReviewWarning: (id: string) => void;
 }) {
-    const { pack, step, onPatch, campaignId, onStep, onReviewWarning } = props;
+    const { pack, step, onPatch, campaignId, onReviewWarning } = props;
     switch (step) {
         case "product":
-            return (
-                <ProductStep pack={pack} onPatch={onPatch} onNext={() => onStep("references")} />
-            );
+            return <ProductStep pack={pack} onPatch={onPatch} />;
         case "references":
-            return (
-                <ReferencesStep pack={pack} onPatch={onPatch} onNext={() => onStep("adaptation")} />
-            );
+            return <ReferencesStep pack={pack} onPatch={onPatch} />;
         case "adaptation":
-            return (
-                <AdaptationStep
-                    pack={pack}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onNext={() => onStep("angles")}
-                />
-            );
+            return <AdaptationStep pack={pack} onPatch={onPatch} campaignId={campaignId} />;
         case "angles":
-            return (
-                <AnglesStep
-                    pack={pack}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onNext={() => onStep("hooks")}
-                />
-            );
+            return <AnglesStep pack={pack} onPatch={onPatch} campaignId={campaignId} />;
         case "hooks":
-            return (
-                <HooksStep
-                    pack={pack}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onNext={() => onStep("script")}
-                />
-            );
+            return <HooksStep pack={pack} onPatch={onPatch} campaignId={campaignId} />;
         case "script":
-            return (
-                <ScriptStep
-                    pack={pack}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onNext={() => onStep("storyboard")}
-                />
-            );
+            return <ScriptStep pack={pack} onPatch={onPatch} campaignId={campaignId} />;
         case "storyboard":
-            return (
-                <StoryboardStep
-                    pack={pack}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onNext={() => onStep("cta")}
-                />
-            );
+            return <StoryboardStep pack={pack} onPatch={onPatch} campaignId={campaignId} />;
         case "cta":
-            return (
-                <CtaStep
-                    pack={pack}
-                    onPatch={onPatch}
-                    onReviewWarning={onReviewWarning}
-                    onNext={() => onStep("deliverables")}
-                />
-            );
+            return <CtaStep pack={pack} onPatch={onPatch} onReviewWarning={onReviewWarning} />;
         case "deliverables":
-            return (
-                <DeliverablesStep pack={pack} onPatch={onPatch} onNext={() => onStep("review")} />
-            );
+            return <DeliverablesStep pack={pack} onPatch={onPatch} />;
         case "review":
             return <ReviewStep pack={pack} campaignId={campaignId} />;
     }
 }
 
-type WorkspaceLayoutProps = React.ComponentProps<typeof WorkspaceLayout>;
+type WorkspaceLayoutProps = {
+    onPatch: (next: Partial<CampaignPack>, activity?: Omit<ActivityEvent, "id" | "at">) => void;
+};
 
 function SectionShell({
     title,
@@ -636,7 +358,7 @@ function SectionShell({
     actions?: React.ReactNode;
 }) {
     return (
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5 [&_[role=combobox]]:min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
@@ -653,11 +375,9 @@ function SectionShell({
 function ProductStep({
     pack,
     onPatch,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
-    onNext: () => void;
 }) {
     return (
         <SectionShell
@@ -839,9 +559,6 @@ function ProductStep({
                         />
                     </div>
                 </div>
-                <div className="flex justify-end">
-                    <Button onClick={onNext}>Continue</Button>
-                </div>
             </SurfaceCard>
         </SectionShell>
     );
@@ -851,11 +568,9 @@ function ProductStep({
 function ReferencesStep({
     pack,
     onPatch,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
-    onNext: () => void;
 }) {
     const creatives = useAppStore((s) => s.creatives);
     const analyses = useAppStore((s) => s.analyses);
@@ -897,15 +612,10 @@ function ReferencesStep({
         <SectionShell
             title="References"
             description="Select up to 5 analyzed creatives. Order defines priority for adaptation."
-            actions={
-                <Button onClick={onNext} disabled={refs.length === 0}>
-                    Continue
-                </Button>
-            }
         >
             {refs.length > 0 && (
                 <SurfaceCard padding="md">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Selected ({refs.length})
                     </p>
                     <ol className="mt-2 flex flex-col divide-y divide-hairline/60">
@@ -964,7 +674,9 @@ function ReferencesStep({
                         description="Analyze creatives in the Library first."
                         action={
                             <Button asChild variant="secondary">
-                                <Link to="/creative-library">Open Creative Library</Link>
+                                <Link to="/creative-library" search={{ import: undefined }}>
+                                    Open Creative Library
+                                </Link>
                             </Button>
                         }
                     />
@@ -1010,15 +722,17 @@ function AdaptationStep({
     pack,
     onPatch,
     campaignId,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
     campaignId: string;
-    onNext: () => void;
 }) {
     const [busy, setBusy] = useState(false);
     const [variant, setVariant] = useState(0);
+    const [sourceOpen, setSourceOpen] = useState(false);
+    const sourceCreative = useAppStore((state) =>
+        state.creatives.find((creative) => creative.id === pack.referenceCreativeIds[0]),
+    );
     async function regenerate() {
         setBusy(true);
         const next = await generateAdaptation(
@@ -1068,23 +782,78 @@ function AdaptationStep({
             }
         >
             <div className="grid gap-4 md:grid-cols-2">
-                <SurfaceCard padding="md">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                        Source pattern
-                    </p>
-                    <p className="mt-2 text-sm">
-                        <span className="font-medium">Hook:</span>{" "}
-                        {pack.adaptation.sourceHook || "—"}
-                    </p>
-                    <p className="mt-1 text-sm">
-                        <span className="font-medium">Angle:</span> {pack.adaptation.sourceAngle}
-                    </p>
-                    <p className="mt-1 text-sm">
-                        <span className="font-medium">Demo:</span> {pack.adaptation.sourceDemo}
-                    </p>
+                <SurfaceCard padding="none" className="overflow-hidden">
+                    <button
+                        type="button"
+                        aria-expanded={sourceCreative ? sourceOpen : undefined}
+                        disabled={!sourceCreative}
+                        onClick={() => setSourceOpen((open) => !open)}
+                        className="w-full p-5 text-left transition-colors duration-200 hover:bg-surface-soft/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+                    >
+                        <span className="flex items-start justify-between gap-3">
+                            <span className="min-w-0">
+                                <span className="text-xs font-semibold uppercase text-text-tertiary">
+                                    Source pattern
+                                </span>
+                                <span className="mt-2 block text-sm">
+                                    <span className="font-medium">Hook:</span>{" "}
+                                    {pack.adaptation.sourceHook || "—"}
+                                </span>
+                                <span className="mt-1 block text-sm">
+                                    <span className="font-medium">Angle:</span>{" "}
+                                    {pack.adaptation.sourceAngle}
+                                </span>
+                                <span className="mt-1 block text-sm">
+                                    <span className="font-medium">Demo:</span>{" "}
+                                    {pack.adaptation.sourceDemo}
+                                </span>
+                            </span>
+                            {sourceCreative ? (
+                                <ChevronDown
+                                    className={cn(
+                                        "mt-0.5 h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200",
+                                        sourceOpen && "rotate-180",
+                                    )}
+                                />
+                            ) : (
+                                <span className="shrink-0 text-[10px] font-medium uppercase text-text-tertiary">
+                                    No linked media
+                                </span>
+                            )}
+                        </span>
+                    </button>
+                    {sourceOpen && sourceCreative && (
+                        <div className="analysis-state-enter border-t border-hairline p-4">
+                            <DemoMediaTile
+                                mediaUrl={sourceCreative.mediaUrl}
+                                mediaKind={sourceCreative.mediaKind}
+                                posterUrl={sourceCreative.posterUrl}
+                                seed={sourceCreative.thumbSeed}
+                                label={sourceCreative.title}
+                                badges={[
+                                    sourceCreative.platform,
+                                    sourceCreative.mediaAspectRatio ?? "reference",
+                                ]}
+                                aspect="16 / 9"
+                                fit={
+                                    sourceCreative.mediaAspectRatio === "9:16" ? "contain" : "cover"
+                                }
+                                className="rounded-md bg-black"
+                            />
+                            <Button asChild size="sm" variant="secondary" className="mt-3">
+                                <Link
+                                    to="/creative-library/$creativeId"
+                                    params={{ creativeId: sourceCreative.id }}
+                                >
+                                    Open source evidence
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
                 </SurfaceCard>
                 <SurfaceCard padding="md" className="bg-primary-soft/30">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary-active">
+                    <p className="text-xs font-semibold uppercase text-primary-active">
                         Adapted for product
                     </p>
                     <p className="mt-2 text-sm">
@@ -1099,7 +868,7 @@ function AdaptationStep({
                 </SurfaceCard>
             </div>
             <SurfaceCard padding="md">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                <p className="text-xs font-semibold uppercase text-text-tertiary">
                     Why this changed
                 </p>
                 <p className="mt-1 text-sm text-text-secondary">{pack.adaptation.whyChanged}</p>
@@ -1108,7 +877,7 @@ function AdaptationStep({
                 {(["keep", "change", "avoid"] as const).map((key) => (
                     <SurfaceCard key={key} padding="md">
                         <p
-                            className={`text-xs font-semibold uppercase tracking-wide ${key === "keep" ? "text-ok" : key === "change" ? "text-info" : "text-warn"}`}
+                            className={`text-xs font-semibold uppercase ${key === "keep" ? "text-ok" : key === "change" ? "text-info" : "text-warn"}`}
                         >
                             {key === "keep"
                                 ? "Keep"
@@ -1127,7 +896,7 @@ function AdaptationStep({
             <SurfaceCard padding="md">
                 <Label
                     htmlFor="notes"
-                    className="text-xs font-semibold uppercase tracking-wide text-text-tertiary"
+                    className="text-xs font-semibold uppercase text-text-tertiary"
                 >
                     Adaptation notes
                 </Label>
@@ -1142,9 +911,6 @@ function AdaptationStep({
                     placeholder="Anything specific to instruct the creator or your team."
                 />
             </SurfaceCard>
-            <div className="flex justify-end">
-                <Button onClick={onNext}>Continue to angles</Button>
-            </div>
         </SectionShell>
     );
 }
@@ -1154,14 +920,13 @@ function AnglesStep({
     pack,
     onPatch,
     campaignId,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
     campaignId: string;
-    onNext: () => void;
 }) {
     const [busy, setBusy] = useState(false);
+    const [pendingPrimaryId, setPendingPrimaryId] = useState<string | null>(null);
     async function generate() {
         setBusy(true);
         const next = await generateAngles(pack.productId, pack.id);
@@ -1179,35 +944,34 @@ function AnglesStep({
     }
     function setPrimary(id: string) {
         if (pack.primaryAngleId === id) return;
-        // warn if downstream edits
         const hasEdits = pack.hookOptions.length > 0 || pack.script.length > 0;
         if (hasEdits) {
-            const proceed = window.confirm(
-                "Changing the primary angle may make existing hooks and script outdated. Keep existing content?",
-            );
-            if (!proceed) {
-                onPatch(
-                    {
-                        primaryAngleId: id,
-                        hookOptions: [],
-                        selectedHookIds: [],
-                        script: [],
-                        storyboard: [],
-                    },
-                    {
-                        campaignId,
-                        kind: "angle-changed",
-                        detail: "Primary angle changed — refreshed sections",
-                    },
-                );
-                toast("Refreshed downstream sections");
-                return;
-            }
+            setPendingPrimaryId(id);
+            return;
         }
+        applyPrimary(id, true);
+    }
+    function applyPrimary(id: string, keepExisting: boolean) {
         onPatch(
-            { primaryAngleId: id },
-            { campaignId, kind: "angle-changed", detail: "Primary angle changed" },
+            keepExisting
+                ? { primaryAngleId: id }
+                : {
+                      primaryAngleId: id,
+                      hookOptions: [],
+                      selectedHookIds: [],
+                      script: [],
+                      storyboard: [],
+                  },
+            {
+                campaignId,
+                kind: "angle-changed",
+                detail: keepExisting
+                    ? "Primary angle changed"
+                    : "Primary angle changed — refreshed sections",
+            },
         );
+        if (!keepExisting) toast("Refreshed downstream sections");
+        setPendingPrimaryId(null);
     }
     function toggleSecondary(id: string) {
         const on = pack.secondaryAngleIds.includes(id);
@@ -1328,11 +1092,38 @@ function AnglesStep({
                         })}
                 </div>
             )}
-            <div className="flex justify-end">
-                <Button onClick={onNext} disabled={!pack.primaryAngleId}>
-                    Continue to hooks
-                </Button>
-            </div>
+            <AlertDialog
+                open={!!pendingPrimaryId}
+                onOpenChange={(open) => {
+                    if (!open) setPendingPrimaryId(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Change the primary angle?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Existing hooks and script may no longer match this direction. Choose
+                            whether to keep them or refresh the downstream sections.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel
+                            onClick={() => {
+                                if (pendingPrimaryId) applyPrimary(pendingPrimaryId, false);
+                            }}
+                        >
+                            Change and refresh
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                if (pendingPrimaryId) applyPrimary(pendingPrimaryId, true);
+                            }}
+                        >
+                            Keep existing content
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </SectionShell>
     );
 }
@@ -1342,12 +1133,10 @@ function HooksStep({
     pack,
     onPatch,
     campaignId,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
     campaignId: string;
-    onNext: () => void;
 }) {
     const [busy, setBusy] = useState(false);
     const angle = pack.angleOptions.find((a) => a.id === pack.primaryAngleId);
@@ -1425,7 +1214,7 @@ function HooksStep({
         >
             {selectedHooks.length > 0 && (
                 <SurfaceCard padding="md" className="bg-primary-soft/30">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary-active">
+                    <p className="text-xs font-semibold uppercase text-primary-active">
                         Selected hooks
                     </p>
                     <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm">
@@ -1453,7 +1242,7 @@ function HooksStep({
                     {Object.entries(grouped).map(([type, hooks]) => (
                         <SurfaceCard key={type} padding="md">
                             <div className="flex items-center justify-between">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                                <p className="text-xs font-semibold uppercase text-text-tertiary">
                                     {type}
                                 </p>
                                 <Button
@@ -1531,11 +1320,6 @@ function HooksStep({
                     ))}
                 </div>
             )}
-            <div className="flex justify-end">
-                <Button onClick={onNext} disabled={selectedHooks.length === 0}>
-                    Continue to script
-                </Button>
-            </div>
         </SectionShell>
     );
 }
@@ -1545,12 +1329,10 @@ function ScriptStep({
     pack,
     onPatch,
     campaignId,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
     campaignId: string;
-    onNext: () => void;
 }) {
     const [busy, setBusy] = useState(false);
     const angle = pack.angleOptions.find((a) => a.id === pack.primaryAngleId);
@@ -1692,11 +1474,6 @@ function ScriptStep({
                     ))}
                 </div>
             )}
-            <div className="flex justify-end">
-                <Button onClick={onNext} disabled={pack.script.length === 0}>
-                    Continue to storyboard
-                </Button>
-            </div>
         </SectionShell>
     );
 }
@@ -1706,12 +1483,10 @@ function StoryboardStep({
     pack,
     onPatch,
     campaignId,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
     campaignId: string;
-    onNext: () => void;
 }) {
     const [busy, setBusy] = useState(false);
     async function generate() {
@@ -1932,11 +1707,6 @@ function StoryboardStep({
                     ))}
                 </div>
             )}
-            <div className="flex justify-end">
-                <Button onClick={onNext} disabled={pack.storyboard.length === 0}>
-                    Continue to CTA
-                </Button>
-            </div>
         </SectionShell>
     );
 }
@@ -1946,12 +1716,10 @@ function CtaStep({
     pack,
     onPatch,
     onReviewWarning,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
     onReviewWarning: (id: string) => void;
-    onNext: () => void;
 }) {
     function setCta(patch: Partial<typeof pack.cta>) {
         onPatch({ cta: { ...pack.cta, ...patch } });
@@ -2061,9 +1829,7 @@ function CtaStep({
 
             {pack.cta.warnings.length > 0 && (
                 <SurfaceCard padding="md">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-warn">
-                        Claim warnings
-                    </p>
+                    <p className="text-xs font-semibold uppercase text-warn">Claim warnings</p>
                     <ul className="mt-2 flex flex-col divide-y divide-hairline/60">
                         {pack.cta.warnings.map((w) => {
                             const reviewed = pack.reviewedWarningIds.includes(w.id);
@@ -2098,10 +1864,6 @@ function CtaStep({
                     </p>
                 </SurfaceCard>
             )}
-
-            <div className="flex justify-end">
-                <Button onClick={onNext}>Continue to deliverables</Button>
-            </div>
         </SectionShell>
     );
 }
@@ -2110,11 +1872,9 @@ function CtaStep({
 function DeliverablesStep({
     pack,
     onPatch,
-    onNext,
 }: {
     pack: CampaignPack;
     onPatch: WorkspaceLayoutProps["onPatch"];
-    onNext: () => void;
 }) {
     function setD(patch: Partial<typeof pack.deliverables>) {
         onPatch({ deliverables: { ...pack.deliverables, ...patch } });
@@ -2132,7 +1892,7 @@ function DeliverablesStep({
         >
             <div className="grid gap-4 md:grid-cols-2">
                 <SurfaceCard padding="md" className="flex flex-col gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Deliverables
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -2224,7 +1984,7 @@ function DeliverablesStep({
                 </SurfaceCard>
 
                 <SurfaceCard padding="md" className="flex flex-col gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Usage rights
                     </p>
                     <div className="grid gap-2">
@@ -2265,7 +2025,7 @@ function DeliverablesStep({
                 </SurfaceCard>
             </div>
             <SurfaceCard padding="md" className="flex flex-col gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                <p className="text-xs font-semibold uppercase text-text-tertiary">
                     Spark authorization
                 </p>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -2294,9 +2054,6 @@ function DeliverablesStep({
                     </div>
                 </div>
             </SurfaceCard>
-            <div className="flex justify-end">
-                <Button onClick={onNext}>Continue to review</Button>
-            </div>
         </SectionShell>
     );
 }

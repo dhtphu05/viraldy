@@ -36,7 +36,16 @@ import { seedProducts } from "@/features/products/data/products";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { ProcessingStepper, type Step } from "@/shared/ui/processing-stepper";
-import { Sparkles, MoreHorizontal, ArrowLeft, ChevronRight, Package } from "lucide-react";
+import { AnalysisThinkingSkeleton } from "@/shared/ui/analysis-thinking-skeleton";
+import {
+    ArrowLeft,
+    ChevronRight,
+    FolderInput,
+    Megaphone,
+    MoreHorizontal,
+    Package,
+    Sparkles,
+} from "lucide-react";
 import { analysisSteps } from "@/features/creative-library/lib/mockAnalysis";
 import { toast } from "sonner";
 
@@ -56,6 +65,8 @@ function CreativeDetailPage() {
     const startAnalysisJob = useAppStore((s) => s.startAnalysisJob);
     const addAdaptationNote = useAppStore((s) => s.addAdaptationNote);
     const adaptationNotes = useAppStore((s) => s.adaptationNotes);
+    const campaignDraft = useAppStore((s) => s.campaignDraft);
+    const setDraft = useAppStore((s) => s.setDraft);
     const navigate = useNavigate();
 
     const creative = creatives.find((c) => c.id === creativeId);
@@ -96,7 +107,7 @@ function CreativeDetailPage() {
                         description="This reference may have been archived or removed."
                         action={
                             <Button asChild variant="secondary" size="sm">
-                                <Link to="/creative-library">
+                                <Link to="/creative-library" search={{ import: undefined }}>
                                     <ArrowLeft className="h-4 w-4" />
                                     Back to library
                                 </Link>
@@ -140,6 +151,25 @@ function CreativeDetailPage() {
         toast("Retrying analysis");
     }
 
+    function addToCampaign() {
+        setDraft({
+            referenceCreativeIds: Array.from(
+                new Set([...(campaignDraft.referenceCreativeIds ?? []), creative!.id]),
+            ),
+        });
+        toast.success("Creative added to draft", {
+            description: "Opening the campaign draft.",
+        });
+        void navigate({ to: "/campaigns/new" });
+    }
+
+    function reviewEvidence() {
+        const firstEvidenceId = analysis?.evidence[0]?.id;
+        document
+            .getElementById(firstEvidenceId ? `evidence-${firstEvidenceId}` : "creative-evidence")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
     const notes = adaptationNotes[creative.id] ?? [];
 
     // Processing / not-analyzed shells
@@ -161,7 +191,9 @@ function CreativeDetailPage() {
                         <BreadcrumbList>
                             <BreadcrumbItem>
                                 <BreadcrumbLink asChild>
-                                    <Link to="/creative-library">Creative Library</Link>
+                                    <Link to="/creative-library" search={{ import: undefined }}>
+                                        Creative Library
+                                    </Link>
                                 </BreadcrumbLink>
                             </BreadcrumbItem>
                             <BreadcrumbSeparator />
@@ -173,9 +205,9 @@ function CreativeDetailPage() {
                         </BreadcrumbList>
                     </Breadcrumb>
 
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
                         <div className="min-w-0">
-                            <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-[26px]">
+                            <h1 className="break-words text-2xl font-semibold text-text-primary sm:text-[26px]">
                                 {creative.title}
                             </h1>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
@@ -199,21 +231,6 @@ function CreativeDetailPage() {
                                     Analyze Creative DNA
                                 </Button>
                             )}
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() =>
-                                    toast("Add to campaign", {
-                                        description:
-                                            "Campaign Pack composer arrives in the next phase.",
-                                    })
-                                }
-                            >
-                                Add to campaign
-                            </Button>
-                            <Button variant="secondary" size="sm" onClick={() => setMoveOpen(true)}>
-                                Move to board
-                            </Button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button
@@ -224,13 +241,26 @@ function CreativeDetailPage() {
                                         <MoreHorizontal className="h-4 w-4" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                                <DropdownMenuContent align="end" className="w-52">
+                                    <DropdownMenuItem onSelect={addToCampaign}>
+                                        <Megaphone className="h-4 w-4" />
+                                        Add to campaign
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
+                                        <FolderInput className="h-4 w-4" />
+                                        Move to board
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={() => setAnalyzeOpen(true)}>
-                                        Re-analyze
+                                        <Sparkles className="h-4 w-4" />
+                                        {creative.analysisStatus === "analyzed"
+                                            ? "Re-analyze"
+                                            : "Analyze Creative DNA"}
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem asChild>
-                                        <Link to="/creative-library">Back to library</Link>
+                                        <Link to="/creative-library" search={{ import: undefined }}>
+                                            Back to library
+                                        </Link>
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -239,9 +269,9 @@ function CreativeDetailPage() {
                 </div>
 
                 {/* Layout */}
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                <div className="grid min-w-0 gap-6 lg:grid-cols-12">
                     {/* Main */}
-                    <div className="flex min-w-0 flex-col gap-4">
+                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
                         <MediaPlayer
                             creative={creative}
                             markers={analysis?.markers ?? []}
@@ -266,23 +296,35 @@ function CreativeDetailPage() {
                                     </p>
                                 </div>
                                 <ProcessingStepper steps={stepper} />
+                                <AnalysisThinkingSkeleton
+                                    compact
+                                    title="Preparing Creative DNA modules"
+                                    description="The breakdown will show analyzed moments, evidence, transcript, Keep/Change/Avoid, and adaptation notes."
+                                />
                             </SurfaceCard>
                         )}
 
                         {(creative.analysisStatus === "unanalyzed" ||
                             creative.analysisStatus === "ready") && (
                             <SurfaceCard padding="lg">
-                                <EmptyState
-                                    icon={Sparkles}
-                                    title="Not analyzed yet"
-                                    description="Run Creative DNA analysis to see the hook, product reveal, evidence, and adaptation notes."
-                                    action={
-                                        <Button size="sm" onClick={() => setAnalyzeOpen(true)}>
-                                            <Sparkles className="h-4 w-4" />
-                                            Analyze Creative DNA
-                                        </Button>
-                                    }
-                                />
+                                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                    <EmptyState
+                                        icon={Sparkles}
+                                        title="Not analyzed yet"
+                                        description="Run Creative DNA analysis to see the hook, product reveal, evidence, and adaptation notes."
+                                        action={
+                                            <Button size="sm" onClick={() => setAnalyzeOpen(true)}>
+                                                <Sparkles className="h-4 w-4" />
+                                                Analyze Creative DNA
+                                            </Button>
+                                        }
+                                    />
+                                    <AnalysisThinkingSkeleton
+                                        compact
+                                        title="Modules after analysis"
+                                        description="Timeline, transcript, evidence, and product adaptation guidance appear here."
+                                    />
+                                </div>
                             </SurfaceCard>
                         )}
 
@@ -295,44 +337,52 @@ function CreativeDetailPage() {
                     </div>
 
                     {/* Right panel */}
-                    <div className="flex min-w-0 flex-col gap-4">
+                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
                         {analysis && creative.analysisStatus === "analyzed" ? (
                             <>
-                                <DecisionSummary
-                                    analysis={analysis}
-                                    onAdapt={() => setAdaptOpen(true)}
-                                    linked={linkedProduct?.name}
-                                />
-                                <EvidenceList
-                                    evidence={analysis.evidence}
-                                    activeId={
-                                        activeMarker
-                                            ? analysis.evidence.find((e) => {
-                                                  const m = analysis.markers.find(
-                                                      (mk) => mk.id === activeMarker,
-                                                  );
-                                                  return (
-                                                      m &&
-                                                      e.timestamp &&
-                                                      Math.abs(e.timestamp - m.at) < 1.5
-                                                  );
-                                              })?.id
-                                            : undefined
-                                    }
-                                    onJump={handleJump}
-                                    onMarkUseful={(id) =>
-                                        setUsefulIds((prev) =>
-                                            prev.includes(id)
-                                                ? prev.filter((x) => x !== id)
-                                                : [...prev, id],
-                                        )
-                                    }
-                                    onAddNote={(e) => {
-                                        addAdaptationNote(creative.id, `${e.title}: ${e.action}`);
-                                        toast.success("Added to adaptation notes");
-                                    }}
-                                    usefulIds={usefulIds}
-                                />
+                                <div className="lg:sticky lg:top-20 lg:z-10">
+                                    <DecisionSummary
+                                        analysis={analysis}
+                                        onAdapt={() => setAdaptOpen(true)}
+                                        onReviewEvidence={reviewEvidence}
+                                        linked={linkedProduct?.name}
+                                    />
+                                </div>
+                                <div id="creative-evidence">
+                                    <EvidenceList
+                                        evidence={analysis.evidence}
+                                        activeId={
+                                            activeMarker
+                                                ? analysis.evidence.find((e) => {
+                                                      const m = analysis.markers.find(
+                                                          (mk) => mk.id === activeMarker,
+                                                      );
+                                                      return (
+                                                          m &&
+                                                          e.timestamp &&
+                                                          Math.abs(e.timestamp - m.at) < 1.5
+                                                      );
+                                                  })?.id
+                                                : undefined
+                                        }
+                                        onJump={handleJump}
+                                        onMarkUseful={(id) =>
+                                            setUsefulIds((prev) =>
+                                                prev.includes(id)
+                                                    ? prev.filter((x) => x !== id)
+                                                    : [...prev, id],
+                                            )
+                                        }
+                                        onAddNote={(e) => {
+                                            addAdaptationNote(
+                                                creative.id,
+                                                `${e.title}: ${e.action}`,
+                                            );
+                                            toast.success("Added to adaptation notes");
+                                        }}
+                                        usefulIds={usefulIds}
+                                    />
+                                </div>
                                 <KcaPanel
                                     keep={analysis.keep}
                                     change={analysis.change}
@@ -340,14 +390,14 @@ function CreativeDetailPage() {
                                 />
                                 {notes.length > 0 && (
                                     <SurfaceCard padding="md">
-                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                                        <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                                             Adaptation notes
                                         </p>
-                                        <ul className="mt-2 flex flex-col gap-1.5 text-sm text-text-primary">
+                                        <ul className="mt-2 flex flex-col divide-y divide-divider text-sm text-text-primary">
                                             {notes.map((n, i) => (
                                                 <li
                                                     key={i}
-                                                    className="flex items-start gap-2 rounded-md bg-surface-soft/60 px-3 py-2 text-xs"
+                                                    className="flex items-start gap-2 py-2.5 text-xs"
                                                 >
                                                     <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-text-tertiary" />
                                                     <span>{n}</span>
@@ -359,7 +409,7 @@ function CreativeDetailPage() {
                             </>
                         ) : (
                             <SurfaceCard padding="lg">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                                <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                                     Intelligence
                                 </p>
                                 <p className="mt-2 text-sm text-text-secondary">

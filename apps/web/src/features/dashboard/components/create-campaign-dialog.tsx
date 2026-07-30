@@ -97,7 +97,7 @@ export function CreateCampaignDialog({
                             name="status"
                             render={({ field }) => (
                                 <Select value={field.value} onValueChange={field.onChange}>
-                                    <SelectTrigger>
+                                    <SelectTrigger aria-label="Campaign status">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>

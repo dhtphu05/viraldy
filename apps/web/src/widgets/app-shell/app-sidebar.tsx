@@ -1,38 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-    LayoutDashboard,
-    Images,
-    Megaphone,
-    Video,
-    BarChart3,
-    Package,
-    Settings as SettingsIcon,
-    Workflow,
-    PanelLeftClose,
-    PanelLeft,
-} from "lucide-react";
+import { PanelLeftClose, PanelLeft, Sparkles } from "lucide-react";
 import { useAppStore } from "@/app/store/app-store";
 import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/shared/ui/tooltip";
-import { Sparkles } from "lucide-react";
+import { navigationGroups, type ShellNavItem } from "./navigation";
 
-type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
-
-const primary: NavItem[] = [
-    { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { to: "/mvp", label: "MVP Flow", icon: Workflow },
-    { to: "/creative-library", label: "Creative Library", icon: Images },
-    { to: "/campaigns", label: "Campaigns", icon: Megaphone },
-    { to: "/ugc-review", label: "UGC Review", icon: Video },
-    { to: "/performance", label: "Performance", icon: BarChart3 },
-];
-
-const secondary: NavItem[] = [
-    { to: "/products", label: "Products", icon: Package },
-    { to: "/settings", label: "Settings", icon: SettingsIcon },
-];
-
-function NavLinkRow({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function NavLinkRow({ item, collapsed }: { item: ShellNavItem; collapsed: boolean }) {
     const pathname = useRouterState({ select: (s) => s.location.pathname });
     const active = pathname === item.to || pathname.startsWith(item.to + "/");
     const Icon = item.icon;
@@ -40,7 +13,7 @@ function NavLinkRow({ item, collapsed }: { item: NavItem; collapsed: boolean }) 
         <Link
             to={item.to}
             className={cn(
-                "relative flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "relative flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-sm font-medium transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 collapsed && "justify-center px-0",
                 active
                     ? "bg-primary-soft text-primary-active"
@@ -94,12 +67,12 @@ export function AppSidebar() {
                         collapsed && "justify-center px-0",
                     )}
                 >
-                    <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
                         <Sparkles className="h-4 w-4" />
                     </span>
                     {!collapsed && (
                         <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold tracking-tight text-text-primary">
+                            <p className="truncate text-sm font-semibold text-text-primary">
                                 Viraldy
                             </p>
                             <p className="truncate text-[11px] text-text-tertiary">
@@ -110,29 +83,26 @@ export function AppSidebar() {
                 </div>
 
                 <nav className={cn("flex-1 overflow-y-auto px-2 pb-4", collapsed && "px-2")}>
-                    {!collapsed && (
-                        <p className="mb-1 px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                            Workspace
-                        </p>
-                    )}
-                    <div className="flex flex-col gap-0.5">
-                        {primary.map((item) => (
-                            <NavLinkRow key={item.to} item={item} collapsed={collapsed} />
-                        ))}
-                    </div>
-
-                    <div className="my-3 h-px bg-hairline/70" />
-
-                    {!collapsed && (
-                        <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                            Manage
-                        </p>
-                    )}
-                    <div className="flex flex-col gap-0.5">
-                        {secondary.map((item) => (
-                            <NavLinkRow key={item.to} item={item} collapsed={collapsed} />
-                        ))}
-                    </div>
+                    {navigationGroups.map((group, index) => (
+                        <div
+                            key={group.label}
+                            className={cn(
+                                index > 0 &&
+                                    (collapsed ? "mt-2 border-t border-divider pt-2" : "mt-4"),
+                            )}
+                        >
+                            {!collapsed && (
+                                <p className="mb-1 px-2 text-[10px] font-semibold uppercase text-text-tertiary first:pt-2">
+                                    {group.label}
+                                </p>
+                            )}
+                            <div className="flex flex-col gap-0.5">
+                                {group.items.map((item) => (
+                                    <NavLinkRow key={item.to} item={item} collapsed={collapsed} />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
                 </nav>
 
                 <div
@@ -164,37 +134,56 @@ export function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }
     return (
         <div className="flex h-full flex-col">
             <div className="flex h-16 items-center gap-2 px-4">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
                     <Sparkles className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold tracking-tight text-text-primary">
-                        Viraldy
-                    </p>
+                    <p className="truncate text-sm font-semibold text-text-primary">Viraldy</p>
                     <p className="truncate text-[11px] text-text-tertiary">Creative Intelligence</p>
                 </div>
             </div>
             <nav className="flex-1 overflow-y-auto px-2 pb-4">
-                {[...primary, ...secondary].map((item) => {
-                    const active = pathname === item.to || pathname.startsWith(item.to + "/");
-                    const Icon = item.icon;
-                    return (
-                        <Link
-                            key={item.to}
-                            to={item.to}
-                            onClick={onNavigate}
-                            className={cn(
-                                "flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium",
-                                active
-                                    ? "bg-primary-soft text-primary-active"
-                                    : "text-text-secondary hover:bg-surface-soft",
-                            )}
-                        >
-                            <Icon className={cn("h-[18px] w-[18px]", active && "text-primary")} />
-                            {item.label}
-                        </Link>
-                    );
-                })}
+                {navigationGroups.map((group) => (
+                    <div key={group.label} className="mt-3 first:mt-0">
+                        <p className="mb-1 px-2 text-[10px] font-semibold uppercase text-text-tertiary">
+                            {group.label}
+                        </p>
+                        <div className="flex flex-col gap-0.5">
+                            {group.items.map((item) => {
+                                const active =
+                                    pathname === item.to || pathname.startsWith(item.to + "/");
+                                const Icon = item.icon;
+                                return (
+                                    <Link
+                                        key={item.to}
+                                        to={item.to}
+                                        onClick={onNavigate}
+                                        className={cn(
+                                            "relative flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-sm font-medium transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                            active
+                                                ? "bg-primary-soft text-primary-active"
+                                                : "text-text-secondary hover:bg-surface-soft",
+                                        )}
+                                    >
+                                        {active && (
+                                            <span
+                                                aria-hidden
+                                                className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
+                                            />
+                                        )}
+                                        <Icon
+                                            className={cn(
+                                                "h-[18px] w-[18px]",
+                                                active && "text-primary",
+                                            )}
+                                        />
+                                        {item.label}
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
             </nav>
         </div>
     );
