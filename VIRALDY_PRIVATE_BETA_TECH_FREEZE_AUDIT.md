@@ -15,7 +15,8 @@ current source code and verification commands prove them.
 - S1 commit SHA: `1f603ba`
 - S2 commit SHA: `b9ffa40`
 - S3 commit SHA: `9382fcb`
-- Current S4 implementation commit SHA: pending until this audit update is committed.
+- S4 commit SHA: `667e418`
+- S5 implementation commit SHA: `f45b318`
 - PR URL: pending
 
 ## 2. Changed Files By Module
@@ -114,6 +115,38 @@ current source code and verification commands prove them.
 - `apps/backend/tests/unit/test_viral_kits.py`
 - `apps/backend/tests/integration/test_migrations.py`
 
+### S5 AI Operations, Jobs, And Generation
+
+- `apps/backend/src/viraldy/modules/ai_gateway/operations.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/prompts.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/public.py`
+- `apps/backend/src/viraldy/modules/generation/`
+- `apps/backend/src/viraldy/modules/jobs/`
+- `apps/backend/src/viraldy/modules/references/service.py`
+- `apps/backend/src/viraldy/modules/tiktok_scorer/service.py`
+- `apps/backend/src/viraldy/modules/preflight/service.py`
+- `apps/backend/src/viraldy/modules/viral_kits/public.py`
+- `apps/backend/src/viraldy/platform/config/settings.py`
+- `apps/backend/src/viraldy/platform/database/models.py`
+- `apps/backend/src/viraldy/worker/celery_app.py`
+- `apps/backend/src/viraldy/worker/tasks/process_asset.py`
+- `apps/backend/src/viraldy/api/main.py`
+- `apps/backend/alembic/versions/0009_generation_foundation.py`
+- `apps/backend/alembic/versions/0010_job_contract_normalization.py`
+- `docker-compose.yml`
+- `infrastructure/docker/entrypoints/worker.sh`
+- `Makefile`
+- `apps/backend/README.md`
+
+### S5 Tests
+
+- `apps/backend/tests/unit/test_ai_gateway.py`
+- `apps/backend/tests/unit/test_generation.py`
+- `apps/backend/tests/unit/test_jobs.py`
+- `apps/backend/tests/unit/test_job_service.py`
+- `apps/backend/tests/contract/test_openapi.py`
+- `apps/backend/tests/integration/test_migrations.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -124,6 +157,8 @@ current source code and verification commands prove them.
 - `0006_feedback_events_model_runs`
 - `0007_pattern_kits`
 - `0008_viral_kits`
+- `0009_generation_foundation`
+- `0010_job_contract_normalization`
 
 `0005_auth_workspace_rbac` adds `users.last_login_at`, converts legacy
 `workspace_members.role='editor'` to `member`, and adds check constraints for
@@ -147,6 +182,21 @@ Packs to be created without an Adaptation Run, and adds `viral_kits`,
 and `viral_kit_campaign_pack_links` with workspace-scoped indexes, append-only
 version uniqueness, pattern-link uniqueness, concept action constraints, and
 Campaign Pack lineage links.
+
+`0009_generation_foundation` adds workspace-scoped `generation_runs` and
+`generation_artifacts`. Runs lock the exact ViralKit/version/concept,
+generation brief, source asset IDs, prompt/schema version, input hash, model
+run, processing job, safe failure, and idempotency metadata. Artifacts retain
+provider/model provenance and storage keys or structured fixture payloads,
+never signed download URLs.
+
+`0010_job_contract_normalization` is a separate data migration. It converts
+`completed` to `succeeded`, converts transient legacy `dispatching` rows to
+`queued`, and safely maps legacy job type names only when doing so cannot
+collide with the existing idempotency unique constraint. Application-level
+aliases remain so queued legacy deliveries and collision-preserved rows are
+still readable. The migration replaces job/event status constraints and has a
+reverse mapping for rollback.
 
 ## 4. Auth And Identity
 
@@ -356,11 +406,16 @@ Implemented in S4:
 - `POST /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/feedback`
 - `DELETE /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}`
 
+Implemented in S5:
+
+- `POST /api/v1/workspaces/{workspace_id}/generation/storyboards`
+- `POST /api/v1/workspaces/{workspace_id}/generation/concept-video-previews`
+- `GET /api/v1/workspaces/{workspace_id}/generation/runs/{generation_run_id}`
+
 Pending:
 
 - Health endpoints `/health/live`, `/health/ready`, `/health/dependencies`,
   `/health/worker`
-- Generation endpoints/foundations where required
 
 S2 behavior implemented:
 
@@ -416,6 +471,51 @@ S4 behavior implemented:
 - Failed ViralKit validation/provider errors mark the model run failed with a
   safe error code/message.
 
+S5 behavior implemented:
+
+- A central typed operation registry defines all seven Dola/Seed analysis
+  operations and both Seedream/Seedance generation operations. Every definition
+  has typed input/output models, prompt version, schema version, timeout, retry
+  policy, model family, and fixture availability.
+- Job types now use the private-beta canonical names, including PatternKit,
+  ViralKit, Campaign Pack, preflight, generation, and retention jobs. Legacy
+  names remain aliases for already-queued deliveries and idempotent lookups.
+- Job terminal success is `succeeded`. API responses expose canonical
+  `progress_percent`, `current_stage`, `safe_error_code`, and
+  `safe_error_message` while retaining the old fields for client compatibility.
+- The Celery production task is named `run_processing_job`; placeholder aliases
+  were removed. Stable UUIDs remain the only task payload.
+- Stale running jobs are locked with `FOR UPDATE SKIP LOCKED`, moved to
+  `retrying` or `failed` based on attempt limits, and redispatched by a
+  maintenance task every five minutes. Recovery uses the persisted
+  `updated_at` heartbeat and waits for the larger of the configured stale
+  threshold or that job type's hard timeout plus a 120-second safety margin.
+- Each claimed attempt is fenced by its persisted `attempt_count`. Every
+  progress and terminal write reacquires the job row and requires both
+  `status=running` and the same attempt token, so a recovered old worker cannot
+  overwrite a newer attempt. Stranded old `retrying` rows are eligible for
+  maintenance redispatch.
+- Initial dispatch and stale-job redispatch both use the registered queue,
+  soft timeout, and hard timeout for the canonical job type.
+- Docker Compose includes a Celery Beat service, and the worker consumes both
+  `default` and `maintenance`, so stale recovery and maintenance jobs are
+  operational rather than configuration-only.
+- Storyboard and concept-video requests validate workspace access, generation
+  feature flags, exact ViralKit version/concept/brief, and every source asset.
+  Explicit source-media rights confirmation is required where the immutable
+  brief requires it. Creation stores an immutable input snapshot and queues an
+  idempotent job.
+- Worker execution creates an `ai_model_runs` row, validates provider output,
+  atomically replaces retry artifacts, records provider/model provenance, and
+  completes both generation run and processing job. Worker lookup is
+  workspace-scoped and verifies the processing-job-to-generation-run binding.
+- Fixture and mock modes produce deterministic structured artifacts. Live mode
+  requires explicit provider URL, API key, and image/video model; it never
+  falls back to fixture output. Transient timeout, rate-limit, and 5xx responses
+  use the configured bounded retry policy.
+- Provider artifact contracts recursively reject persisted HTTP(S) URLs.
+  Signed download URLs remain request-time concerns and are not stored.
+
 ## 9. Test Commands And Results
 
 Commands run locally:
@@ -437,6 +537,17 @@ cd apps/backend && .venv/bin/mypy src/viraldy/modules/viral_kits src/viraldy/mod
 cd apps/backend && .venv/bin/pytest tests/unit/test_viral_kits.py -q
 cd apps/backend && .venv/bin/pytest tests/integration/test_migrations.py -q
 cd apps/backend && .venv/bin/pytest -q
+cd apps/backend && .venv/bin/ruff check .
+cd apps/backend && .venv/bin/mypy src/viraldy/modules/generation src/viraldy/modules/ai_gateway/operations.py src/viraldy/modules/jobs src/viraldy/modules/viral_kits/public.py
+cd apps/backend && .venv/bin/pytest tests/unit/test_generation.py tests/unit/test_ai_gateway.py tests/unit/test_jobs.py tests/unit/test_job_service.py -q
+cd apps/backend && .venv/bin/pytest tests/integration/test_migrations.py -q
+cd apps/backend && .venv/bin/pytest -q
+cd apps/backend && .venv/bin/pip-audit
+cd apps/backend && uv run mypy src/viraldy/modules/ai_gateway/operations.py src/viraldy/modules/ai_gateway/prompts.py src/viraldy/modules/ai_gateway/public.py src/viraldy/modules/creative_domain/schema_versions.py src/viraldy/modules/generation src/viraldy/modules/jobs/dispatcher.py src/viraldy/modules/jobs/policies.py src/viraldy/modules/jobs/public.py src/viraldy/modules/jobs/registry.py src/viraldy/modules/jobs/repository.py src/viraldy/modules/jobs/schemas.py src/viraldy/modules/jobs/service.py src/viraldy/modules/preflight/service.py src/viraldy/modules/references/service.py src/viraldy/modules/tiktok_scorer/service.py src/viraldy/modules/viral_kits/public.py src/viraldy/platform/config/settings.py src/viraldy/platform/database/models.py tests/unit/test_generation.py tests/unit/test_job_service.py tests/unit/test_jobs.py tests/contract/test_openapi.py tests/integration/test_migrations.py
+cd apps/backend && uv run pytest tests/unit/test_ai_gateway.py tests/unit/test_generation.py tests/unit/test_jobs.py tests/unit/test_job_service.py tests/contract/test_openapi.py --no-cov -q
+cd apps/backend && uv run pytest tests/integration/test_migrations.py -q
+cd apps/backend && uv run pytest -q
+docker compose -f <(sed '/env_file: \.env/d' docker-compose.yml) --project-directory "$PWD" config --quiet
 ```
 
 Results:
@@ -460,6 +571,20 @@ Results:
 - S4 ViralKit unit suite: `7 passed`, coverage `73.17%`.
 - S4 clean Postgres migration integration: `1 passed`, coverage `98.45%`.
 - S4 full backend pytest: `101 passed`, coverage `73.08%`.
+- S5 full backend lint: passed.
+- S5 targeted mypy: passed, `no issues found in 31 source files`.
+- S5 AI/generation/job/OpenAPI targeted suite: `33 passed`. Coverage was
+  intentionally disabled for this narrow run; the full suite is the coverage
+  gate.
+- S5 clean Postgres migration integration: `1 passed`, coverage `89.32%`.
+  This also verifies canonical idempotent-job selection when canonical and
+  legacy alias rows coexist.
+- S5 full backend pytest: `121 passed`, coverage `72.49%`.
+- S5 dependency audit: no known vulnerabilities; the local unpublished
+  `viraldy-backend` package is not present on PyPI and was skipped.
+- S5 Docker Compose structure validation: passed. The local `.env` file is not
+  present, so validation omitted only the `env_file` entries while preserving
+  all service, command, dependency, queue, and network structure.
 
 Local `alembic current` against the default localhost database failed because
 the local Postgres credentials rejected `viraldy`; the clean migration test used
@@ -475,7 +600,10 @@ Pending for the full private beta flow. Existing unit tests now cover media
 evidence, Creative DNA, PatternKit fixture extraction, PatternKit state
 transitions, PatternKit feedback, ViralKit fixture composition, ViralKit
 product-version locking, ViralKit concept actions, ViralKit-to-Campaign-Pack
-lineage, TikTok scorer, campaign pack semantics, preflight requirements, and
+lineage, typed AI operation registration, generation feature flags, exact
+generation-brief selection, deterministic generation artifacts, job aliases,
+stale-job recovery fencing, live-provider retry/error/output validation,
+TikTok scorer, campaign pack semantics, preflight requirements, and
 recommendations. The full fixture/mock E2E path is not yet implemented.
 
 ## 12. Known Limitations
@@ -484,18 +612,18 @@ recommendations. The full fixture/mock E2E path is not yet implemented.
   tenant-isolation coverage, deletion invalidation, and performance-evidence
   promotion rules remain pending.
 - ViralKit module exists, but full HTTP tenant-isolation coverage, live provider
-  qualification, frontend integration, and generation execution remain pending.
+  qualification and frontend integration remain pending.
 - Feedback module exists for workspace-scoped field-level correction, and
   PatternKit/ViralKit both have resource-local feedback endpoints.
 - Product events module exists for workspace-scoped export, but not every
   required event producer is wired yet.
-- Generation foundation is still absent.
+- Generation foundation is implemented, but live Seedream/Seedance provider
+  qualification and real generated-object storage tests remain pending.
 - Health endpoint set is incomplete.
-- Job statuses still use the pre-existing naming in parts of the codebase.
 - Product Context still needs expansion to the full private beta section model.
 - Recommendation product snapshots and full source-version metadata remain incomplete.
-- Model-run trace fields are present, but the full Dola/Seed operation registry
-  and generation run foundation remain incomplete.
+- Model-run trace fields and the operation registry are present; existing
+  analysis services still need complete registry-driven execution coverage.
 - Data deletion/retention is incomplete.
 - GitHub CI and release tag are pending.
 
@@ -522,7 +650,7 @@ Production/staging rejects:
 
 ## 14. Dola/Seed Environment Variables
 
-Pending implementation. Existing AI analysis settings:
+Implemented AI analysis settings:
 
 - `AI_MODE`
 - `AI_PROVIDER`
@@ -536,16 +664,31 @@ Pending implementation. Existing AI analysis settings:
 - `AI_MAX_RETRIES`
 - `AI_MAX_OUTPUT_TOKENS`
 
-Required generation additions still pending:
+Implemented generation settings:
 
 - `IMAGE_GENERATION_ENABLED`
 - `VIDEO_GENERATION_ENABLED`
 - `IMAGE_GENERATION_MODEL`
 - `VIDEO_GENERATION_MODEL`
 
+Implemented job recovery setting:
+
+- `JOB_STALE_AFTER_SECONDS`, default `900`
+
 ## 15. Seedream/Seedance Activation Steps
 
-Pending. Feature flags and generation run persistence have not been added yet.
+Feature flags default to off. Activation requires:
+
+1. Deploy a qualified provider/proxy implementing
+   `POST {AI_BASE_URL}/media/generations`.
+2. Set `AI_MODE=live`, `AI_PROVIDER`, `AI_BASE_URL`, and `AI_API_KEY`.
+3. Set `IMAGE_GENERATION_MODEL` and/or `VIDEO_GENERATION_MODEL`.
+4. Run provider qualification and output-contract tests.
+5. Enable `IMAGE_GENERATION_ENABLED=true` and/or
+   `VIDEO_GENERATION_ENABLED=true`.
+
+Do not enable either flag before provider qualification. Fixture and mock modes
+use deterministic artifacts and do not prove visual model quality.
 
 ## 16. Data Deletion Evidence
 
@@ -557,10 +700,8 @@ records are not yet implemented.
 
 The backend is not technically frozen yet. Remaining milestones:
 
-- Remaining S2 job naming/progress additions beyond model-run trace fields.
 - Remaining S3 hardening: PatternKit live/mock provider qualification, full
   HTTP tenant-isolation tests, deletion invalidation, and performance evidence
   promotion rules.
-- S5 provider/generation/job integration.
 - S6 deletion, health, evaluation harness.
 - S7 full fixture/mock E2E, GitHub CI, PR, and release tag.
