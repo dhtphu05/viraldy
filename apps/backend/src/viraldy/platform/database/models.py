@@ -8,6 +8,7 @@ from viraldy.modules.assets.models import AssetModel, AssetVersionModel
 from viraldy.modules.campaign_packs.models import CampaignPackModel, CampaignPackVersionModel
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
 from viraldy.modules.feedback.models import FeedbackItemModel
+from viraldy.modules.generation.models import GenerationArtifactModel, GenerationRunModel
 from viraldy.modules.identity.models import UserModel
 from viraldy.modules.jobs.models import ProcessingJobEventModel, ProcessingJobModel
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
@@ -47,6 +48,8 @@ __all__ = [
     "CreativeDnaVersionModel",
     "EvidenceItemModel",
     "FeedbackItemModel",
+    "GenerationArtifactModel",
+    "GenerationRunModel",
     "MediaArtifactModel",
     "PatternKitActionModel",
     "PatternKitEvidenceLinkModel",

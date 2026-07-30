@@ -1,7 +1,7 @@
 BACKEND_DIR=apps/backend
 WEB_DIR=apps/web
 
-.PHONY: setup infra-up infra-down backend-install web-install api worker web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke security docker-build logs clean
+.PHONY: setup infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke security docker-build logs clean
 
 setup: backend-install
 
@@ -21,7 +21,10 @@ api:
 	cd $(BACKEND_DIR) && uv run uvicorn viraldy.api.main:app --host $${API_HOST:-0.0.0.0} --port $${API_PORT:-8000} --reload
 
 worker:
-	cd $(BACKEND_DIR) && uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default
+	cd $(BACKEND_DIR) && uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default,maintenance
+
+beat:
+	cd $(BACKEND_DIR) && uv run celery -A viraldy.worker.celery_app beat --loglevel=INFO
 
 web-dev:
 	cd $(WEB_DIR) && pnpm dev

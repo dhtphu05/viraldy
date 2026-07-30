@@ -8,7 +8,8 @@ FastAPI API and Celery worker backend foundation.
 uv sync --all-extras --dev
 uv run alembic upgrade head
 uv run uvicorn viraldy.api.main:app --reload
-uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default
+uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default,maintenance
+uv run celery -A viraldy.worker.celery_app beat --loglevel=INFO
 uv run pytest
 ```
 
@@ -18,7 +19,8 @@ Local MVP fixture flow:
 uv run alembic upgrade head
 uv run python scripts/seed_local.py
 AI_MODE=fixture uv run uvicorn viraldy.api.main:app --reload
-AI_MODE=fixture uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default
+AI_MODE=fixture uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default,maintenance
+AI_MODE=fixture uv run celery -A viraldy.worker.celery_app beat --loglevel=INFO
 ```
 
 `AI_MODE=fixture` only analyzes seeded demo assets with known fixture IDs. Unknown uploads

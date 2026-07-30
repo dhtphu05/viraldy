@@ -60,7 +60,7 @@ class PreflightService:
                 "CAMPAIGN_PACK_VERSION_NOT_FOUND", "Campaign Pack version was not found."
             )
         existing_job = await get_existing_idempotent_job(
-            self._session, workspace_id, "run_ugc_preflight", idempotency_key
+            self._session, workspace_id, "preflight_run", idempotency_key
         )
         if existing_job is not None:
             run = await self._repository.get(workspace_id, existing_job.subject_id)
@@ -81,7 +81,7 @@ class PreflightService:
             workspace_id,
             "preflight_run",
             run.id,
-            "run_ugc_preflight",
+            "preflight_run",
             {
                 "preflight_run_id": str(run.id),
                 "ugc_asset_id": str(data.ugc_asset_id),

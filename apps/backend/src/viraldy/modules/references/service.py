@@ -74,7 +74,7 @@ class ReferenceService:
         if reference is None:
             raise NotFoundError("REFERENCE_NOT_FOUND", "Reference was not found.")
         existing_job = await get_existing_idempotent_job(
-            self._session, workspace_id, "analyze_reference", idempotency_key
+            self._session, workspace_id, "creative_dna_build", idempotency_key
         )
         if existing_job is not None:
             return AnalyzeReferenceResponse(
@@ -92,7 +92,7 @@ class ReferenceService:
             workspace_id,
             "reference",
             reference_id,
-            "analyze_reference",
+            "creative_dna_build",
             {
                 "reference_id": str(reference_id),
                 "asset_id": str(reference.asset_id),

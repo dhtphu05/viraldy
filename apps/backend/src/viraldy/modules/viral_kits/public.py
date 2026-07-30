@@ -5,7 +5,11 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from viraldy.modules.viral_kits.contracts import ViralKitV1
+from viraldy.modules.viral_kits.contracts import (
+    GenerationBriefV1,
+    GenerationSceneV1,
+    ViralKitV1,
+)
 from viraldy.modules.viral_kits.repository import ViralKitRepository
 from viraldy.shared.errors.base import NotFoundError
 
@@ -76,4 +80,10 @@ class ViralKitQueries:
         )
 
 
-__all__ = ["ViralKitQueries", "ViralKitV1", "ViralKitVersionSnapshot"]
+__all__ = [
+    "GenerationBriefV1",
+    "GenerationSceneV1",
+    "ViralKitQueries",
+    "ViralKitV1",
+    "ViralKitVersionSnapshot",
+]

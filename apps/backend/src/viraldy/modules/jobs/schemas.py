@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobResponse(BaseModel):
@@ -23,5 +24,12 @@ class JobResponse(BaseModel):
     error_code: str | None
     error_message: str | None
     task_id: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    progress_percent: int = Field(validation_alias="progress")
+    current_stage: str | None = Field(validation_alias="stage")
+    safe_error_code: str | None = Field(validation_alias="error_code")
+    safe_error_message: str | None = Field(validation_alias="error_message")
 
     model_config = {"from_attributes": True}

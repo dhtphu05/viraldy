@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
+    job_stale_after_seconds: int = Field(default=900, ge=60)
 
     auth_mode: AuthMode = AuthMode.LOCAL_TEST
     auth_disabled: bool = False
@@ -77,6 +78,10 @@ class Settings(BaseSettings):
     ai_request_timeout_seconds: int = 120
     ai_max_retries: int = 2
     ai_max_output_tokens: int | None = None
+    image_generation_enabled: bool = False
+    video_generation_enabled: bool = False
+    image_generation_model: str | None = None
+    video_generation_model: str | None = None
 
     sentry_dsn: SecretStr | None = None
     otel_exporter_otlp_endpoint: str | None = None

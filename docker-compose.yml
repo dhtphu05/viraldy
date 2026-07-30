@@ -102,7 +102,28 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-    command: ["celery", "-A", "viraldy.worker.celery_app", "worker", "--loglevel=INFO", "--queues=default"]
+    command: ["celery", "-A", "viraldy.worker.celery_app", "worker", "--loglevel=INFO", "--queues=default,maintenance"]
+    networks: [viraldy]
+
+  beat:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+      target: runtime
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://viraldy:viraldy@postgres:5432/viraldy
+      DATABASE_SYNC_URL: postgresql+psycopg://viraldy:viraldy@postgres:5432/viraldy
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "viraldy.worker.celery_app", "beat", "--loglevel=INFO"]
     networks: [viraldy]
 
 networks:

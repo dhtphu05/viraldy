@@ -5,12 +5,14 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.jobs.dispatcher import CeleryJobDispatcher
+from viraldy.modules.jobs.registry import JobType
 from viraldy.modules.jobs.repository import JobRepository
 from viraldy.modules.jobs.schemas import JobResponse
 from viraldy.modules.jobs.service import JobService
 
 __all__ = [
     "JobResponse",
+    "JobType",
     "get_existing_idempotent_job",
     "request_mvp_job",
     "request_process_asset",

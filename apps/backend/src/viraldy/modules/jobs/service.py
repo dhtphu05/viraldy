@@ -6,6 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.jobs.dispatcher import JobDispatcher
+from viraldy.modules.jobs.models import ProcessingJobModel
+from viraldy.modules.jobs.registry import JobType, normalize_job_type
 from viraldy.modules.jobs.repository import JobRepository
 from viraldy.modules.jobs.schemas import JobResponse
 from viraldy.shared.errors.base import NotFoundError
@@ -25,7 +27,7 @@ class JobService:
         idempotency_key: str | None,
     ) -> JobResponse:
         job = await self._repository.get_existing_idempotent(
-            workspace_id, "process_asset", idempotency_key
+            workspace_id, JobType.MEDIA_ANALYSIS.value, idempotency_key
         )
         created = job is None
         if job is None:
@@ -39,7 +41,7 @@ class JobService:
             except IntegrityError:
                 await self._session.rollback()
                 job = await self._repository.get_existing_idempotent(
-                    workspace_id, "process_asset", idempotency_key
+                    workspace_id, JobType.MEDIA_ANALYSIS.value, idempotency_key
                 )
                 created = False
                 if job is None:
@@ -47,7 +49,7 @@ class JobService:
 
         await self._session.commit()
         if created and self._dispatcher is not None:
-            await self._dispatch_created_job(job, "process_asset")
+            await self._dispatch_created_job(job)
 
         return JobResponse.model_validate(job)
 
@@ -60,6 +62,7 @@ class JobService:
         input_json: dict[str, object],
         idempotency_key: str | None,
     ) -> JobResponse:
+        job_type = normalize_job_type(job_type)
         job = await self._repository.get_existing_idempotent(
             workspace_id, job_type, idempotency_key
         )
@@ -84,7 +87,7 @@ class JobService:
                     raise
         await self._session.commit()
         if created and self._dispatcher is not None:
-            await self._dispatch_created_job(job, "mvp")
+            await self._dispatch_created_job(job)
         return JobResponse.model_validate(job)
 
     async def list_jobs(self, workspace_id: UUID) -> list[JobResponse]:
@@ -97,14 +100,13 @@ class JobService:
             raise NotFoundError("JOB_NOT_FOUND", "Processing job was not found.")
         return JobResponse.model_validate(job)
 
-    async def _dispatch_created_job(self, job, dispatch_kind: str) -> None:
+    async def _dispatch_created_job(self, job: ProcessingJobModel) -> None:
+        if self._dispatcher is None:
+            return
         await self._repository.record_dispatch_requested(job)
         await self._session.commit()
         try:
-            if dispatch_kind == "process_asset":
-                result = self._dispatcher.dispatch_process_asset(job.id)
-            else:
-                result = self._dispatcher.dispatch_mvp_job(job.id)
+            result = self._dispatcher.dispatch_job(job.id, job.job_type)
         except Exception as exc:
             await self._repository.record_dispatch_failed(job, str(exc))
             await self._session.commit()

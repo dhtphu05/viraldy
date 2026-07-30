@@ -15,6 +15,12 @@ from fastapi.testclient import TestClient
 import viraldy.modules.adaptations.provider as adaptation_provider_module
 import viraldy.modules.ai_gateway.http_client as http_client_module
 from viraldy.modules.ai_gateway.http_client import OpenAICompatibleClient, extract_message_json
+from viraldy.modules.ai_gateway.operations import (
+    AI_OPERATION_DEFINITIONS,
+    AiOperationName,
+    build_ai_operation_fixture,
+    get_ai_operation_definition,
+)
 from viraldy.modules.ai_gateway.repository import _run
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.platform.config.settings import Settings
@@ -159,6 +165,95 @@ def test_model_run_populates_private_beta_trace_fields() -> None:
     assert run.attempt == 1
     assert run.attempt_count == 2
     assert run.usage_json == {}
+
+
+def test_private_beta_ai_operation_registry_is_complete_and_typed() -> None:
+    assert set(AI_OPERATION_DEFINITIONS) == {operation.value for operation in AiOperationName}
+
+    for operation in AiOperationName:
+        definition = get_ai_operation_definition(operation)
+        assert definition.prompt_version
+        assert definition.schema_version
+        assert definition.timeout_seconds > 0
+        assert definition.max_retries >= 0
+        assert definition.mock_fixture_available
+        assert definition.input_contract.model_fields
+        assert definition.output_contract.model_fields
+
+    assert (
+        get_ai_operation_definition(AiOperationName.STORYBOARD_IMAGE_GENERATE).model_family
+        == "image"
+    )
+    assert (
+        get_ai_operation_definition(AiOperationName.CONCEPT_VIDEO_PREVIEW_GENERATE).model_family
+        == "video"
+    )
+
+
+def test_every_ai_operation_has_a_deterministic_contract_valid_fixture() -> None:
+    workspace_id = uuid4()
+    asset_id = uuid4()
+    asset_version_id = uuid4()
+    product_id = uuid4()
+    version_id = uuid4()
+    inputs: dict[AiOperationName, dict[str, object]] = {
+        AiOperationName.MEDIA_OBSERVATION: {
+            "workspace_id": workspace_id,
+            "asset_id": asset_id,
+            "asset_version_id": asset_version_id,
+        },
+        AiOperationName.CREATIVE_DNA_BUILD: {
+            "workspace_id": workspace_id,
+            "asset_id": asset_id,
+            "asset_version_id": asset_version_id,
+            "evidence_item_ids": [uuid4()],
+        },
+        AiOperationName.PATTERN_KIT_EXTRACT: {
+            "workspace_id": workspace_id,
+            "creative_dna_version_ids": [version_id],
+        },
+        AiOperationName.VIRAL_KIT_COMPOSE: {
+            "workspace_id": workspace_id,
+            "product_id": product_id,
+            "product_context_version": 1,
+            "pattern_kit_version_ids": [version_id],
+        },
+        AiOperationName.ADAPTATION_GENERATE: {
+            "workspace_id": workspace_id,
+            "product_id": product_id,
+            "product_context_version": 1,
+            "creative_dna_version_id": version_id,
+        },
+        AiOperationName.CAMPAIGN_PACK_GENERATE: {
+            "workspace_id": workspace_id,
+            "viral_kit_version_id": version_id,
+            "concept_id": "concept-1",
+        },
+        AiOperationName.REVISION_MESSAGE_GENERATE: {
+            "workspace_id": workspace_id,
+            "preflight_run_id": uuid4(),
+            "blocker_codes": ["PRODUCT_NOT_VISIBLE"],
+        },
+        AiOperationName.STORYBOARD_IMAGE_GENERATE: {
+            "workspace_id": workspace_id,
+            "viral_kit_version_id": version_id,
+            "concept_id": "concept-1",
+            "source_asset_ids": [asset_id],
+        },
+        AiOperationName.CONCEPT_VIDEO_PREVIEW_GENERATE: {
+            "workspace_id": workspace_id,
+            "viral_kit_version_id": version_id,
+            "concept_id": "concept-1",
+            "source_asset_ids": [asset_id],
+        },
+    }
+
+    for operation, payload in inputs.items():
+        first = build_ai_operation_fixture(operation, payload)
+        second = build_ai_operation_fixture(operation, payload)
+        definition = get_ai_operation_definition(operation)
+        assert first == second
+        assert isinstance(first, definition.output_contract)
 
 
 @pytest.mark.asyncio
