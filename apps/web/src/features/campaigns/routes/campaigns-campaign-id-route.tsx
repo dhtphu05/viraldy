@@ -60,9 +60,13 @@ import {
     Eye,
     AlertTriangle,
     Check,
+    ChevronDown,
+    ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DecisionBanner } from "@/shared/ui/decision-banner";
+import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
+import { cn } from "@/shared/lib/utils";
 
 export const Route = createFileRoute("/campaigns/$campaignId")({
     head: ({ loaderData }) => {
@@ -512,29 +516,74 @@ function WorkspaceLayout({
     campaignId: string;
     onReviewWarning: (warningId: string) => void;
 }) {
+    const currentIndex = STEPS.findIndex((item) => item.id === step);
+    const currentStep = STEPS[currentIndex] ?? STEPS[0];
+    const nextStep = STEPS[currentIndex + 1];
+    const currentComplete = stepIsComplete(pack, step);
+
     return (
-        <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
-            <aside className="lg:sticky lg:top-20 lg:self-start">
-                <div className="lg:hidden">
-                    <StepNav pack={pack} current={step} onSelect={onStep} compact />
+        <div className="flex flex-col gap-4">
+            <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
+                <aside className="lg:sticky lg:top-20 lg:self-start">
+                    <div className="lg:hidden">
+                        <StepNav pack={pack} current={step} onSelect={onStep} compact />
+                    </div>
+                    <div className="hidden lg:block">
+                        <StepNav pack={pack} current={step} onSelect={onStep} />
+                    </div>
+                </aside>
+                <div className="min-w-0">
+                    <StepSection
+                        pack={pack}
+                        step={step}
+                        onPatch={onPatch}
+                        campaignId={campaignId}
+                        onStep={onStep}
+                        onReviewWarning={onReviewWarning}
+                    />
                 </div>
-                <div className="hidden lg:block">
-                    <StepNav pack={pack} current={step} onSelect={onStep} />
-                </div>
-            </aside>
-            <div className="min-w-0">
-                <StepSection
-                    pack={pack}
-                    step={step}
-                    onPatch={onPatch}
-                    campaignId={campaignId}
-                    onStep={onStep}
-                    onReviewWarning={onReviewWarning}
-                />
+                <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
+                    <EvidencePanel pack={pack} />
+                </aside>
             </div>
-            <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
-                <EvidencePanel pack={pack} />
-            </aside>
+            <div className="sticky bottom-0 z-10 rounded-md border border-hairline bg-surface/95 px-4 py-3 shadow-md-card backdrop-blur">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <StatusChip tone={currentComplete ? "ok" : "neutral"} dot>
+                                {currentComplete ? "Step complete" : "In progress"}
+                            </StatusChip>
+                            <p className="truncate text-sm font-medium text-text-primary">
+                                {currentStep.label}
+                            </p>
+                        </div>
+                        <p className="mt-0.5 text-xs text-text-secondary">
+                            {completionPercent(pack)}% complete · saved locally as you edit
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {currentIndex > 0 && (
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onStep(STEPS[currentIndex - 1].id)}
+                            >
+                                Previous
+                            </Button>
+                        )}
+                        {nextStep ? (
+                            <Button size="sm" onClick={() => onStep(nextStep.id)}>
+                                Continue: {nextStep.short}
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        ) : (
+                            <Button size="sm" onClick={() => onStep("review")}>
+                                Review pack
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -1019,6 +1068,10 @@ function AdaptationStep({
 }) {
     const [busy, setBusy] = useState(false);
     const [variant, setVariant] = useState(0);
+    const [sourceOpen, setSourceOpen] = useState(false);
+    const sourceCreative = useAppStore((state) =>
+        state.creatives.find((creative) => creative.id === pack.referenceCreativeIds[0]),
+    );
     async function regenerate() {
         setBusy(true);
         const next = await generateAdaptation(
@@ -1068,20 +1121,75 @@ function AdaptationStep({
             }
         >
             <div className="grid gap-4 md:grid-cols-2">
-                <SurfaceCard padding="md">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                        Source pattern
-                    </p>
-                    <p className="mt-2 text-sm">
-                        <span className="font-medium">Hook:</span>{" "}
-                        {pack.adaptation.sourceHook || "—"}
-                    </p>
-                    <p className="mt-1 text-sm">
-                        <span className="font-medium">Angle:</span> {pack.adaptation.sourceAngle}
-                    </p>
-                    <p className="mt-1 text-sm">
-                        <span className="font-medium">Demo:</span> {pack.adaptation.sourceDemo}
-                    </p>
+                <SurfaceCard padding="none" className="overflow-hidden">
+                    <button
+                        type="button"
+                        aria-expanded={sourceCreative ? sourceOpen : undefined}
+                        disabled={!sourceCreative}
+                        onClick={() => setSourceOpen((open) => !open)}
+                        className="w-full p-5 text-left transition-colors duration-200 hover:bg-surface-soft/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+                    >
+                        <span className="flex items-start justify-between gap-3">
+                            <span className="min-w-0">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                                    Source pattern
+                                </span>
+                                <span className="mt-2 block text-sm">
+                                    <span className="font-medium">Hook:</span>{" "}
+                                    {pack.adaptation.sourceHook || "—"}
+                                </span>
+                                <span className="mt-1 block text-sm">
+                                    <span className="font-medium">Angle:</span>{" "}
+                                    {pack.adaptation.sourceAngle}
+                                </span>
+                                <span className="mt-1 block text-sm">
+                                    <span className="font-medium">Demo:</span>{" "}
+                                    {pack.adaptation.sourceDemo}
+                                </span>
+                            </span>
+                            {sourceCreative ? (
+                                <ChevronDown
+                                    className={cn(
+                                        "mt-0.5 h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200",
+                                        sourceOpen && "rotate-180",
+                                    )}
+                                />
+                            ) : (
+                                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-text-tertiary">
+                                    No linked media
+                                </span>
+                            )}
+                        </span>
+                    </button>
+                    {sourceOpen && sourceCreative && (
+                        <div className="analysis-state-enter border-t border-hairline p-4">
+                            <DemoMediaTile
+                                mediaUrl={sourceCreative.mediaUrl}
+                                mediaKind={sourceCreative.mediaKind}
+                                posterUrl={sourceCreative.posterUrl}
+                                seed={sourceCreative.thumbSeed}
+                                label={sourceCreative.title}
+                                badges={[
+                                    sourceCreative.platform,
+                                    sourceCreative.mediaAspectRatio ?? "reference",
+                                ]}
+                                aspect="16 / 9"
+                                fit={
+                                    sourceCreative.mediaAspectRatio === "9:16" ? "contain" : "cover"
+                                }
+                                className="rounded-md bg-black"
+                            />
+                            <Button asChild size="sm" variant="secondary" className="mt-3">
+                                <Link
+                                    to="/creative-library/$creativeId"
+                                    params={{ creativeId: sourceCreative.id }}
+                                >
+                                    Open source evidence
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
                 </SurfaceCard>
                 <SurfaceCard padding="md" className="bg-primary-soft/30">
                     <p className="text-xs font-semibold uppercase tracking-wide text-primary-active">

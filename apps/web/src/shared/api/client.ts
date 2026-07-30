@@ -1,7 +1,11 @@
 import { authHeaders } from "./auth";
 import { unwrapEnvelope } from "./errors";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+export const hasConfiguredApiBaseUrl = Boolean(CONFIGURED_API_BASE_URL);
+
+const API_BASE_URL = CONFIGURED_API_BASE_URL || "http://localhost:8000/api/v1";
 
 export async function apiGet<T>(path: string): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });

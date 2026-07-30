@@ -43,4 +43,11 @@ export const seedCreators: Creator[] = [
         avatarSeed: "dani",
         tone: "Expert",
     },
+    {
+        id: "cr-sofa",
+        name: "Lina Park",
+        handle: "@lina.homefinds",
+        avatarSeed: "lina",
+        tone: "Calm product demo",
+    },
 ];

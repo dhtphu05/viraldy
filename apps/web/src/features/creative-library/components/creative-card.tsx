@@ -20,11 +20,9 @@ import {
     ArrowRight,
     Play,
 } from "lucide-react";
-import {
-    thumbnailGradient,
-    formatDuration,
-} from "@/features/creative-library/lib/creative-visuals";
+import { formatDuration } from "@/features/creative-library/lib/creative-visuals";
 import type { CreativeReference } from "@/features/creative-library/types/creative";
+import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 
 export type CreativeCardAction =
     "open" | "analyze" | "adapt" | "add-to-campaign" | "move-board" | "duplicate" | "archive";
@@ -50,6 +48,14 @@ export function CreativeCard({
         creative.analysisStatus === "ready" ||
         creative.analysisStatus === "unanalyzed" ||
         creative.analysisStatus === "failed";
+    const markerTone =
+        creative.analysisStatus === "analyzed"
+            ? "ok"
+            : creative.analysisStatus === "failed"
+              ? "destructive"
+              : creative.analysisStatus === "processing"
+                ? "warn"
+                : "info";
 
     return (
         <div
@@ -66,25 +72,33 @@ export function CreativeCard({
                 className="relative block w-full overflow-hidden focus-visible:outline-none"
                 style={{ aspectRatio: compact ? "16 / 10" : "4 / 5" }}
             >
-                <div
+                <DemoMediaTile
+                    mediaUrl={creative.mediaUrl}
+                    mediaKind={creative.mediaKind}
+                    posterUrl={creative.posterUrl}
+                    alt={creative.title}
+                    seed={creative.thumbSeed}
+                    label={creative.angle}
+                    badges={[
+                        creative.platform,
+                        formatDuration(creative.durationSec),
+                        creative.mediaAspectRatio ?? "demo",
+                    ]}
+                    score={
+                        typeof creative.dnaScore === "number"
+                            ? `DNA ${creative.dnaScore}`
+                            : undefined
+                    }
+                    markers={[
+                        { at: 8, tone: "info" },
+                        { at: 34, tone: markerTone },
+                        { at: 62, tone: "ok" },
+                        { at: 88, tone: "warn" },
+                    ]}
+                    aspect={creative.mediaAspectRatio ?? (compact ? "16 / 10" : "4 / 5")}
+                    fit={creative.mediaAspectRatio === "9:16" ? "contain" : "cover"}
                     className="absolute inset-0"
-                    style={{ backgroundImage: thumbnailGradient(creative.thumbSeed) }}
-                    aria-hidden
                 />
-                <div
-                    aria-hidden
-                    className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.35),transparent_55%)]"
-                />
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent" />
-
-                <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
-                    <span className="rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white backdrop-blur-sm">
-                        {creative.platform}
-                    </span>
-                    <span className="rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
-                        {formatDuration(creative.durationSec)}
-                    </span>
-                </div>
 
                 {selectable && (
                     <span
@@ -95,6 +109,7 @@ export function CreativeCard({
                         }}
                         role="checkbox"
                         aria-checked={!!selected}
+                        aria-label={`${selected ? "Deselect" : "Select"} ${creative.title}`}
                         tabIndex={0}
                         onKeyDown={(e) => {
                             if (e.key === " " || e.key === "Enter") {
@@ -114,12 +129,6 @@ export function CreativeCard({
                 <span className="absolute bottom-2.5 left-2.5 grid h-9 w-9 place-items-center rounded-full bg-white/85 text-text-primary shadow-md-card opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                     <Play className="h-4 w-4 fill-current" />
                 </span>
-
-                {typeof creative.dnaScore === "number" && (
-                    <span className="absolute bottom-2.5 right-2.5 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold tabular text-text-primary shadow-sm-card">
-                        DNA {creative.dnaScore}
-                    </span>
-                )}
             </button>
 
             {/* Body */}

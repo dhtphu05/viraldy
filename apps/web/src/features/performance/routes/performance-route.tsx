@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
 import { SurfaceCard } from "@/shared/ui/surface-card";
@@ -7,8 +7,10 @@ import { MetricCard } from "@/shared/ui/metric-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { RelativeTime } from "@/shared/ui/relative-time";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 import { RecommendationCardPerf } from "@/features/performance/components/recommendation-card-perf";
 import { EvidenceDrawer } from "@/features/performance/components/evidence-drawer";
 import { ImportPerformanceDialog } from "@/features/performance/components/import-performance-dialog";
@@ -27,7 +29,6 @@ import {
     generateVariants,
 } from "@/features/performance/lib/performanceEngine";
 import type { PerfRecommendation, DecisionGroup } from "@/features/performance/types/performance";
-import { formatDistanceToNow } from "date-fns";
 import {
     BarChart3,
     TrendingUp,
@@ -47,7 +48,16 @@ import {
 import { toast } from "sonner";
 import type { Metric } from "@/shared/types";
 
-export const Route = createFileRoute("/performance")({
+export const Route = createFileRoute("/performance/")({
+    validateSearch: (search: Record<string, unknown>) => ({
+        import:
+            search.import === true ||
+            search.import === "true" ||
+            search.import === "1" ||
+            search.import === 1
+                ? true
+                : undefined,
+    }),
     head: () => ({
         meta: [
             { title: "Performance — Viraldy" },
@@ -74,6 +84,7 @@ const groupMeta: Record<
 };
 
 function PerformancePage() {
+    const routeSearch = Route.useSearch();
     const navigate = useNavigate();
     const recs = useAppStore((s) => s.perfRecommendations);
     const accepted = useAppStore((s) => s.perfAcceptedRecs);
@@ -83,12 +94,20 @@ function PerformancePage() {
     const filters = useAppStore((s) => s.perfFilters);
     const setFilters = useAppStore((s) => s.setPerfFilters);
     const acceptRec = useAppStore((s) => s.acceptPerfRec);
+    const unacceptRec = useAppStore((s) => s.unacceptPerfRec);
     const addVariants = useAppStore((s) => s.addVariants);
 
     const [openImport, setOpenImport] = useState(false);
     const [openReports, setOpenReports] = useState(false);
     const [selected, setSelected] = useState<PerfRecommendation | null>(null);
     const [groupFilter, setGroupFilter] = useState<DecisionGroup | "All">("All");
+
+    useEffect(() => {
+        const importParam = new URLSearchParams(window.location.search).get("import");
+        if (!routeSearch.import && importParam !== "1" && importParam !== "true") return;
+        setOpenImport(true);
+        void navigate({ to: "/performance", replace: true, search: {} });
+    }, [navigate, routeSearch.import]);
 
     const business = overviewBusinessMetrics();
 
@@ -155,6 +174,13 @@ function PerformancePage() {
             return true;
         });
     }, [recs, dismissed, snoozed, groupFilter, filters.search]);
+
+    const topRecommendation = visibleRecs.find((r) => !accepted.includes(r.id)) ?? visibleRecs[0];
+    const activeFilterLabels = [
+        filters.search ? `Search: ${filters.search}` : null,
+        groupFilter !== "All" ? `Decision: ${groupFilter}` : null,
+        filters.dateRange !== "30d" ? `Range: ${filters.dateRange}` : null,
+    ].filter((label): label is string => Boolean(label));
 
     const onCreateVariants = (rec: PerfRecommendation) => {
         const pattern =
@@ -270,6 +296,7 @@ function PerformancePage() {
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
                         <Input
                             placeholder="Search recommendations, campaigns, creators, assets"
+                            aria-label="Search recommendations, campaigns, creators, and assets"
                             className="h-9 pl-8 text-sm"
                             value={filters.search ?? ""}
                             onChange={(e) => setFilters({ search: e.target.value })}
@@ -323,6 +350,87 @@ function PerformancePage() {
                     </div>
                 </SurfaceCard>
 
+                {activeFilterLabels.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {activeFilterLabels.map((label) => (
+                            <span
+                                key={label}
+                                className="rounded-full bg-surface-soft px-2 py-0.5 text-xs text-text-secondary"
+                            >
+                                {label}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {topRecommendation && (
+                    <SurfaceCard padding="md" className="border-primary/20 bg-primary-soft/35">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            {topRecommendation.mediaUrl && (
+                                <DemoMediaTile
+                                    mediaUrl={topRecommendation.mediaUrl}
+                                    mediaKind={topRecommendation.mediaKind}
+                                    posterUrl={topRecommendation.posterUrl}
+                                    seed={topRecommendation.objectId ?? topRecommendation.id}
+                                    label={topRecommendation.object}
+                                    badges={[
+                                        topRecommendation.mediaAspectRatio ?? "media",
+                                        "top signal",
+                                    ]}
+                                    aspect={topRecommendation.mediaAspectRatio ?? "16 / 9"}
+                                    fit={
+                                        topRecommendation.mediaAspectRatio === "9:16"
+                                            ? "contain"
+                                            : "cover"
+                                    }
+                                    className="w-full max-w-[180px] rounded-md bg-black"
+                                />
+                            )}
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <StatusChip tone={decisionTone[topRecommendation.group]}>
+                                        {topRecommendation.kind}
+                                    </StatusChip>
+                                    <StatusChip
+                                        tone={
+                                            topRecommendation.confidence === "High"
+                                                ? "ok"
+                                                : topRecommendation.confidence === "Medium"
+                                                  ? "info"
+                                                  : "warn"
+                                        }
+                                    >
+                                        Confidence: {topRecommendation.confidence}
+                                    </StatusChip>
+                                </div>
+                                <p className="mt-2 text-sm font-semibold text-text-primary">
+                                    {topRecommendation.title}
+                                </p>
+                                <p className="mt-1 text-sm text-text-secondary">
+                                    {topRecommendation.nextAction}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => setSelected(topRecommendation)}
+                                >
+                                    View evidence
+                                </Button>
+                                {topRecommendation.group === "Scale" && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => onCreateVariants(topRecommendation)}
+                                    >
+                                        Create variants
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </SurfaceCard>
+                )}
+
                 {/* Two-column: recommendations + winning patterns/fatigue */}
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)]">
                     <SurfaceCard padding="none" className="flex flex-col">
@@ -360,7 +468,12 @@ function PerformancePage() {
                                         onOpen={() => setSelected(r)}
                                         onAccept={() => {
                                             acceptRec(r.id);
-                                            toast.success("Recommendation accepted");
+                                            toast.success("Recommendation accepted", {
+                                                action: {
+                                                    label: "Undo",
+                                                    onClick: () => unacceptRec(r.id),
+                                                },
+                                            });
                                         }}
                                         className={accepted.includes(r.id) ? "opacity-60" : ""}
                                     />
@@ -472,9 +585,70 @@ function PerformancePage() {
                             <Upload className="h-4 w-4" /> Import metrics
                         </Button>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="grid gap-3 p-3 sm:hidden">
+                        {seedCampaignPerf.map((c) => (
+                            <button
+                                key={c.campaignId}
+                                type="button"
+                                className="rounded-md border border-hairline bg-surface p-3 text-left transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                onClick={() =>
+                                    navigate({
+                                        to: "/performance/$campaignId",
+                                        params: { campaignId: c.campaignId },
+                                    })
+                                }
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium text-text-primary">
+                                            {c.campaignName}
+                                        </p>
+                                        <p className="truncate text-xs text-text-tertiary">
+                                            {c.product}
+                                        </p>
+                                    </div>
+                                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-text-tertiary" />
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <StatusChip tone={c.status === "Live" ? "ok" : "info"} dot>
+                                        {c.status}
+                                    </StatusChip>
+                                    <StatusChip tone={decisionTone[c.primaryDecision]}>
+                                        {c.primaryDecision}
+                                    </StatusChip>
+                                </div>
+                                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                                    <div>
+                                        <dt className="text-text-tertiary">GMV</dt>
+                                        <dd className="tabular font-medium text-text-primary">
+                                            {fmtMoney(c.gmv)}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-text-tertiary">Gross profit</dt>
+                                        <dd className="tabular font-medium text-text-primary">
+                                            {fmtMoney(c.grossProfit)}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-text-tertiary">Sample eff.</dt>
+                                        <dd className="tabular font-medium text-text-primary">
+                                            ${c.sampleEfficiency.toFixed(1)}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-text-tertiary">Updated</dt>
+                                        <dd className="tabular font-medium text-text-primary">
+                                            <RelativeTime value={c.lastUpdated} />
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="hidden overflow-x-auto sm:block">
                         <table className="w-full min-w-[900px] text-sm">
-                            <thead className="bg-surface-soft/60">
+                            <thead className="sticky top-0 z-10 bg-surface-soft/95 backdrop-blur-sm">
                                 <tr className="text-left text-xs font-medium text-text-tertiary">
                                     <th className="px-4 py-2.5">Campaign</th>
                                     <th className="px-3 py-2.5">Status</th>
@@ -541,9 +715,7 @@ function PerformancePage() {
                                             </StatusChip>
                                         </td>
                                         <td className="px-3 py-3 text-xs text-text-tertiary">
-                                            {formatDistanceToNow(new Date(c.lastUpdated), {
-                                                addSuffix: true,
-                                            })}
+                                            <RelativeTime value={c.lastUpdated} />
                                         </td>
                                         <td className="px-3 py-3">
                                             <ChevronRight className="h-4 w-4 text-text-tertiary" />
@@ -577,7 +749,7 @@ function PerformancePage() {
                                         <p className="truncate text-text-primary">{e.detail}</p>
                                     </div>
                                     <span className="shrink-0 text-xs text-text-tertiary">
-                                        {formatDistanceToNow(new Date(e.at), { addSuffix: true })}
+                                        <RelativeTime value={e.at} />
                                     </span>
                                 </div>
                             ))

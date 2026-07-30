@@ -1,4 +1,6 @@
 import type { CreativeAnalysis } from "@/features/creative-library/types/creative";
+import { buildMockAnalysis } from "@/features/creative-library/lib/mockAnalysis";
+import { seedCreatives } from "@/features/creative-library/mocks/creatives";
 
 const analysis1: CreativeAnalysis = {
     creativeId: "cr-1",
@@ -321,6 +323,17 @@ const analysis7 = variant(analysis1, {
     confidence: "High",
 });
 
+const sofaCreative = seedCreatives.find((creative) => creative.id === "cr-sofa-cover");
+const analysisSofa = sofaCreative
+    ? {
+          ...buildMockAnalysis(sofaCreative),
+          decision: "Strong reference" as const,
+          reason: "Real vertical product demo with an immediate living-room transformation, clear product screen time, and a usable TikTok Shop CTA structure.",
+          dnaScore: 84,
+          confidence: "High" as const,
+      }
+    : undefined;
+
 export const seedAnalyses: Record<string, CreativeAnalysis> = {
     "cr-1": analysis1,
     "cr-2": analysis2,
@@ -329,4 +342,5 @@ export const seedAnalyses: Record<string, CreativeAnalysis> = {
     "cr-5": analysis5,
     "cr-6": analysis6,
     "cr-7": analysis7,
+    ...(analysisSofa ? { "cr-sofa-cover": analysisSofa } : {}),
 };

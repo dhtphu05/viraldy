@@ -10,6 +10,7 @@ import { RightDrawer } from "@/shared/ui/right-drawer";
 import { ProcessingStepper, type Step } from "@/shared/ui/processing-stepper";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { RelativeTime } from "@/shared/ui/relative-time";
 import { AnalyzeCreativeDialog } from "@/features/dashboard/components/analyze-creative-dialog";
 import { CreateCampaignDialog } from "@/features/dashboard/components/create-campaign-dialog";
 import { overviewMetrics, decisionQueue } from "@/features/dashboard/mocks/dashboard";
@@ -18,7 +19,6 @@ import { activities } from "@/features/dashboard/mocks/activities";
 import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
 import {
     Sparkles,
     Plus,
@@ -28,6 +28,7 @@ import {
     ShieldCheck,
     Lightbulb,
     ArrowRight,
+    Workflow,
 } from "lucide-react";
 import type { DecisionItem, Recommendation } from "@/shared/types";
 
@@ -103,6 +104,26 @@ function DashboardPage() {
         });
     }
 
+    function openDecisionObject(item: DecisionItem) {
+        if (item.objectType === "Campaign") {
+            const campaign = campaigns.find((c) => c.name === item.object);
+            if (campaign) {
+                navigate({
+                    to: "/campaigns/$campaignId",
+                    params: { campaignId: campaign.id },
+                });
+                return;
+            }
+            navigate({ to: "/campaigns" });
+            return;
+        }
+        if (item.objectType === "UGC" || item.objectType === "Asset") {
+            navigate({ to: "/ugc-review" });
+            return;
+        }
+        navigate({ to: "/campaigns" });
+    }
+
     return (
         <AppShell>
             <div className="flex flex-col gap-8">
@@ -147,6 +168,34 @@ function DashboardPage() {
                         onClick={() => setActiveDecision(decisionQueue[0])}
                     >
                         Start with the most urgent
+                        <ArrowRight className="h-4 w-4" />
+                    </Button>
+                </SurfaceCard>
+
+                <SurfaceCard
+                    padding="md"
+                    className="inner-top-highlight flex flex-col gap-4 border-primary/20 bg-primary-soft/30 sm:flex-row sm:items-center sm:justify-between"
+                >
+                    <div className="flex min-w-0 gap-3">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+                            <Workflow className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-text-primary">
+                                    Production Studio
+                                </p>
+                                <StatusChip tone="info">Workspace connected</StatusChip>
+                                <StatusChip tone="warn">Demo analysis</StatusChip>
+                            </div>
+                            <p className="mt-1 max-w-2xl text-sm text-text-secondary">
+                                Analyze a reference, adapt its Creative DNA, build a campaign brief,
+                                and review creator video in one guided workspace.
+                            </p>
+                        </div>
+                    </div>
+                    <Button className="shrink-0" onClick={() => navigate({ to: "/production" })}>
+                        Open Studio
                         <ArrowRight className="h-4 w-4" />
                     </Button>
                 </SurfaceCard>
@@ -281,7 +330,7 @@ function DashboardPage() {
                                         </p>
                                     </div>
                                     <span className="shrink-0 text-[11px] tabular text-text-tertiary">
-                                        {formatDistanceToNow(new Date(a.at), { addSuffix: true })}
+                                        <RelativeTime value={a.at} />
                                     </span>
                                 </li>
                             );
@@ -308,8 +357,13 @@ function DashboardPage() {
                             </Button>
                             <Button
                                 onClick={() => {
+                                    const item = activeDecision;
                                     toast.success("Action queued", {
                                         description: activeDecision.nextAction,
+                                        action: {
+                                            label: "Undo",
+                                            onClick: () => setActiveDecision(item),
+                                        },
                                     });
                                     setActiveDecision(null);
                                 }}
@@ -341,6 +395,17 @@ function DashboardPage() {
                                 Confidence: {activeDecision.confidence}
                             </StatusChip>
                             <StatusChip tone="neutral">{activeDecision.objectType}</StatusChip>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                    openDecisionObject(activeDecision);
+                                    setActiveDecision(null);
+                                }}
+                            >
+                                Open {activeDecision.objectType.toLowerCase()}
+                                <ArrowRight className="h-4 w-4" />
+                            </Button>
                         </div>
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
@@ -378,6 +443,17 @@ function DashboardPage() {
                                 Next action
                             </p>
                             <p className="mt-1 text-sm text-text-primary">
+                                {activeDecision.nextAction}
+                            </p>
+                        </div>
+                        <div className="rounded-md border border-primary/20 bg-primary-soft/40 p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                                System recommendation
+                            </p>
+                            <p className="mt-1 text-sm font-medium text-text-primary">
+                                {activeDecision.action}
+                            </p>
+                            <p className="mt-1 text-xs text-text-secondary">
                                 {activeDecision.nextAction}
                             </p>
                         </div>
@@ -419,7 +495,10 @@ function DashboardPage() {
                             </StatusChip>
                         </div>
                         <div className="rounded-md bg-surface-soft px-3 py-2">
-                            <p className="text-xs text-text-secondary">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                                System signal
+                            </p>
+                            <p className="mt-1 text-xs text-text-secondary">
                                 {evidenceRec.metric.label}
                             </p>
                             <p className="tabular text-2xl font-semibold text-text-primary">

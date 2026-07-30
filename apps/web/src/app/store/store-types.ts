@@ -180,6 +180,8 @@ export type AppState = {
     deletePerfView: (id: string) => void;
     addPerfActivity: (e: Omit<PerfActivity, "id" | "at">) => void;
     markPerfReviewStarted: (id: string) => void;
+    unacceptPerfRec: (id: string) => void;
+    unsnoozePerfRec: (id: string) => void;
 
     reset: () => void;
 };

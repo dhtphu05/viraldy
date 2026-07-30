@@ -64,6 +64,7 @@ function pickTemplateAnalysisId(asset: UgcAsset): string | undefined {
     if (t.includes("v3") || t.includes("spark")) return "u-3";
     if (t.includes("v2") || t.includes("revision")) return "u-2";
     if (t.includes("dog")) return "u-4";
+    if (t.includes("sofa") || t.includes("cover")) return "u-sofa-cover";
     if (t.includes("pet") || t.includes("roller")) return "u-11";
     if (t.includes("mirror") || t.includes("beauty")) return "u-2";
     if (t.includes("claim") || t.includes("aggressive")) return "u-10";

@@ -20,6 +20,10 @@ export type CreativeReference = {
     hookExcerpt: string;
     platform: CreativePlatform;
     durationSec: number;
+    mediaKind?: "image" | "video";
+    mediaUrl?: string;
+    posterUrl?: string;
+    mediaAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
     brandOrCreator: string;
     angle: CreativeAngle;
     category: ProductCategory;
@@ -104,6 +108,8 @@ export type SeedProduct = {
     fulfillmentRisk: "Low" | "Medium" | "High";
     linkedCampaignCount: number;
     colorSeed: string;
+    imageUrl?: string;
+    imageAlt?: string;
 };
 
 export type CreativeFilterState = {

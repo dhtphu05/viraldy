@@ -5,6 +5,7 @@ import type { SeedCampaign } from "@/features/campaigns/mocks/campaigns";
 import type { CampaignPackStatus } from "@/features/campaigns/types/campaign";
 import type { MetricTone } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
+import { RelativeTime } from "@/shared/ui/relative-time";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,18 +23,6 @@ const packStatusTone: Record<CampaignPackStatus, MetricTone> = {
     Completed: "ok",
     Archived: "neutral",
 };
-
-function timeAgo(iso?: string) {
-    if (!iso) return "—";
-    const diffMs = Date.now() - new Date(iso).getTime();
-    const mins = Math.round(diffMs / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.round(hrs / 24);
-    return `${days}d ago`;
-}
 
 export function CampaignListRow({
     campaign,
@@ -96,7 +85,7 @@ export function CampaignListRow({
             <div className="hidden min-w-0 sm:block">
                 <p className="truncate text-sm text-text-primary">{campaign.nextAction}</p>
                 <p className="text-[10px] uppercase tracking-wide text-text-tertiary">
-                    {timeAgo(campaign.updatedAt)}
+                    <RelativeTime value={campaign.updatedAt} />
                 </p>
             </div>
             <div className="flex items-center gap-1">

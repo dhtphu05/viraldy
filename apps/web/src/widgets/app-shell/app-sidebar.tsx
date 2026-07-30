@@ -20,7 +20,7 @@ type NavItem = { to: string; label: string; icon: React.ComponentType<{ classNam
 
 const primary: NavItem[] = [
     { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { to: "/mvp", label: "MVP Flow", icon: Workflow },
+    { to: "/production", label: "Production Studio", icon: Workflow },
     { to: "/creative-library", label: "Creative Library", icon: Images },
     { to: "/campaigns", label: "Campaigns", icon: Megaphone },
     { to: "/ugc-review", label: "UGC Review", icon: Video },

@@ -161,6 +161,7 @@ function CampaignsIndex() {
                         <Input
                             className="pl-8"
                             placeholder="Search campaigns, products, objectives…"
+                            aria-label="Search campaigns, products, and objectives"
                             value={q}
                             onChange={(e) => setQ(e.target.value)}
                         />

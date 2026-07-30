@@ -1,6 +1,5 @@
 import type { CreativeReference } from "@/features/creative-library/types/creative";
-
-const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+import { demoDaysAgo } from "@/shared/mocks/time";
 
 export const seedCreatives: CreativeReference[] = [
     {
@@ -18,8 +17,8 @@ export const seedCreatives: CreativeReference[] = [
         usedInCampaignId: "c-1",
         analysisStatus: "analyzed",
         dnaScore: 88,
-        savedAt: daysAgo(3),
-        analyzedAt: daysAgo(3),
+        savedAt: demoDaysAgo(3),
+        analyzedAt: demoDaysAgo(3),
         thumbSeed: "sunset",
     },
     {
@@ -37,8 +36,8 @@ export const seedCreatives: CreativeReference[] = [
         usedInCampaignId: "c-2",
         analysisStatus: "analyzed",
         dnaScore: 82,
-        savedAt: daysAgo(5),
-        analyzedAt: daysAgo(4),
+        savedAt: demoDaysAgo(5),
+        analyzedAt: demoDaysAgo(4),
         thumbSeed: "peach",
     },
     {
@@ -55,8 +54,8 @@ export const seedCreatives: CreativeReference[] = [
         linkedProductId: "p-3",
         analysisStatus: "analyzed",
         dnaScore: 71,
-        savedAt: daysAgo(7),
-        analyzedAt: daysAgo(6),
+        savedAt: demoDaysAgo(7),
+        analyzedAt: demoDaysAgo(6),
         thumbSeed: "blush",
     },
     {
@@ -74,8 +73,8 @@ export const seedCreatives: CreativeReference[] = [
         usedInCampaignId: "c-4",
         analysisStatus: "analyzed",
         dnaScore: 79,
-        savedAt: daysAgo(2),
-        analyzedAt: daysAgo(2),
+        savedAt: demoDaysAgo(2),
+        analyzedAt: demoDaysAgo(2),
         thumbSeed: "mint",
     },
     {
@@ -91,8 +90,8 @@ export const seedCreatives: CreativeReference[] = [
         boardIds: ["b-home"],
         analysisStatus: "analyzed",
         dnaScore: 74,
-        savedAt: daysAgo(9),
-        analyzedAt: daysAgo(8),
+        savedAt: demoDaysAgo(9),
+        analyzedAt: demoDaysAgo(8),
         thumbSeed: "sage",
     },
     {
@@ -108,8 +107,8 @@ export const seedCreatives: CreativeReference[] = [
         boardIds: ["b-beauty", "b-competitor"],
         analysisStatus: "analyzed",
         dnaScore: 66,
-        savedAt: daysAgo(11),
-        analyzedAt: daysAgo(10),
+        savedAt: demoDaysAgo(11),
+        analyzedAt: demoDaysAgo(10),
         thumbSeed: "lavender",
     },
     {
@@ -125,8 +124,8 @@ export const seedCreatives: CreativeReference[] = [
         boardIds: ["b-kitchen"],
         analysisStatus: "analyzed",
         dnaScore: 85,
-        savedAt: daysAgo(1),
-        analyzedAt: daysAgo(1),
+        savedAt: demoDaysAgo(1),
+        analyzedAt: demoDaysAgo(1),
         thumbSeed: "coral",
     },
     {
@@ -141,7 +140,7 @@ export const seedCreatives: CreativeReference[] = [
         tags: ["emotion:sentimental"],
         boardIds: ["b-pod"],
         analysisStatus: "ready",
-        savedAt: daysAgo(1),
+        savedAt: demoDaysAgo(1),
         thumbSeed: "amber",
     },
     {
@@ -156,7 +155,7 @@ export const seedCreatives: CreativeReference[] = [
         tags: ["format:listicle"],
         boardIds: ["b-pod"],
         analysisStatus: "ready",
-        savedAt: daysAgo(4),
+        savedAt: demoDaysAgo(4),
         thumbSeed: "rose",
     },
     {
@@ -172,7 +171,7 @@ export const seedCreatives: CreativeReference[] = [
         boardIds: ["b-kitchen"],
         linkedProductId: "p-1",
         analysisStatus: "processing",
-        savedAt: daysAgo(0.05),
+        savedAt: demoDaysAgo(0.05),
         thumbSeed: "sky",
     },
     {
@@ -187,7 +186,7 @@ export const seedCreatives: CreativeReference[] = [
         tags: ["format:demo"],
         boardIds: ["b-beauty"],
         analysisStatus: "failed",
-        savedAt: daysAgo(2),
+        savedAt: demoDaysAgo(2),
         thumbSeed: "lilac",
     },
     {
@@ -202,7 +201,30 @@ export const seedCreatives: CreativeReference[] = [
         tags: [],
         boardIds: [],
         analysisStatus: "unanalyzed",
-        savedAt: daysAgo(0.5),
+        savedAt: demoDaysAgo(0.5),
         thumbSeed: "stone",
+    },
+    {
+        id: "cr-sofa-cover",
+        title: "Sofa cover living-room transformation",
+        hookExcerpt: "My couch looked tired until I tried this quilted cover.",
+        platform: "TikTok",
+        durationSec: 16,
+        mediaKind: "video",
+        mediaUrl: "/demo-media/sofa-cover-ugc.mp4",
+        posterUrl: "/demo-media/sofa-cover-product.jpg",
+        mediaAspectRatio: "9:16",
+        brandOrCreator: "@lina.homefinds",
+        angle: "Product demonstration",
+        category: "Home & Kitchen",
+        tags: ["real-media", "vertical-video", "sofa-cover"],
+        boardIds: ["b-home", "b-competitor"],
+        linkedProductId: "p-sofa-cover",
+        usedInCampaignId: "c-sofa-cover",
+        analysisStatus: "analyzed",
+        dnaScore: 84,
+        savedAt: demoDaysAgo(0.15),
+        analyzedAt: demoDaysAgo(0.1),
+        thumbSeed: "sofa",
     },
 ];

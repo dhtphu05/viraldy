@@ -36,6 +36,7 @@ import { seedProducts } from "@/features/products/data/products";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { ProcessingStepper, type Step } from "@/shared/ui/processing-stepper";
+import { AnalysisThinkingSkeleton } from "@/shared/ui/analysis-thinking-skeleton";
 import { Sparkles, MoreHorizontal, ArrowLeft, ChevronRight, Package } from "lucide-react";
 import { analysisSteps } from "@/features/creative-library/lib/mockAnalysis";
 import { toast } from "sonner";
@@ -173,9 +174,9 @@ function CreativeDetailPage() {
                         </BreadcrumbList>
                     </Breadcrumb>
 
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
                         <div className="min-w-0">
-                            <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-[26px]">
+                            <h1 className="break-words text-2xl font-semibold tracking-tight text-text-primary sm:text-[26px]">
                                 {creative.title}
                             </h1>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
@@ -239,9 +240,9 @@ function CreativeDetailPage() {
                 </div>
 
                 {/* Layout */}
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                <div className="grid gap-6 lg:grid-cols-12">
                     {/* Main */}
-                    <div className="flex min-w-0 flex-col gap-4">
+                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
                         <MediaPlayer
                             creative={creative}
                             markers={analysis?.markers ?? []}
@@ -266,23 +267,35 @@ function CreativeDetailPage() {
                                     </p>
                                 </div>
                                 <ProcessingStepper steps={stepper} />
+                                <AnalysisThinkingSkeleton
+                                    compact
+                                    title="Preparing Creative DNA modules"
+                                    description="The breakdown will show analyzed moments, evidence, transcript, Keep/Change/Avoid, and adaptation notes."
+                                />
                             </SurfaceCard>
                         )}
 
                         {(creative.analysisStatus === "unanalyzed" ||
                             creative.analysisStatus === "ready") && (
                             <SurfaceCard padding="lg">
-                                <EmptyState
-                                    icon={Sparkles}
-                                    title="Not analyzed yet"
-                                    description="Run Creative DNA analysis to see the hook, product reveal, evidence, and adaptation notes."
-                                    action={
-                                        <Button size="sm" onClick={() => setAnalyzeOpen(true)}>
-                                            <Sparkles className="h-4 w-4" />
-                                            Analyze Creative DNA
-                                        </Button>
-                                    }
-                                />
+                                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                    <EmptyState
+                                        icon={Sparkles}
+                                        title="Not analyzed yet"
+                                        description="Run Creative DNA analysis to see the hook, product reveal, evidence, and adaptation notes."
+                                        action={
+                                            <Button size="sm" onClick={() => setAnalyzeOpen(true)}>
+                                                <Sparkles className="h-4 w-4" />
+                                                Analyze Creative DNA
+                                            </Button>
+                                        }
+                                    />
+                                    <AnalysisThinkingSkeleton
+                                        compact
+                                        title="Modules after analysis"
+                                        description="Timeline, transcript, evidence, and product adaptation guidance appear here."
+                                    />
+                                </div>
                             </SurfaceCard>
                         )}
 
@@ -295,14 +308,16 @@ function CreativeDetailPage() {
                     </div>
 
                     {/* Right panel */}
-                    <div className="flex min-w-0 flex-col gap-4">
+                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-4">
                         {analysis && creative.analysisStatus === "analyzed" ? (
                             <>
-                                <DecisionSummary
-                                    analysis={analysis}
-                                    onAdapt={() => setAdaptOpen(true)}
-                                    linked={linkedProduct?.name}
-                                />
+                                <div className="lg:sticky lg:top-20 lg:z-10">
+                                    <DecisionSummary
+                                        analysis={analysis}
+                                        onAdapt={() => setAdaptOpen(true)}
+                                        linked={linkedProduct?.name}
+                                    />
+                                </div>
                                 <EvidenceList
                                     evidence={analysis.evidence}
                                     activeId={

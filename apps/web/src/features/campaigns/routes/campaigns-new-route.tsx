@@ -103,6 +103,7 @@ function NewCampaign() {
     );
 
     const [name, setName] = useState(draft.name ?? "");
+    const [nameEdited, setNameEdited] = useState(!!draft.name);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -122,9 +123,17 @@ function NewCampaign() {
     const handoffProduct = lastAdaptation
         ? seedProducts.find((p) => p.id === lastAdaptation.productId)
         : undefined;
+    const selectedProduct = seedProducts.find((p) => p.id === productId);
+    const suggestedName = selectedProduct
+        ? `${selectedProduct.name} ${market} ${objective.includes("Affiliate") ? "Affiliate Test" : "Launch"}`
+        : "";
 
     const templateName =
         draft.templateId && campaignTemplates.find((t) => t.id === draft.templateId)?.name;
+
+    useEffect(() => {
+        if (!nameEdited && suggestedName) setName(suggestedName);
+    }, [nameEdited, suggestedName]);
 
     async function createCampaign() {
         if (!name.trim()) {
@@ -279,12 +288,33 @@ function NewCampaign() {
                             <Label htmlFor="name">Campaign name</Label>
                             <Input
                                 id="name"
-                                placeholder="e.g. Kitchen Organizer US Launch"
+                                placeholder={suggestedName || "e.g. Kitchen Organizer US Launch"}
                                 value={name}
-                                onChange={(e) => setName(e.target.value)}
+                                aria-invalid={!!error && !name.trim()}
+                                aria-describedby={
+                                    error && !name.trim() ? "campaign-name-error" : undefined
+                                }
+                                onChange={(e) => {
+                                    setNameEdited(true);
+                                    setName(e.target.value);
+                                }}
                             />
                             {error && !name.trim() && (
-                                <p className="text-xs text-destructive">{error}</p>
+                                <p id="campaign-name-error" className="text-xs text-destructive">
+                                    {error}
+                                </p>
+                            )}
+                            {suggestedName && name !== suggestedName && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setNameEdited(false);
+                                        setName(suggestedName);
+                                    }}
+                                    className="w-fit text-xs text-primary hover:underline"
+                                >
+                                    Use suggested name: {suggestedName}
+                                </button>
                             )}
                         </div>
 
@@ -294,7 +324,7 @@ function NewCampaign() {
                                 value={productId}
                                 onValueChange={(v) => setDraft({ productId: v })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger aria-label="Product">
                                     <SelectValue placeholder="Select a product" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -306,7 +336,7 @@ function NewCampaign() {
                                 </SelectContent>
                             </Select>
                             {error && !productId && (
-                                <p className="text-xs text-destructive">{error}</p>
+                                <p className="text-xs text-destructive">Select a product</p>
                             )}
                         </div>
 
@@ -319,7 +349,7 @@ function NewCampaign() {
                                         setDraft({ objective: v as CampaignObjective })
                                     }
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger aria-label="Objective">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -339,7 +369,7 @@ function NewCampaign() {
                                         setDraft({ platform: v as CampaignPlatform })
                                     }
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger aria-label="Platform">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -357,7 +387,7 @@ function NewCampaign() {
                                     value={market}
                                     onValueChange={(v) => setDraft({ market: v as CampaignMarket })}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger aria-label="Market">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -370,8 +400,9 @@ function NewCampaign() {
                                 </Select>
                             </div>
                             <div className="grid gap-1.5">
-                                <Label>Language</Label>
+                                <Label htmlFor="campaign-language">Language</Label>
                                 <Input
+                                    id="campaign-language"
                                     value={language}
                                     onChange={(e) => setDraft({ language: e.target.value })}
                                 />
@@ -384,7 +415,7 @@ function NewCampaign() {
                                         setDraft({ creatorType: v as CreatorType })
                                     }
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger aria-label="Creator type">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -404,7 +435,7 @@ function NewCampaign() {
                                         setDraft({ creatorTone: v as CreatorTone })
                                     }
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger aria-label="Creator tone">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -419,8 +450,9 @@ function NewCampaign() {
                         </div>
 
                         <div className="grid gap-1.5">
-                            <Label>Buyer segment (optional)</Label>
+                            <Label htmlFor="campaign-buyer-segment">Buyer segment (optional)</Label>
                             <Input
+                                id="campaign-buyer-segment"
                                 placeholder="e.g. Renters 25–35 with small kitchens"
                                 value={buyerSegment}
                                 onChange={(e) => setDraft({ buyerSegment: e.target.value })}
@@ -483,13 +515,32 @@ function NewCampaign() {
                             </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-hairline/60 pt-4">
-                            <Button variant="ghost" onClick={() => clearDraft()}>
-                                Clear
-                            </Button>
-                            <Button onClick={createCampaign} disabled={busy}>
-                                {busy ? "Creating…" : "Create campaign"}
-                            </Button>
+                        <div className="sticky bottom-0 z-10 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-hairline/60 bg-surface/95 px-7 py-4 backdrop-blur">
+                            <div className="min-w-0 text-xs text-text-secondary">
+                                <p className="font-medium text-text-primary">
+                                    {selectedProduct?.name ?? "Select a product"}
+                                </p>
+                                <p className="truncate">
+                                    {objective} · {market} · {refs.length} reference
+                                    {refs.length === 1 ? "" : "s"}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                        clearDraft();
+                                        setName("");
+                                        setNameEdited(false);
+                                        setError(null);
+                                    }}
+                                >
+                                    Clear
+                                </Button>
+                                <Button onClick={createCampaign} disabled={busy}>
+                                    {busy ? "Creating…" : "Create campaign"}
+                                </Button>
+                            </div>
                         </div>
                     </SurfaceCard>
 

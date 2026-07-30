@@ -38,15 +38,17 @@ export function AppHeader() {
 
             <WorkspaceSwitcher />
 
-            <div className="mx-auto hidden max-w-md flex-1 md:block">
+            <div className="mx-auto hidden min-w-0 max-w-md flex-1 lg:block">
                 <button
                     type="button"
                     onClick={() => setSearchOpen(true)}
                     className="inline-flex h-9 w-full items-center gap-2 rounded-md bg-surface-soft px-3 text-sm text-text-tertiary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                    <Search className="h-4 w-4" />
-                    <span className="flex-1 text-left">Search campaigns, creators, assets…</span>
-                    <kbd className="rounded border border-hairline bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
+                    <Search className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
+                        Search products, campaigns, system responses…
+                    </span>
+                    <kbd className="shrink-0 rounded border border-hairline bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
                         ⌘K
                     </kbd>
                 </button>
@@ -57,7 +59,7 @@ export function AppHeader() {
                     type="button"
                     onClick={() => setSearchOpen(true)}
                     aria-label="Search"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft md:hidden"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft lg:hidden"
                 >
                     <Search className="h-4 w-4" />
                 </button>

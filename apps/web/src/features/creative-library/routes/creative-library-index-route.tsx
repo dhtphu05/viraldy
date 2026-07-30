@@ -4,7 +4,7 @@ import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
 import { Plus, Sparkles, X, PanelLeft } from "lucide-react";
 import { useAppStore } from "@/app/store/app-store";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BoardRail } from "@/features/creative-library/components/board-rail";
 import { CreativeToolbar } from "@/features/creative-library/components/creative-toolbar";
 import { CreativeCard } from "@/features/creative-library/components/creative-card";
@@ -17,6 +17,7 @@ import { MoveToBoardDialog } from "@/features/creative-library/components/move-t
 import { AnalysisJobsRunner } from "@/features/creative-library/components/analysis-jobs-runner";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/ui/sheet";
+import { isWithinDemoDays } from "@/shared/mocks/time";
 import type {
     CreativeBoard,
     CreativeFilterState,
@@ -29,6 +30,15 @@ import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 
 export const Route = createFileRoute("/creative-library/")({
+    validateSearch: (search: Record<string, unknown>) => ({
+        import:
+            search.import === true ||
+            search.import === "true" ||
+            search.import === "1" ||
+            search.import === 1
+                ? true
+                : undefined,
+    }),
     head: () => ({
         meta: [
             { title: "Creative Library — Viraldy" },
@@ -43,6 +53,7 @@ export const Route = createFileRoute("/creative-library/")({
 });
 
 function CreativeLibraryPage() {
+    const routeSearch = Route.useSearch();
     const boards = useAppStore((s) => s.boards);
     const creatives = useAppStore((s) => s.creatives);
     const duplicate = useAppStore((s) => s.duplicateCreative);
@@ -68,6 +79,12 @@ function CreativeLibraryPage() {
     const [moveForId, setMoveForId] = useState<string | null>(null);
     const [boardSheetOpen, setBoardSheetOpen] = useState(false);
 
+    useEffect(() => {
+        const importParam = new URLSearchParams(window.location.search).get("import");
+        if (!routeSearch.import && importParam !== "1" && importParam !== "true") return;
+        setImportOpen(true);
+    }, [routeSearch.import]);
+
     const productMap = useMemo(() => {
         const m = new Map<string, string>();
         for (const p of seedProducts) m.set(p.id, p.name);
@@ -80,9 +97,7 @@ function CreativeLibraryPage() {
         const board = boards.find((b) => b.id === activeBoard);
         if (board) {
             if (board.filter === "recent") {
-                list = list.filter(
-                    (c) => Date.now() - new Date(c.savedAt).getTime() < 7 * 86_400_000,
-                );
+                list = list.filter((c) => isWithinDemoDays(c.savedAt, 7));
             } else if (board.filter === "unassigned") {
                 list = list.filter((c) => c.boardIds.length === 0);
             } else if (!board.filter) {
@@ -368,6 +383,35 @@ function CreativeLibraryPage() {
                             </div>
                         )}
 
+                        {selectMode && (
+                            <div className="sticky top-20 z-10 rounded-md border border-primary/20 bg-primary-soft px-3 py-2 shadow-sm-card">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm font-medium text-primary-active">
+                                        {selectedArr.length} creative
+                                        {selectedArr.length === 1 ? "" : "s"} selected
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => openAnalyze(selectedEligible)}
+                                            disabled={selectedEligible.length === 0}
+                                        >
+                                            <Sparkles className="h-4 w-4" />
+                                            Analyze selected
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => setSelected(new Set())}
+                                        >
+                                            Clear selection
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Grid */}
                         {emptyBoard && (
                             <div className="surface-card inner-top-highlight p-10">
@@ -449,7 +493,12 @@ function CreativeLibraryPage() {
             />
             <ImportCreativeDialog
                 open={importOpen}
-                onOpenChange={setImportOpen}
+                onOpenChange={(open) => {
+                    setImportOpen(open);
+                    if (!open && routeSearch.import) {
+                        void navigate({ to: "/creative-library", replace: true, search: {} });
+                    }
+                }}
                 defaultBoardId={activeBoard}
             />
             <AnalyzeDnaDialog

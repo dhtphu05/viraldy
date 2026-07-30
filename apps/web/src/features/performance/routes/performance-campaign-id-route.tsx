@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-ro
 import { useMemo, useState } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
+import { formatUtcDateTime } from "@/shared/lib/date-format";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -19,6 +20,11 @@ import {
 } from "@/shared/ui/dialog";
 import { EvidenceDrawer } from "@/features/performance/components/evidence-drawer";
 import { ImportPerformanceDialog } from "@/features/performance/components/import-performance-dialog";
+import {
+    AngleCreatorHeatmap,
+    HeatmapAssetDrawer,
+    type HeatmapSelection,
+} from "@/features/performance/components/angle-creator-heatmap";
 import { useAppStore } from "@/app/store/app-store";
 import {
     seedCampaignPerf,
@@ -48,7 +54,6 @@ import {
     downloadBlob,
 } from "@/features/performance/lib/performanceEngine";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
 import {
     ArrowLeft,
     BarChart3,
@@ -123,6 +128,7 @@ function CampaignPerformancePage() {
     const [openImport, setOpenImport] = useState(false);
     const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
     const [openCompare, setOpenCompare] = useState(false);
+    const [heatmapSelection, setHeatmapSelection] = useState<HeatmapSelection | null>(null);
     const [chartMetric, setChartMetric] = useState<"gmv" | "orders" | "ctr" | "sampleEfficiency">(
         "gmv",
     );
@@ -211,7 +217,7 @@ function CampaignPerformancePage() {
                     </Link>
                     <PageHeader
                         title={summary.campaignName}
-                        description={`${summary.product} · ${summary.status} · Last updated ${formatDistanceToNow(new Date(summary.lastUpdated), { addSuffix: true })}`}
+                        description={`${summary.product} · ${summary.status} · Last updated ${formatUtcDateTime(summary.lastUpdated)}`}
                         actions={
                             <>
                                 <Button
@@ -253,7 +259,7 @@ function CampaignPerformancePage() {
                 </div>
 
                 <Tabs value={tab} onValueChange={setTab}>
-                    <TabsList className="w-full sm:w-auto">
+                    <TabsList className="w-full max-w-full justify-start overflow-x-auto sm:w-auto">
                         <TabsTrigger value="decisions">Decisions</TabsTrigger>
                         <TabsTrigger value="assets">Assets</TabsTrigger>
                         <TabsTrigger value="patterns">Creative patterns</TabsTrigger>
@@ -336,7 +342,11 @@ function CampaignPerformancePage() {
                                                         key={r.id}
                                                         className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 ${accepted.includes(r.id) ? "opacity-60" : ""}`}
                                                     >
-                                                        <div className="min-w-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedRec(r)}
+                                                            className="min-w-0 rounded-md text-left transition-colors duration-200 hover:bg-surface-soft/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                        >
                                                             <p className="truncate text-sm font-medium">
                                                                 {r.title}
                                                             </p>
@@ -347,7 +357,7 @@ function CampaignPerformancePage() {
                                                                 Impact: {r.estimatedImpact} ·
                                                                 Confidence: {r.confidence}
                                                             </p>
-                                                        </div>
+                                                        </button>
                                                         <div className="flex items-center gap-2">
                                                             <Button
                                                                 size="sm"
@@ -400,7 +410,7 @@ function CampaignPerformancePage() {
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full min-w-[1100px] text-sm">
-                                    <thead className="bg-surface-soft/60">
+                                    <thead className="sticky top-0 z-10 bg-surface-soft/95 backdrop-blur-sm">
                                         <tr className="text-left text-xs font-medium text-text-tertiary">
                                             <th className="w-10 px-3 py-2.5" />
                                             <th className="px-3 py-2.5">Asset</th>
@@ -565,6 +575,12 @@ function CampaignPerformancePage() {
 
                     {/* -------- CREATIVE PATTERNS -------- */}
                     <TabsContent value="patterns" className="mt-4 space-y-4">
+                        <AngleCreatorHeatmap
+                            assets={assets}
+                            selected={heatmapSelection}
+                            onSelect={setHeatmapSelection}
+                        />
+
                         <SurfaceCard padding="none">
                             <div className="border-b border-hairline px-5 py-3">
                                 <h3 className="text-sm font-semibold">Pattern → GMV map</h3>
@@ -574,7 +590,7 @@ function CampaignPerformancePage() {
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full min-w-[700px] text-sm">
-                                    <thead className="bg-surface-soft/60">
+                                    <thead className="sticky top-0 z-10 bg-surface-soft/95 backdrop-blur-sm">
                                         <tr className="text-left text-xs font-medium text-text-tertiary">
                                             <th className="px-4 py-2.5">Pattern</th>
                                             <th className="px-3 py-2.5 text-right">Assets</th>
@@ -1003,6 +1019,10 @@ function CampaignPerformancePage() {
                 onGenerateVariants={onGenerateVariants}
             />
             <ImportPerformanceDialog open={openImport} onOpenChange={setOpenImport} />
+            <HeatmapAssetDrawer
+                selection={heatmapSelection}
+                onOpenChange={(open) => !open && setHeatmapSelection(null)}
+            />
 
             <Dialog open={openCompare} onOpenChange={setOpenCompare}>
                 <DialogContent className="max-w-4xl">

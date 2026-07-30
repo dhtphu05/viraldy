@@ -1,5 +1,6 @@
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/app/store/app-store";
+import { isWithinDemoDays } from "@/shared/mocks/time";
 import {
     Layers,
     Clock,
@@ -60,9 +61,7 @@ export function BoardRail({
         for (const b of boards) {
             if (b.filter === "all") counts[b.id] = active.length;
             else if (b.filter === "recent")
-                counts[b.id] = active.filter(
-                    (c) => Date.now() - new Date(c.savedAt).getTime() < 7 * 86_400_000,
-                ).length;
+                counts[b.id] = active.filter((c) => isWithinDemoDays(c.savedAt, 7)).length;
             else if (b.filter === "unassigned")
                 counts[b.id] = active.filter((c) => c.boardIds.length === 0).length;
             else counts[b.id] = active.filter((c) => c.boardIds.includes(b.id)).length;

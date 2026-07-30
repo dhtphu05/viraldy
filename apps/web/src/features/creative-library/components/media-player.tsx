@@ -6,20 +6,12 @@ import {
     thumbnailAccent,
     formatDuration,
 } from "@/features/creative-library/lib/creative-visuals";
+import { normalizeAspectRatio } from "@/shared/lib/media-aspect";
+import { AnalysisTimelineSvg } from "@/shared/ui/analysis-timeline-svg";
 import type {
     CreativeReference,
     DnaTimelineMarker,
 } from "@/features/creative-library/types/creative";
-
-const kindColor: Record<DnaTimelineMarker["kind"], string> = {
-    hook: "var(--primary)",
-    reveal: "var(--info)",
-    demo: "var(--ok)",
-    proof: "var(--ok)",
-    offer: "var(--warn)",
-    cta: "var(--info)",
-    risk: "var(--destructive)",
-};
 
 export function MediaPlayer({
     creative,
@@ -38,10 +30,14 @@ export function MediaPlayer({
 }) {
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(true);
+    const videoRef = useRef<HTMLVideoElement>(null);
     const rafRef = useRef<number | null>(null);
     const lastTsRef = useRef<number | null>(null);
+    const hasVideo = creative.mediaKind === "video" && !!creative.mediaUrl;
+    const hasImage = creative.mediaKind === "image" && !!creative.mediaUrl;
 
     useEffect(() => {
+        if (hasVideo) return;
         if (!playing) {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             lastTsRef.current = null;
@@ -64,51 +60,116 @@ export function MediaPlayer({
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [playing, currentTime, creative.durationSec, onTimeChange]);
+    }, [hasVideo, playing, currentTime, creative.durationSec, onTimeChange]);
+
+    useEffect(() => {
+        if (!hasVideo || !videoRef.current) return;
+        videoRef.current.muted = muted;
+    }, [hasVideo, muted]);
+
+    useEffect(() => {
+        if (!hasVideo || !videoRef.current) return;
+        if (Math.abs(videoRef.current.currentTime - currentTime) > 0.35) {
+            videoRef.current.currentTime = currentTime;
+        }
+    }, [currentTime, hasVideo]);
+
+    const seekTo = (value: number) => {
+        const next = Math.min(creative.durationSec, Math.max(0, value));
+        onTimeChange(next);
+        if (videoRef.current && Math.abs(videoRef.current.currentTime - next) > 0.2) {
+            videoRef.current.currentTime = next;
+        }
+    };
+
+    const togglePlayback = () => {
+        if (!hasVideo || !videoRef.current) {
+            setPlaying((p) => !p);
+            return;
+        }
+        if (videoRef.current.paused) void videoRef.current.play();
+        else videoRef.current.pause();
+    };
 
     const pct = (currentTime / creative.durationSec) * 100;
     const accent = thumbnailAccent(creative.thumbSeed);
+    const mediaAspect = normalizeAspectRatio(creative.mediaAspectRatio, "16 / 9");
+    const vertical = creative.mediaAspectRatio === "9:16";
 
     return (
         <div className="surface-card inner-top-highlight overflow-hidden">
             <div
-                className="relative w-full"
+                className={cn("relative w-full bg-black", vertical && "mx-auto max-w-[420px]")}
                 style={{
-                    aspectRatio: "16 / 9",
-                    backgroundImage: thumbnailGradient(creative.thumbSeed),
+                    aspectRatio: mediaAspect,
+                    backgroundImage:
+                        !hasVideo && !hasImage ? thumbnailGradient(creative.thumbSeed) : undefined,
                 }}
             >
-                <div
-                    aria-hidden
-                    className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.35),transparent_55%)]"
-                />
+                {hasVideo ? (
+                    <video
+                        ref={videoRef}
+                        src={creative.mediaUrl}
+                        poster={creative.posterUrl}
+                        className="h-full w-full object-contain"
+                        muted={muted}
+                        playsInline
+                        preload="metadata"
+                        onPlay={() => setPlaying(true)}
+                        onPause={() => setPlaying(false)}
+                        onEnded={() => setPlaying(false)}
+                        onTimeUpdate={(event) => onTimeChange(event.currentTarget.currentTime)}
+                    />
+                ) : hasImage ? (
+                    <img
+                        src={creative.mediaUrl}
+                        alt={creative.title}
+                        className="h-full w-full object-contain"
+                    />
+                ) : (
+                    <div
+                        aria-hidden
+                        className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.35),transparent_55%)]"
+                    />
+                )}
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute left-4 top-4 flex items-center gap-2">
+                    <span className="rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-text-primary shadow-sm">
+                        Real media
+                    </span>
                     <span className="rounded-md bg-black/45 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white backdrop-blur-sm">
                         {creative.platform}
                     </span>
                     <span className="rounded-md bg-black/45 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
                         {formatDuration(creative.durationSec)}
                     </span>
+                    {creative.mediaAspectRatio && (
+                        <span className="rounded-md bg-black/45 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                            {creative.mediaAspectRatio}
+                        </span>
+                    )}
                 </div>
                 <button
                     type="button"
-                    onClick={() => setPlaying((p) => !p)}
+                    onClick={togglePlayback}
                     aria-label={playing ? "Pause" : "Play"}
+                    disabled={hasImage}
                     className="absolute inset-0 grid place-items-center focus-visible:outline-none"
                 >
-                    <span
-                        className={cn(
-                            "grid h-14 w-14 place-items-center rounded-full bg-white/90 text-text-primary shadow-lg transition-opacity",
-                            playing && "opacity-0 group-hover:opacity-100",
-                        )}
-                    >
-                        {playing ? (
-                            <Pause className="h-5 w-5" />
-                        ) : (
-                            <Play className="h-5 w-5 fill-current" />
-                        )}
-                    </span>
+                    {!hasImage && (
+                        <span
+                            className={cn(
+                                "grid h-14 w-14 place-items-center rounded-full bg-white/90 text-text-primary shadow-lg transition-opacity",
+                                playing && "opacity-0 group-hover:opacity-100",
+                            )}
+                        >
+                            {playing ? (
+                                <Pause className="h-5 w-5" />
+                            ) : (
+                                <Play className="h-5 w-5 fill-current" />
+                            )}
+                        </span>
+                    )}
                 </button>
             </div>
 
@@ -117,8 +178,9 @@ export function MediaPlayer({
                 <div className="flex items-center gap-3 text-sm">
                     <button
                         type="button"
-                        onClick={() => setPlaying((p) => !p)}
+                        onClick={togglePlayback}
                         aria-label={playing ? "Pause" : "Play"}
+                        disabled={hasImage}
                         className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     >
                         {playing ? (
@@ -141,8 +203,7 @@ export function MediaPlayer({
                     </button>
                 </div>
 
-                {/* Timeline */}
-                <div className="relative pt-3">
+                <div className="relative pt-2" aria-label="Video scrubber">
                     <div className="relative h-1.5 rounded-full bg-surface-muted">
                         <div
                             className="absolute inset-y-0 left-0 rounded-full"
@@ -156,49 +217,32 @@ export function MediaPlayer({
                         step={0.1}
                         value={currentTime}
                         aria-label="Seek"
-                        onChange={(e) => onTimeChange(Number(e.target.value))}
+                        onChange={(e) => seekTo(Number(e.target.value))}
                         className="absolute inset-x-0 top-2 h-4 w-full cursor-pointer opacity-0"
                     />
-                    {/* Markers */}
-                    {markers.map((m) => {
-                        const left = Math.min(
-                            100,
-                            Math.max(0, (m.at / creative.durationSec) * 100),
-                        );
-                        const active = m.id === activeMarkerId;
-                        return (
-                            <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => {
-                                    onTimeChange(m.at);
-                                    onMarkerClick?.(m.id);
-                                }}
-                                aria-label={`${m.label} at ${formatDuration(m.at)}`}
-                                className={cn(
-                                    "group/marker absolute -translate-x-1/2 focus-visible:outline-none",
-                                )}
-                                style={{ left: `${left}%`, top: "10px" }}
-                            >
-                                <span
-                                    className={cn(
-                                        "block h-3.5 w-3.5 rounded-full border-2 border-surface transition-transform",
-                                        active && "scale-125",
-                                    )}
-                                    style={{ backgroundColor: kindColor[m.kind] }}
-                                />
-                                <span
-                                    className={cn(
-                                        "pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 whitespace-nowrap rounded-md bg-surface px-2 py-0.5 text-[10px] font-medium text-text-primary opacity-0 shadow-sm-card transition-opacity group-hover/marker:opacity-100 group-focus-visible/marker:opacity-100",
-                                        active && "opacity-100",
-                                    )}
-                                >
-                                    {m.label} · {formatDuration(m.at)}
-                                </span>
-                            </button>
-                        );
-                    })}
                 </div>
+                {markers.length > 0 && (
+                    <AnalysisTimelineSvg
+                        className="border-primary/10 bg-primary-soft/25"
+                        title="Analyzed moments"
+                        durationSec={creative.durationSec}
+                        currentTime={currentTime}
+                        previewMediaUrl={creative.mediaUrl}
+                        previewPosterUrl={creative.posterUrl}
+                        previewMediaKind={creative.mediaKind}
+                        markers={markers.map((marker) => ({
+                            id: marker.id,
+                            at: marker.at,
+                            label: marker.label,
+                            kind: marker.kind,
+                            tone: marker.id === activeMarkerId ? "info" : undefined,
+                        }))}
+                        onJump={(time, marker) => {
+                            seekTo(time);
+                            onMarkerClick?.(marker.id);
+                        }}
+                    />
+                )}
             </div>
         </div>
     );

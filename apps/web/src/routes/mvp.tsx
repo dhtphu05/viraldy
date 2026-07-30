@@ -1,3 +1,10 @@
-import { Route as FeatureRoute } from "@/features/mvp-flow/routes/mvp-route";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = FeatureRoute;
+export const Route = createFileRoute("/mvp")({
+    beforeLoad: ({ search }) => {
+        throw redirect({
+            to: "/production",
+            search,
+        });
+    },
+});

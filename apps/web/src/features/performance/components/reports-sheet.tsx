@@ -1,10 +1,10 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/shared/ui/sheet";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { RelativeTime } from "@/shared/ui/relative-time";
 import { useAppStore } from "@/app/store/app-store";
 import { downloadBlob } from "@/features/performance/lib/performanceEngine";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -65,9 +65,7 @@ export function ReportsSheet({
                                 <div className="mt-2 flex items-center justify-between">
                                     <p className="text-xs text-text-tertiary">
                                         {r.includedAssets} assets · updated{" "}
-                                        {formatDistanceToNow(new Date(r.lastGenerated), {
-                                            addSuffix: true,
-                                        })}
+                                        <RelativeTime value={r.lastGenerated} />
                                     </p>
                                     <div className="flex items-center gap-1">
                                         <Button

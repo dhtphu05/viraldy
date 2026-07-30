@@ -16,6 +16,10 @@ export function createPerformanceSlice(set: StoreSet): Partial<AppState> {
                     ...s.perfActivity,
                 ].slice(0, 500),
             })),
+        unacceptPerfRec: (id) =>
+            set((s) => ({
+                perfAcceptedRecs: s.perfAcceptedRecs.filter((recId) => recId !== id),
+            })),
         dismissPerfRec: (id, reason) =>
             set((s) => ({
                 perfDismissedRecs: { ...s.perfDismissedRecs, [id]: reason },
@@ -48,6 +52,12 @@ export function createPerformanceSlice(set: StoreSet): Partial<AppState> {
                     ...s.perfActivity,
                 ].slice(0, 500),
             })),
+        unsnoozePerfRec: (id) =>
+            set((s) => {
+                const next = { ...s.perfSnoozedRecs };
+                delete next[id];
+                return { perfSnoozedRecs: next };
+            }),
         savePattern: (p) =>
             set((s) => ({
                 savedPatterns: [{ ...p, id: `${p.id}-saved-${Date.now()}` }, ...s.savedPatterns],

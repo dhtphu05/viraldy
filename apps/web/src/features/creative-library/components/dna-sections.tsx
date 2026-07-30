@@ -28,7 +28,7 @@ export function DecisionSummary({
     linked?: string;
 }) {
     return (
-        <SurfaceCard padding="lg" className="flex flex-col gap-4">
+        <SurfaceCard padding="lg" className="analysis-state-enter flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-2">
                 <StatusChip tone={decisionTone[analysis.decision]} dot>
                     {analysis.decision}
@@ -105,7 +105,7 @@ export function DnaElementSections({
                                         <div className="mt-1.5 h-1 w-full max-w-xs overflow-hidden rounded-full bg-surface-muted">
                                             <div
                                                 className={cn(
-                                                    "h-full rounded-full",
+                                                    "analysis-score-fill h-full rounded-full",
                                                     el.tone === "warn"
                                                         ? "bg-warn"
                                                         : el.tone === "destructive"
