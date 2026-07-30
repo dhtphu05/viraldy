@@ -6,9 +6,13 @@ from viraldy.modules.ai_gateway.prompts import (
     ADAPTATION_PROMPT_VERSION,
     ADAPTATION_SCHEMA_VERSION,
     PATTERN_KIT_PROMPT_VERSION,
+    VIRAL_KIT_PROMPT_VERSION,
 )
 from viraldy.modules.ai_gateway.repository import AiModelRunRepository
-from viraldy.modules.creative_domain.schema_versions import PATTERN_KIT_SCHEMA_VERSION
+from viraldy.modules.creative_domain.schema_versions import (
+    PATTERN_KIT_SCHEMA_VERSION,
+    VIRAL_KIT_SCHEMA_VERSION,
+)
 
 __all__ = [
     "ADAPTATION_PROMPT_VERSION",
@@ -18,5 +22,7 @@ __all__ = [
     "OpenAICompatibleClient",
     "PATTERN_KIT_PROMPT_VERSION",
     "PATTERN_KIT_SCHEMA_VERSION",
+    "VIRAL_KIT_PROMPT_VERSION",
+    "VIRAL_KIT_SCHEMA_VERSION",
     "extract_message_json",
 ]

@@ -48,7 +48,7 @@ class CampaignPackResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     product_id: UUID
-    adaptation_run_id: UUID
+    adaptation_run_id: UUID | None
     status: str
     current_version_id: UUID | None
     created_at: datetime

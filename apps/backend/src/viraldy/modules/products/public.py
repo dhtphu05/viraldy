@@ -24,6 +24,7 @@ class ProductContextSnapshot(BaseModel):
     product_id: UUID
     workspace_id: UUID
     context_schema_version: str
+    product_context_version: int
     product_context: ProductContextV1
 
 
@@ -87,6 +88,7 @@ def get_product_context_snapshot(product: ProductModel) -> ProductContextSnapsho
         product_id=product.id,
         workspace_id=product.workspace_id,
         context_schema_version=product.context_schema_version or PRODUCT_CONTEXT_SCHEMA_VERSION,
+        product_context_version=int(getattr(product, "product_context_version", 1) or 1),
         product_context=context,
     )
 

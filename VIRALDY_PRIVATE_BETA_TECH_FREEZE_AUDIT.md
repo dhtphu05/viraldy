@@ -14,7 +14,8 @@ current source code and verification commands prove them.
 - Baseline SHA before this goal work: `6461380`
 - S1 commit SHA: `1f603ba`
 - S2 commit SHA: `b9ffa40`
-- Current S3 implementation commit SHA: pending until this audit update is committed.
+- S3 commit SHA: `9382fcb`
+- Current S4 implementation commit SHA: pending until this audit update is committed.
 - PR URL: pending
 
 ## 2. Changed Files By Module
@@ -86,6 +87,33 @@ current source code and verification commands prove them.
 - `apps/backend/tests/unit/test_feedback_service.py`
 - `apps/backend/tests/integration/test_migrations.py`
 
+### S4 ViralKit
+
+- `apps/backend/src/viraldy/modules/viral_kits/`
+- `apps/backend/src/viraldy/modules/creative_domain/schema_versions.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/prompts.py`
+- `apps/backend/src/viraldy/modules/ai_gateway/public.py`
+- `apps/backend/src/viraldy/modules/products/models.py`
+- `apps/backend/src/viraldy/modules/products/public.py`
+- `apps/backend/src/viraldy/modules/products/schemas.py`
+- `apps/backend/src/viraldy/modules/products/service.py`
+- `apps/backend/src/viraldy/modules/pattern_kits/public.py`
+- `apps/backend/src/viraldy/modules/pattern_kits/repository.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/contracts.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/models.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/public.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/repository.py`
+- `apps/backend/src/viraldy/modules/campaign_packs/schemas.py`
+- `apps/backend/src/viraldy/api/main.py`
+- `apps/backend/src/viraldy/platform/database/models.py`
+- `apps/backend/alembic/versions/0008_viral_kits.py`
+- `.gitignore`
+
+### S4 Tests
+
+- `apps/backend/tests/unit/test_viral_kits.py`
+- `apps/backend/tests/integration/test_migrations.py`
+
 ## 3. Migration List
 
 - `0001_initial_foundation`
@@ -95,6 +123,7 @@ current source code and verification commands prove them.
 - `0005_auth_workspace_rbac`
 - `0006_feedback_events_model_runs`
 - `0007_pattern_kits`
+- `0008_viral_kits`
 
 `0005_auth_workspace_rbac` adds `users.last_login_at`, converts legacy
 `workspace_members.role='editor'` to `member`, and adds check constraints for
@@ -111,6 +140,13 @@ new append-only data.
 `pattern_kit_actions` with workspace-scoped indexes, immutable version rows,
 source/evidence uniqueness constraints, lifecycle action constraints, and
 `source_order >= 1` validation.
+
+`0008_viral_kits` adds `products.product_context_version`, allows Campaign
+Packs to be created without an Adaptation Run, and adds `viral_kits`,
+`viral_kit_versions`, `viral_kit_pattern_links`, `viral_kit_concept_actions`,
+and `viral_kit_campaign_pack_links` with workspace-scoped indexes, append-only
+version uniqueness, pattern-link uniqueness, concept action constraints, and
+Campaign Pack lineage links.
 
 ## 4. Auth And Identity
 
@@ -222,17 +258,47 @@ Still pending for PatternKit:
 
 ## 7. ViralKit Contract Summary
 
-Not yet implemented in this goal branch.
+Implemented in S4:
 
-Required next state:
+- `ViralKitV1` is a strict Pydantic contract with schema version
+  `viral_kit_v1`, immutable identity/version fields, locked Product Context
+  snapshot, buyer context, requested platform/objective/market, PatternKit match
+  records, adaptation plan, exactly three concepts, test matrix, optional
+  generation briefs, preflight requirement class links, risks, confidence,
+  campaign pack lineage, and provenance.
+- Concept validation rejects duplicate concept IDs, requires selected concepts
+  to exist, requires every concept pair to differ on at least two strategic
+  axes, requires hook variation, and requires demo/proof/narrative variation.
+- Buyer persona and creator persona are explicitly separated to avoid confusing
+  the target customer with the creator archetype.
+- Pattern matching is deterministic and product-aware. It scores category,
+  platform, market, objective, required traits, preferred traits, visual demo
+  suitability, and governance context; rejected PatternKits cannot be used
+  unless an explicit override reason is supplied.
+- Fixture composer is product-grounded and evidence-linked. It produces three
+  concepts, preserves prohibited claims and required disclosures, avoids sales
+  or virality promises, adds TikTok Shop product-tag requirements when required,
+  and can emit storyboard-preview generation briefs behind the request flag.
+- Live composer uses the OpenAI-compatible client and validates returned JSON
+  against `ViralKitV1`; it does not silently fall back to fixture mode when live
+  provider configuration is missing or invalid.
+- Persistence stores kits, immutable versions, pattern applicability links,
+  concept decision actions, Campaign Pack links, model-run provenance, and
+  first-party events.
+- Product Context now has `product_context_version`; ViralKit creation rejects
+  stale expected versions to prevent composing from outdated seller context.
+- ViralKit-to-Campaign-Pack creation compiles exact must-show requirements and
+  records source ViralKit, source ViralKit version, source concept, source
+  PatternKit versions, and the created Campaign Pack version.
+- ViralKit-local feedback endpoint writes field-level corrections through the
+  feedback public boundary.
 
-- Add `viral_kits`, `viral_kit_versions`, `viral_kit_pattern_links`,
-  `viral_kit_concept_actions`, and `viral_kit_campaign_pack_links`.
-- Add `ViralKitV1` strict contracts with product snapshot, deterministic pattern
-  match, adaptation plan, exactly three diverse concepts, test matrix, campaign
-  pack links, preflight requirement links, generation briefs, risks, confidence,
-  and provenance.
-- Add API, service, repository, public boundary, fixture composer, tests, and events.
+Still pending for ViralKit:
+
+- HTTP tenant-isolation tests across the full endpoint set.
+- Live provider qualification against real Dola/Seed-compatible responses.
+- Frontend integration for ViralKit list/detail/create/select/pack creation.
+- Generation provider execution for the optional generation brief payloads.
 
 ## 8. API Endpoint List
 
@@ -277,10 +343,21 @@ Implemented in S3:
 - `POST /api/v1/workspaces/{workspace_id}/pattern-kits/{pattern_kit_id}/feedback`
 - `DELETE /api/v1/workspaces/{workspace_id}/pattern-kits/{pattern_kit_id}`
 
+Implemented in S4:
+
+- `POST /api/v1/workspaces/{workspace_id}/viral-kits`
+- `GET /api/v1/workspaces/{workspace_id}/viral-kits`
+- `GET /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}`
+- `GET /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/versions`
+- `GET /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/versions/{version}`
+- `POST /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/versions`
+- `POST /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/concept-actions`
+- `POST /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/concepts/{concept_id}/campaign-pack`
+- `POST /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}/feedback`
+- `DELETE /api/v1/workspaces/{workspace_id}/viral-kits/{viral_kit_id}`
+
 Pending:
 
-- ViralKit endpoints
-- ViralKit-specific feedback convenience endpoint
 - Health endpoints `/health/live`, `/health/ready`, `/health/dependencies`,
   `/health/worker`
 - Generation endpoints/foundations where required
@@ -319,6 +396,26 @@ S3 behavior implemented:
 - PatternKit actions and feedback emit product events where required by the
   private beta event list.
 
+S4 behavior implemented:
+
+- ViralKit creation loads the exact Product Context snapshot and exact
+  PatternKit version snapshots through module public boundaries.
+- Stale `expected_product_context_version` requests fail with
+  `VIRAL_KIT_PRODUCT_VERSION_CONFLICT`.
+- PatternKit applicability is stored both inside the immutable ViralKit JSON and
+  separately in `viral_kit_pattern_links` for querying and audit.
+- ViralKit versions are append-only; creating a new version never mutates the
+  prior version row.
+- Concept selection/rejection is recorded as an append-only action and emits
+  `concept_selected` or `concept_rejected` where applicable.
+- Campaign Pack creation from a concept records both a Campaign Pack link row
+  and a `campaign_pack_created` concept action.
+- Fixture-mode ViralKit composition creates and completes an `ai_model_runs`
+  record with `operation=viral_kit_compose`, schema/prompt version, input hash,
+  and output summary.
+- Failed ViralKit validation/provider errors mark the model run failed with a
+  safe error code/message.
+
 ## 9. Test Commands And Results
 
 Commands run locally:
@@ -335,6 +432,11 @@ cd apps/backend && .venv/bin/pytest tests/unit/test_feedback_service.py tests/un
 cd apps/backend && .venv/bin/pytest tests/unit tests/architecture tests/contract tests/integration/test_migrations.py
 cd apps/backend && .venv/bin/ruff check src tests alembic/versions
 cd apps/backend && .venv/bin/pytest tests/unit tests/architecture tests/contract tests/integration/test_migrations.py
+cd apps/backend && .venv/bin/ruff check .
+cd apps/backend && .venv/bin/mypy src/viraldy/modules/viral_kits src/viraldy/modules/products src/viraldy/modules/campaign_packs/public.py src/viraldy/modules/campaign_packs/contracts.py src/viraldy/modules/campaign_packs/models.py src/viraldy/modules/campaign_packs/repository.py src/viraldy/modules/pattern_kits/public.py src/viraldy/modules/pattern_kits/repository.py
+cd apps/backend && .venv/bin/pytest tests/unit/test_viral_kits.py -q
+cd apps/backend && .venv/bin/pytest tests/integration/test_migrations.py -q
+cd apps/backend && .venv/bin/pytest -q
 ```
 
 Results:
@@ -352,6 +454,12 @@ Results:
 - S3 backend lint across `src`, `tests`, and all Alembic versions: passed.
 - S3 backend unit + architecture + contract + clean migration suite:
   `94 passed`, coverage `72.79%`.
+- S4 backend lint with `.backend_deps/` ignored: passed.
+- S4 targeted mypy across ViralKit/products/Campaign Pack/PatternKit public
+  boundaries: passed, `no issues found in 24 source files`.
+- S4 ViralKit unit suite: `7 passed`, coverage `73.17%`.
+- S4 clean Postgres migration integration: `1 passed`, coverage `98.45%`.
+- S4 full backend pytest: `101 passed`, coverage `73.08%`.
 
 Local `alembic current` against the default localhost database failed because
 the local Postgres credentials rejected `viraldy`; the clean migration test used
@@ -365,19 +473,20 @@ Pending. Do not claim GitHub CI success from local tests.
 
 Pending for the full private beta flow. Existing unit tests now cover media
 evidence, Creative DNA, PatternKit fixture extraction, PatternKit state
-transitions, PatternKit feedback, TikTok scorer, campaign pack semantics,
-preflight requirements, and recommendations. The full fixture/mock E2E path is
-not yet implemented.
+transitions, PatternKit feedback, ViralKit fixture composition, ViralKit
+product-version locking, ViralKit concept actions, ViralKit-to-Campaign-Pack
+lineage, TikTok scorer, campaign pack semantics, preflight requirements, and
+recommendations. The full fixture/mock E2E path is not yet implemented.
 
 ## 12. Known Limitations
 
-- ViralKit module is still absent.
 - PatternKit module exists, but live/mock provider qualification, full HTTP
   tenant-isolation coverage, deletion invalidation, and performance-evidence
   promotion rules remain pending.
+- ViralKit module exists, but full HTTP tenant-isolation coverage, live provider
+  qualification, frontend integration, and generation execution remain pending.
 - Feedback module exists for workspace-scoped field-level correction, and
-  PatternKit has a resource-local feedback endpoint. ViralKit resource-local
-  feedback is pending with the ViralKit module.
+  PatternKit/ViralKit both have resource-local feedback endpoints.
 - Product events module exists for workspace-scoped export, but not every
   required event producer is wired yet.
 - Generation foundation is still absent.
@@ -452,7 +561,6 @@ The backend is not technically frozen yet. Remaining milestones:
 - Remaining S3 hardening: PatternKit live/mock provider qualification, full
   HTTP tenant-isolation tests, deletion invalidation, and performance evidence
   promotion rules.
-- S4 ViralKit contracts, matcher, composer, persistence, Campaign Pack links, tests.
 - S5 provider/generation/job integration.
 - S6 deletion, health, evaluation harness.
 - S7 full fixture/mock E2E, GitHub CI, PR, and release tag.

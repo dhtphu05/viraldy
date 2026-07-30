@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,6 +30,7 @@ class ProductModel(Base):
     metadata_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     product_context_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     context_schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    product_context_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

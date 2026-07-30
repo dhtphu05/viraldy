@@ -55,5 +55,31 @@ class PatternKitQueries:
             pattern=PatternKitV1.model_validate(version_model.pattern_json),
         )
 
+    async def get_version_snapshot_by_id(
+        self,
+        workspace_id: UUID,
+        pattern_kit_version_id: UUID,
+    ) -> PatternKitVersionSnapshot:
+        version_model = await self._repository.get_version_by_id(
+            workspace_id,
+            pattern_kit_version_id,
+        )
+        if version_model is None:
+            raise NotFoundError(
+                "PATTERN_KIT_VERSION_NOT_FOUND",
+                "PatternKit version was not found.",
+            )
+        kit = await self._repository.get_kit(workspace_id, version_model.pattern_kit_id)
+        if kit is None:
+            raise NotFoundError("PATTERN_KIT_NOT_FOUND", "PatternKit was not found.")
+        return PatternKitVersionSnapshot(
+            pattern_kit_id=kit.id,
+            pattern_kit_version_id=version_model.id,
+            workspace_id=workspace_id,
+            version=version_model.version,
+            status=kit.status,
+            pattern=PatternKitV1.model_validate(version_model.pattern_json),
+        )
+
 
 __all__ = ["PatternKitQueries", "PatternKitV1", "PatternKitVersionSnapshot"]

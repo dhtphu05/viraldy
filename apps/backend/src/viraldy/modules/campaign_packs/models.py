@@ -21,8 +21,8 @@ class CampaignPackModel(Base):
     product_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True
     )
-    adaptation_run_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("adaptation_runs.id"), nullable=False, index=True
+    adaptation_run_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("adaptation_runs.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     current_version_id: Mapped[UUID | None] = mapped_column(

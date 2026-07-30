@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -19,7 +20,7 @@ class CampaignPackRepository:
         workspace_id: UUID,
         user_id: UUID,
         product_id: UUID,
-        adaptation_run_id: UUID,
+        adaptation_run_id: UUID | None,
         brief_json: dict[str, object],
         source_model_run_id: UUID | None,
         source_prompt_version: str | None,
@@ -97,7 +98,7 @@ class CampaignPackRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_versions(self, pack_id: UUID) -> list[CampaignPackVersionModel]:
+    async def list_versions(self, pack_id: UUID) -> builtins.list[CampaignPackVersionModel]:
         result = await self._session.execute(
             select(CampaignPackVersionModel)
             .where(CampaignPackVersionModel.campaign_pack_id == pack_id)
@@ -172,4 +173,4 @@ class SyncCampaignPackRepository:
                 CampaignPackModel.deleted_at.is_(None),
             )
         ).one_or_none()
-        return row
+        return row._tuple() if row is not None else None

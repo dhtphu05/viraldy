@@ -29,6 +29,7 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
             ai_model_run_columns = {
                 column["name"] for column in inspector.get_columns("ai_model_runs")
             }
+            product_columns = {column["name"] for column in inspector.get_columns("products")}
         finally:
             engine.dispose()
 
@@ -49,6 +50,11 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
         "pattern_kit_sources",
         "pattern_kit_evidence_links",
         "pattern_kit_actions",
+        "viral_kits",
+        "viral_kit_versions",
+        "viral_kit_pattern_links",
+        "viral_kit_concept_actions",
+        "viral_kit_campaign_pack_links",
     }.issubset(tables)
     assert {
         "operation",
@@ -59,3 +65,4 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
         "estimated_cost",
         "safe_error_message",
     }.issubset(ai_model_run_columns)
+    assert "product_context_version" in product_columns

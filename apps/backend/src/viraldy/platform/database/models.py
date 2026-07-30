@@ -28,6 +28,13 @@ from viraldy.modules.recommendations.models import (
 from viraldy.modules.reference_boards.models import ReferenceBoardModel
 from viraldy.modules.references.models import ReferenceModel
 from viraldy.modules.tiktok_scorer.models import TikTokScoreRunModel
+from viraldy.modules.viral_kits.models import (
+    ViralKitCampaignPackLinkModel,
+    ViralKitConceptActionModel,
+    ViralKitModel,
+    ViralKitPatternLinkModel,
+    ViralKitVersionModel,
+)
 from viraldy.modules.workspaces.models import WorkspaceMemberModel, WorkspaceModel
 
 __all__ = [
@@ -56,6 +63,11 @@ __all__ = [
     "RecommendationActionModel",
     "RecommendationModel",
     "TikTokScoreRunModel",
+    "ViralKitCampaignPackLinkModel",
+    "ViralKitConceptActionModel",
+    "ViralKitModel",
+    "ViralKitPatternLinkModel",
+    "ViralKitVersionModel",
     "UserModel",
     "WorkspaceMemberModel",
     "WorkspaceModel",

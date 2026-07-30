@@ -29,6 +29,7 @@ from viraldy.modules.recommendations.router import router as recommendations_rou
 from viraldy.modules.reference_boards.router import router as reference_boards_router
 from viraldy.modules.references.router import router as references_router
 from viraldy.modules.tiktok_scorer.router import router as tiktok_scorer_router
+from viraldy.modules.viral_kits.router import router as viral_kits_router
 from viraldy.modules.workspaces.router import router as workspaces_router
 from viraldy.platform.config.settings import get_settings
 from viraldy.platform.observability.logging import configure_logging
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(references_router, prefix=api_v1)
     app.include_router(creative_dna_router, prefix=api_v1)
     app.include_router(pattern_kits_router, prefix=api_v1)
+    app.include_router(viral_kits_router, prefix=api_v1)
     app.include_router(tiktok_scorer_router, prefix=api_v1)
     app.include_router(adaptations_router, prefix=api_v1)
     app.include_router(campaign_packs_router, prefix=api_v1)

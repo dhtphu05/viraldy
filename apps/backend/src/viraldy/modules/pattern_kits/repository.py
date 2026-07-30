@@ -162,6 +162,19 @@ class PatternKitRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_version_by_id(
+        self,
+        workspace_id: UUID,
+        pattern_kit_version_id: UUID,
+    ) -> PatternKitVersionModel | None:
+        result = await self._session.execute(
+            select(PatternKitVersionModel).where(
+                PatternKitVersionModel.workspace_id == workspace_id,
+                PatternKitVersionModel.id == pattern_kit_version_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def list_sources_for_version(
         self,
         workspace_id: UUID,
