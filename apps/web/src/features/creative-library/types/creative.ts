@@ -23,6 +23,7 @@ export type CreativeReference = {
     mediaKind?: "image" | "video";
     mediaUrl?: string;
     posterUrl?: string;
+    thumbnailUrl?: string;
     mediaAspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
     brandOrCreator: string;
     angle: CreativeAngle;

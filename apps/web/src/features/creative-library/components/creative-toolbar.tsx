@@ -3,10 +3,8 @@ import { Input } from "@/shared/ui/input";
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuRadioGroup,
     DropdownMenuRadioItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import {
@@ -54,8 +52,8 @@ export function CreativeToolbar({
     className?: string;
 }) {
     return (
-        <div className={cn("flex flex-wrap items-center gap-2", className)}>
-            <div className="relative min-w-0 flex-1 sm:max-w-md">
+        <div className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
+            <div className="relative min-w-0 basis-full sm:max-w-md sm:flex-1 sm:basis-auto">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                 <Input
                     value={query}
@@ -95,16 +93,20 @@ export function CreativeToolbar({
                     </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <div className="inline-flex overflow-hidden rounded-md border border-hairline">
+            <div
+                role="group"
+                aria-label="Creative layout"
+                className="inline-flex overflow-hidden rounded-[10px] border border-control-border bg-surface"
+            >
                 <button
                     type="button"
                     aria-label="Grid view"
                     aria-pressed={view === "grid"}
                     onClick={() => onView("grid")}
                     className={cn(
-                        "grid h-8 w-8 place-items-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+                        "grid h-9 w-9 place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         view === "grid"
-                            ? "bg-surface-soft text-text-primary"
+                            ? "bg-primary-soft text-primary-active"
                             : "text-text-tertiary hover:bg-surface-soft",
                     )}
                 >
@@ -116,9 +118,9 @@ export function CreativeToolbar({
                     aria-pressed={view === "compact"}
                     onClick={() => onView("compact")}
                     className={cn(
-                        "grid h-8 w-8 place-items-center border-l border-hairline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+                        "grid h-9 w-9 place-items-center border-l border-control-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         view === "compact"
-                            ? "bg-surface-soft text-text-primary"
+                            ? "bg-primary-soft text-primary-active"
                             : "text-text-tertiary hover:bg-surface-soft",
                     )}
                 >
@@ -136,6 +138,3 @@ export function CreativeToolbar({
         </div>
     );
 }
-
-export { sortLabels };
-export const _Unused = { DropdownMenuItem, DropdownMenuSeparator };

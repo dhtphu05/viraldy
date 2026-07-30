@@ -67,21 +67,17 @@ export function CampaignRow({
                     </div>
                     <span className="tabular text-xs text-text-secondary">{campaign.ugcScore}</span>
                 </div>
-                <p className="mt-0.5 text-[10px] uppercase tracking-wide text-text-tertiary">
-                    UGC score
-                </p>
+                <p className="mt-0.5 text-[10px] uppercase text-text-tertiary">UGC score</p>
             </div>
             <div className="hidden sm:block">
                 <p className="tabular text-sm font-medium text-text-primary">
                     {fmtGmv(campaign.gmv)}
                 </p>
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">GMV</p>
+                <p className="text-[10px] uppercase text-text-tertiary">GMV</p>
             </div>
             <div className="hidden min-w-0 sm:block">
                 <p className="truncate text-sm text-text-primary">{campaign.nextAction}</p>
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">
-                    Next action
-                </p>
+                <p className="text-[10px] uppercase text-text-tertiary">Next action</p>
             </div>
             <ChevronRight className="ml-auto h-4 w-4 text-text-tertiary transition-transform group-hover:translate-x-0.5" />
         </button>

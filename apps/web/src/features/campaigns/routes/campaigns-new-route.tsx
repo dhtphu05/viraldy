@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
-import { SurfaceCard } from "@/shared/ui/surface-card";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -130,6 +129,8 @@ function NewCampaign() {
 
     const templateName =
         draft.templateId && campaignTemplates.find((t) => t.id === draft.templateId)?.name;
+    const setupCompleteCount = Number(!!name.trim()) + Number(!!productId);
+    const readyToCreate = setupCompleteCount === 2;
 
     useEffect(() => {
         if (!nameEdited && suggestedName) setName(suggestedName);
@@ -261,7 +262,7 @@ function NewCampaign() {
                 />
 
                 {handoffCreative && handoffProduct && (
-                    <SurfaceCard padding="md" className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-3 border-y border-primary/20 bg-primary-softer px-4 py-3">
                         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary-soft text-primary">
                             <Sparkles className="h-4 w-4" />
                         </span>
@@ -279,11 +280,11 @@ function NewCampaign() {
                                 below.
                             </p>
                         </div>
-                    </SurfaceCard>
+                    </div>
                 )}
 
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                    <SurfaceCard padding="lg" className="flex flex-col gap-5">
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <section className="flex min-w-0 flex-col gap-5 rounded-md bg-surface p-4 sm:p-7">
                         <div className="grid gap-1.5">
                             <Label htmlFor="name">Campaign name</Label>
                             <Input
@@ -466,6 +467,7 @@ function NewCampaign() {
                                     No analyzed creatives yet.{" "}
                                     <Link
                                         to="/creative-library"
+                                        search={{ import: undefined }}
                                         className="text-primary hover:underline"
                                     >
                                         Open Creative Library
@@ -515,7 +517,7 @@ function NewCampaign() {
                             </p>
                         </div>
 
-                        <div className="sticky bottom-0 z-10 -mx-7 -mb-7 flex flex-wrap items-center justify-between gap-3 border-t border-hairline/60 bg-surface/95 px-7 py-4 backdrop-blur">
+                        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-col gap-3 border-t border-divider bg-surface px-4 py-4 sm:-mx-7 sm:-mb-7 sm:flex-row sm:items-center sm:justify-between sm:px-7">
                             <div className="min-w-0 text-xs text-text-secondary">
                                 <p className="font-medium text-text-primary">
                                     {selectedProduct?.name ?? "Select a product"}
@@ -525,9 +527,10 @@ function NewCampaign() {
                                     {refs.length === 1 ? "" : "s"}
                                 </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex w-full items-center gap-2 sm:w-auto">
                                 <Button
                                     variant="ghost"
+                                    className="flex-1 sm:flex-none"
                                     onClick={() => {
                                         clearDraft();
                                         setName("");
@@ -537,26 +540,68 @@ function NewCampaign() {
                                 >
                                     Clear
                                 </Button>
-                                <Button onClick={createCampaign} disabled={busy}>
+                                <Button
+                                    className="flex-1 sm:flex-none"
+                                    onClick={createCampaign}
+                                    disabled={busy}
+                                >
                                     {busy ? "Creating…" : "Create campaign"}
                                 </Button>
                             </div>
                         </div>
-                    </SurfaceCard>
+                    </section>
 
-                    <SurfaceCard padding="md" className="h-fit">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                            What happens next
+                    <aside className="h-fit border-y border-divider bg-surface px-4 py-5 xl:sticky xl:top-20">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-semibold uppercase text-text-tertiary">
+                                Setup readiness
+                            </p>
+                            <StatusChip tone={readyToCreate ? "ok" : "warn"} dot>
+                                {readyToCreate
+                                    ? "Ready to create"
+                                    : `${setupCompleteCount}/2 required`}
+                            </StatusChip>
+                        </div>
+                        <p className="mt-4 text-base font-semibold text-text-primary">
+                            {readyToCreate
+                                ? "Campaign direction is ready"
+                                : !productId
+                                  ? "Select the product"
+                                  : "Name the campaign"}
                         </p>
-                        <ol className="mt-2 flex flex-col gap-2 text-sm text-text-secondary">
-                            <li>• Viraldy adapts your references to this product's context</li>
-                            <li>• You'll select an angle and hooks</li>
-                            <li>• Edit script, storyboard, CTA, deliverables and rights</li>
-                            <li>• Review and export a creator-facing brief</li>
-                        </ol>
-                    </SurfaceCard>
+                        <p className="mt-1 text-sm text-text-secondary">
+                            {readyToCreate
+                                ? "Create the draft to continue with references, angles, hooks, and the creator brief."
+                                : "Campaign name and product are required. The remaining settings can be refined in the Campaign Pack."}
+                        </p>
+                        <dl className="mt-5 divide-y divide-divider border-y border-divider">
+                            <SetupSummary
+                                label="Product"
+                                value={selectedProduct?.name ?? "Not set"}
+                            />
+                            <SetupSummary label="Objective" value={objective} />
+                            <SetupSummary
+                                label="Market · platform"
+                                value={`${market} · ${platform}`}
+                            />
+                            <SetupSummary
+                                label="Creative references"
+                                value={`${refs.length} selected`}
+                            />
+                            {templateName && <SetupSummary label="Template" value={templateName} />}
+                        </dl>
+                    </aside>
                 </div>
             </div>
         </AppShell>
+    );
+}
+
+function SetupSummary({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex items-start justify-between gap-3 py-3 text-sm">
+            <dt className="text-text-tertiary">{label}</dt>
+            <dd className="min-w-0 text-right font-medium text-text-primary">{value}</dd>
+        </div>
     );
 }

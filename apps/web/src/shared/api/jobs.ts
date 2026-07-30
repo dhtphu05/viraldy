@@ -1,6 +1,7 @@
 import { apiGet } from "./client";
 
-export type JobStatus = "queued" | "running" | "retrying" | "completed" | "failed" | "cancelled";
+export type JobStatus =
+    "queued" | "running" | "retrying" | "succeeded" | "completed" | "failed" | "cancelled";
 
 export type JobResponse = {
     id: string;

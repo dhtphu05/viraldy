@@ -21,6 +21,8 @@
     --color-surface-soft: var(--surface-soft);
     --color-surface-muted: var(--surface-muted);
     --color-hairline: var(--hairline);
+    --color-divider: var(--divider);
+    --color-control-border: var(--control-border);
 
     --color-card: var(--surface);
     --color-card-foreground: var(--foreground);
@@ -76,14 +78,9 @@
     --color-sidebar-border: var(--hairline);
     --color-sidebar-ring: var(--primary);
 
-    --shadow-flat: 0 0 0 1px rgba(17, 17, 26, 0.04);
-    --shadow-sm-card: 0 1px 2px rgba(17, 17, 26, 0.04), 0 0 0 1px rgba(17, 17, 26, 0.04);
-    --shadow-md-card:
-        0 1px 2px rgba(17, 17, 26, 0.04), 0 8px 24px -12px rgba(17, 17, 26, 0.12),
-        0 0 0 1px rgba(17, 17, 26, 0.03);
-    --shadow-lg-card:
-        0 4px 12px rgba(17, 17, 26, 0.06), 0 24px 48px -16px rgba(17, 17, 26, 0.18),
-        0 0 0 1px rgba(17, 17, 26, 0.03);
+    --shadow-soft-card: var(--shadow-soft);
+    --shadow-hover-card: var(--shadow-hover);
+    --shadow-floating-card: var(--shadow-floating);
 }
 
 :root {
@@ -94,21 +91,24 @@
     --primary-softer: #fff7f8;
     --primary-foreground: #ffffff;
 
-    --background: #fafafb;
+    --background: #f5f5f7;
     --foreground: #1a1a1f;
     --surface: #ffffff;
-    --surface-soft: #f5f5f7;
-    --surface-muted: #efeff2;
-    --hairline: #dcdce0;
+    --surface-soft: #fafafb;
+    --surface-muted: #f0f0f2;
 
     --text-primary: #1a1a1f;
     --text-secondary: #5f5f68;
     --text-tertiary: #85858f;
     --text-disabled: #ababb3;
 
+    --hairline: rgba(60, 60, 67, 0.14);
+    --divider: rgba(60, 60, 67, 0.09);
+    --control-border: rgba(60, 60, 67, 0.18);
+
     --ok: #0c8a4a;
     --ok-soft: #eaf8f0;
-    --warn: #c2730a;
+    --warn: #b76e00;
     --warn-soft: #fff5e6;
     --info: #2566eb;
     --info-soft: #edf3ff;
@@ -123,6 +123,10 @@
     --sidebar-accent-foreground: var(--primary-active);
     --sidebar-border: var(--hairline);
     --sidebar-ring: var(--primary);
+
+    --shadow-soft: 0 1px 2px rgba(17, 17, 26, 0.025), 0 8px 24px rgba(17, 17, 26, 0.045);
+    --shadow-hover: 0 2px 4px rgba(17, 17, 26, 0.035), 0 12px 30px rgba(17, 17, 26, 0.065);
+    --shadow-floating: 0 12px 36px rgba(17, 17, 26, 0.09);
 }
 
 html,
@@ -158,38 +162,48 @@ body,
 
 @utility surface-card {
     background-color: var(--surface);
-    border-radius: 14px;
-    box-shadow: var(--shadow-sm-card);
+    border-radius: 18px;
     position: relative;
 }
 
 @utility surface-card-interactive {
     background-color: var(--surface);
-    border-radius: 14px;
-    box-shadow: var(--shadow-sm-card);
+    border-radius: 18px;
+    box-shadow: var(--shadow-soft);
     transition:
         transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
         box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     cursor: pointer;
     &:hover {
         transform: translateY(-1px);
-        box-shadow: var(--shadow-md-card);
+        box-shadow: var(--shadow-hover);
     }
+}
+
+@utility surface-card-raised {
+    background-color: var(--surface);
+    border-radius: 20px;
+    box-shadow: var(--shadow-soft);
+    position: relative;
+}
+
+@utility surface-card-outlined {
+    background-color: var(--surface);
+    border: 1px solid var(--control-border);
+    border-radius: 16px;
+    position: relative;
+}
+
+@utility surface-card-critical {
+    background-color: var(--destructive-soft);
+    border: 1px solid color-mix(in srgb, var(--destructive) 28%, transparent);
+    border-radius: 16px;
+    position: relative;
 }
 
 @utility inner-top-highlight {
     &::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-        background: linear-gradient(
-            to bottom,
-            rgba(255, 255, 255, 0.6) 0%,
-            rgba(255, 255, 255, 0) 30%
-        );
-        mix-blend-mode: overlay;
+        content: none;
     }
 }
 

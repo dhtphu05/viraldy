@@ -20,41 +20,62 @@ const EMPTY_RIGHTS: UgcRights = {
     creatorConfirmed: false,
 };
 
-const requirements = [
+const rightsChecklist = [
+    {
+        key: "organic",
+        label: "Organic",
+        detail: "Organic publishing permission is recorded.",
+        targetId: "rights-organic",
+        isComplete: (rights: UgcRights) => rights.organic,
+    },
     {
         key: "spark-authorization",
-        label: "Spark Ads authorization",
+        label: "Spark allowed",
         detail: "Creator has authorized paid use through Spark Ads.",
         targetId: "rights-spark-allowed",
         isComplete: (rights: UgcRights) => rights.sparkAllowed,
     },
     {
-        key: "spark-code",
-        label: "Spark authorization code",
-        detail: "A valid authorization code is recorded for this asset.",
-        targetId: "rights-spark-code",
-        isComplete: (rights: UgcRights) => Boolean(rights.sparkCode),
+        key: "meta",
+        label: "Meta allowed",
+        detail: "Permission for Meta paid distribution is recorded.",
+        targetId: "rights-meta",
+        isComplete: (rights: UgcRights) => rights.metaAllowed,
     },
     {
-        key: "spark-expiry",
-        label: "Spark code expiry",
-        detail: "The authorization expiry date is available to the media buyer.",
-        targetId: "rights-spark-expiry",
-        isComplete: (rights: UgcRights) => Boolean(rights.sparkExpiry),
+        key: "website",
+        label: "Website allowed",
+        detail: "Permission for owned website use is recorded.",
+        targetId: "rights-website",
+        isComplete: (rights: UgcRights) => rights.websiteAllowed,
     },
     {
-        key: "usage-duration",
-        label: "Paid usage duration",
-        detail: "The approved usage window is recorded in days.",
-        targetId: "rights-duration-days",
-        isComplete: (rights: UgcRights) => Boolean(rights.durationDays),
+        key: "raw-footage",
+        label: "Raw footage",
+        detail: "Raw footage is included in the creator handoff.",
+        targetId: "rights-raw-footage",
+        isComplete: (rights: UgcRights) => rights.rawFootage,
     },
     {
         key: "editing-permission",
-        label: "Editing permission",
+        label: "Editing allowed",
         detail: "The team may create paid variants from this asset.",
         targetId: "rights-editing-allowed",
         isComplete: (rights: UgcRights) => rights.editingAllowed,
+    },
+    {
+        key: "creator-confirmed",
+        label: "Creator confirmed",
+        detail: "The creator has confirmed the recorded usage permissions.",
+        targetId: "rights-creator-confirmed",
+        isComplete: (rights: UgcRights) => rights.creatorConfirmed,
+    },
+    {
+        key: "spark-expiry",
+        label: "Expiry",
+        detail: "The authorization expiry date is available to the media buyer.",
+        targetId: "rights-spark-expiry",
+        isComplete: (rights: UgcRights) => Boolean(rights.sparkExpiry),
     },
 ] as const;
 
@@ -74,9 +95,16 @@ export function RightsReadinessDrawer({
     onCloseAutoFocus?: ComponentProps<typeof RightDrawer>["onCloseAutoFocus"];
 }) {
     const blockers = sparkBlockers(rights);
-    const completed = requirements.filter((requirement) => requirement.isComplete(rights)).length;
-    const completion = Math.round((completed / requirements.length) * 100);
+    const completed = rightsChecklist.filter((item) => item.isComplete(rights)).length;
+    const completion = Math.round((completed / rightsChecklist.length) * 100);
+    const coverageComplete = completed === rightsChecklist.length;
     const statusId = "rights-readiness-status";
+    const status =
+        blockers.length === 0
+            ? "READY FOR SPARK"
+            : rights.organic && !rights.sparkAllowed
+              ? "ORGANIC ONLY"
+              : `${blockers.length} PAID-USE BLOCKER${blockers.length === 1 ? "" : "S"}`;
 
     const focusRequirement = (targetId: string) => {
         document.getElementById(targetId)?.focus();
@@ -90,20 +118,21 @@ export function RightsReadinessDrawer({
         <RightDrawer
             open={open}
             onOpenChange={onOpenChange}
-            title="Rights & Spark readiness"
-            description="Resolve paid usage blockers without leaving the asset review."
+            title="Rights readiness"
+            description="Record usage methods and resolve paid launch blockers."
             size="md"
             onCloseAutoFocus={onCloseAutoFocus}
             footer={
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                        Keep organic-only
+                        Done for now
                     </Button>
-                    <div className="ml-auto text-right">
+                    <div className="sm:ml-auto sm:text-right">
                         <Button
                             onClick={markReady}
                             disabled={blockers.length > 0}
                             aria-describedby={statusId}
+                            className="w-full sm:w-auto"
                         >
                             <Sparkles className="h-4 w-4" />
                             Mark Spark-ready
@@ -126,6 +155,46 @@ export function RightsReadinessDrawer({
             }
         >
             <div className="space-y-7">
+                <section
+                    aria-labelledby="rights-primary-status"
+                    className="border-b border-hairline pb-5"
+                >
+                    <p className="text-[11px] font-semibold uppercase text-text-tertiary">
+                        Current status
+                    </p>
+                    <h3
+                        id="rights-primary-status"
+                        className={cn(
+                            "mt-1 text-xl font-semibold",
+                            blockers.length === 0
+                                ? "text-ok"
+                                : rights.organic
+                                  ? "text-info"
+                                  : "text-warn",
+                        )}
+                    >
+                        {status}
+                    </h3>
+                    <p className="mt-1 text-sm text-text-secondary">
+                        {blockers.length === 0
+                            ? "All existing paid-use requirements are complete."
+                            : `${completed} of ${rightsChecklist.length} rights checks are recorded.`}
+                    </p>
+                    {blockers.length > 0 && (
+                        <ul className="mt-3 space-y-1 text-xs text-text-secondary">
+                            {blockers.map((blocker) => (
+                                <li key={blocker} className="flex items-start gap-2">
+                                    <CircleAlert
+                                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn"
+                                        aria-hidden
+                                    />
+                                    {blocker}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+
                 <section aria-labelledby="rights-progress-title">
                     <div className="flex items-start justify-between gap-3">
                         <div>
@@ -133,20 +202,20 @@ export function RightsReadinessDrawer({
                                 id="rights-progress-title"
                                 className="text-sm font-semibold text-text-primary"
                             >
-                                Paid readiness
+                                Rights coverage
                             </h3>
                             <p className="mt-0.5 text-xs text-text-tertiary">
-                                Select a missing requirement to jump to its field.
+                                Select an item to jump to its permission field.
                             </p>
                         </div>
-                        <StatusChip tone={blockers.length === 0 ? "ok" : "warn"}>
-                            {completed}/{requirements.length} complete
+                        <StatusChip tone={coverageComplete ? "ok" : "warn"}>
+                            {completed}/{rightsChecklist.length} complete
                         </StatusChip>
                     </div>
                     <div
                         className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-soft"
                         role="progressbar"
-                        aria-label="Spark readiness completion"
+                        aria-label="Rights checklist completion"
                         aria-valuemin={0}
                         aria-valuemax={100}
                         aria-valuenow={completion}
@@ -154,27 +223,27 @@ export function RightsReadinessDrawer({
                         <div
                             className={cn(
                                 "h-full origin-left rounded-full transition-[width,background-color] duration-200",
-                                blockers.length === 0 ? "bg-ok" : "bg-warn",
+                                coverageComplete ? "bg-ok" : "bg-warn",
                             )}
                             style={{ width: `${completion}%` }}
                         />
                     </div>
 
                     <div className="mt-4 space-y-1.5">
-                        {requirements.map((requirement) => {
-                            const complete = requirement.isComplete(rights);
+                        {rightsChecklist.map((item) => {
+                            const complete = item.isComplete(rights);
                             return (
                                 <button
-                                    key={requirement.key}
+                                    key={item.key}
                                     type="button"
-                                    onClick={() => focusRequirement(requirement.targetId)}
+                                    onClick={() => focusRequirement(item.targetId)}
                                     className={cn(
                                         "group flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                         complete
                                             ? "bg-ok-soft/55 hover:bg-ok-soft"
                                             : "bg-warn-soft/55 hover:bg-warn-soft",
                                     )}
-                                    aria-label={`${requirement.label}: ${complete ? "complete" : "missing"}. Go to field.`}
+                                    aria-label={`${item.label}: ${complete ? "complete" : "missing"}. Go to field.`}
                                 >
                                     {complete ? (
                                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" />
@@ -183,10 +252,10 @@ export function RightsReadinessDrawer({
                                     )}
                                     <span className="min-w-0 flex-1">
                                         <span className="block text-sm font-medium text-text-primary">
-                                            {requirement.label}
+                                            {item.label}
                                         </span>
                                         <span className="mt-0.5 block text-xs text-text-secondary">
-                                            {requirement.detail}
+                                            {item.detail}
                                         </span>
                                     </span>
                                     <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-text-tertiary transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -227,7 +296,7 @@ export function RightsReadinessDrawer({
                             id="rights-spark-expiry"
                             label="Spark code expiry"
                             type="date"
-                            value={rights.sparkExpiry ?? ""}
+                            value={rights.sparkExpiry?.slice(0, 10) ?? ""}
                             invalid={!rights.sparkExpiry}
                             onChange={(value) => onUpdate({ sparkExpiry: value || undefined })}
                         />

@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
-import { SurfaceCard } from "@/shared/ui/surface-card";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
@@ -12,6 +11,8 @@ import { Plus, LayoutTemplate, Sparkles, Search } from "lucide-react";
 import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
 import { CampaignListRow } from "@/features/campaigns/components/campaign-list-row";
 import { CampaignTemplatesSheet } from "@/features/campaigns/components/campaign-templates-sheet";
+import { CampaignRenameDialog } from "@/features/campaigns/components/campaign-rename-dialog";
+import { CampaignDeleteDialog } from "@/features/campaigns/components/campaign-delete-dialog";
 import { seedProducts } from "@/features/products/data/products";
 import { toast } from "sonner";
 import type { CampaignPackStatus } from "@/features/campaigns/types/campaign";
@@ -75,6 +76,8 @@ function CampaignsIndex() {
     const [objective, setObjective] = useState<string>("all");
     const [sort, setSort] = useState<(typeof SORTS)[number]["id"]>("updated");
     const [templatesOpen, setTemplatesOpen] = useState(false);
+    const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
     const objectives = useMemo(
         () => Array.from(new Set(campaigns.map((c) => c.objective).filter(Boolean))),
@@ -126,10 +129,7 @@ function CampaignsIndex() {
                 />
 
                 {handoffCreative && handoffProduct && (
-                    <SurfaceCard
-                        padding="md"
-                        className="flex flex-wrap items-center justify-between gap-3"
-                    >
+                    <div className="flex flex-col gap-3 border-y border-primary/20 bg-primary-softer px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex min-w-0 items-center gap-3">
                             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary-soft text-primary">
                                 <Sparkles className="h-4 w-4" />
@@ -149,13 +149,13 @@ function CampaignsIndex() {
                                 </p>
                             </div>
                         </div>
-                        <Button asChild size="sm">
-                            <Link to="/campaigns/new">Continue in new campaign</Link>
+                        <Button asChild size="sm" className="w-full sm:w-auto">
+                            <Link to="/campaigns/new">Create campaign from this adaptation</Link>
                         </Button>
-                    </SurfaceCard>
+                    </div>
                 )}
 
-                <SurfaceCard padding="sm" className="flex flex-wrap items-center gap-2">
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_repeat(4,180px)]">
                     <div className="relative min-w-[220px] flex-1">
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                         <Input
@@ -167,7 +167,7 @@ function CampaignsIndex() {
                         />
                     </div>
                     <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-                        <SelectTrigger className="w-[170px]">
+                        <SelectTrigger className="w-full" aria-label="Filter campaigns by status">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -179,7 +179,7 @@ function CampaignsIndex() {
                         </SelectContent>
                     </Select>
                     <Select value={productId} onValueChange={setProductId}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full" aria-label="Filter campaigns by product">
                             <SelectValue placeholder="Product" />
                         </SelectTrigger>
                         <SelectContent>
@@ -192,7 +192,10 @@ function CampaignsIndex() {
                         </SelectContent>
                     </Select>
                     <Select value={objective} onValueChange={setObjective}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger
+                            className="w-full"
+                            aria-label="Filter campaigns by objective"
+                        >
                             <SelectValue placeholder="Objective" />
                         </SelectTrigger>
                         <SelectContent>
@@ -205,7 +208,7 @@ function CampaignsIndex() {
                         </SelectContent>
                     </Select>
                     <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full" aria-label="Sort campaigns">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -216,10 +219,10 @@ function CampaignsIndex() {
                             ))}
                         </SelectContent>
                     </Select>
-                </SurfaceCard>
+                </div>
 
                 {filtered.length === 0 ? (
-                    <SurfaceCard padding="lg">
+                    <div className="border-y border-divider bg-surface p-7">
                         <EmptyState
                             title={
                                 q
@@ -238,14 +241,14 @@ function CampaignsIndex() {
                                 </Button>
                             }
                         />
-                    </SurfaceCard>
+                    </div>
                 ) : (
-                    <SurfaceCard padding="none" className="divide-y divide-hairline/70">
-                        <div className="hidden grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_120px_120px_minmax(0,1.4fr)_auto] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary sm:grid">
+                    <div className="divide-y divide-divider overflow-hidden rounded-md border border-control-border bg-surface">
+                        <div className="sticky top-0 z-10 hidden gap-3 bg-surface px-4 py-2 text-[10px] font-semibold uppercase text-text-tertiary md:grid md:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_120px_120px_minmax(0,1.4fr)_auto]">
                             <span>Campaign</span>
                             <span>Status</span>
-                            <span>Angle</span>
-                            <span>Refs · hooks</span>
+                            <span className="hidden xl:block">Angle</span>
+                            <span className="hidden xl:block">Refs · hooks</span>
                             <span>Next action</span>
                             <span />
                         </div>
@@ -253,13 +256,7 @@ function CampaignsIndex() {
                             <CampaignListRow
                                 key={c.id}
                                 campaign={c}
-                                onRename={() => {
-                                    const name = window.prompt("Rename campaign", c.name);
-                                    if (name && name.trim()) {
-                                        rename(c.id, name.trim());
-                                        toast.success("Renamed");
-                                    }
-                                }}
+                                onRename={() => setRenameTarget({ id: c.id, name: c.name })}
                                 onDuplicate={() => {
                                     const newId = duplicate(c.id);
                                     if (newId) {
@@ -286,25 +283,41 @@ function CampaignsIndex() {
                                 }}
                                 onDelete={
                                     localSet.has(c.id)
-                                        ? () => {
-                                              if (
-                                                  window.confirm(
-                                                      "Delete this local draft? This cannot be undone.",
-                                                  )
-                                              ) {
-                                                  deleteLocal(c.id);
-                                                  toast.success("Draft deleted");
-                                              }
-                                          }
+                                        ? () => setDeleteTarget({ id: c.id, name: c.name })
                                         : undefined
                                 }
                             />
                         ))}
-                    </SurfaceCard>
+                    </div>
                 )}
             </div>
 
             <CampaignTemplatesSheet open={templatesOpen} onOpenChange={setTemplatesOpen} />
+            <CampaignRenameDialog
+                open={!!renameTarget}
+                currentName={renameTarget?.name ?? ""}
+                onOpenChange={(open) => {
+                    if (!open) setRenameTarget(null);
+                }}
+                onRename={(name) => {
+                    if (!renameTarget) return;
+                    rename(renameTarget.id, name);
+                    toast.success("Renamed");
+                }}
+            />
+            <CampaignDeleteDialog
+                open={!!deleteTarget}
+                campaignName={deleteTarget?.name ?? "This campaign"}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+                onDelete={() => {
+                    if (!deleteTarget) return;
+                    deleteLocal(deleteTarget.id);
+                    setDeleteTarget(null);
+                    toast.success("Draft deleted");
+                }}
+            />
         </AppShell>
     );
 }

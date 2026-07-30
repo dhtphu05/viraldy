@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
 import { SurfaceCard } from "@/shared/ui/surface-card";
@@ -24,10 +24,9 @@ import { useAppStore, useAllCampaigns } from "@/app/store/app-store";
 import { seedCreators } from "@/features/ugc-review/mocks/creators";
 import { demoUploadAssets } from "@/features/ugc-review/mocks/ugcSeed";
 import { ugcProcessingSteps } from "@/features/ugc-review/lib/mockUgcAnalysis";
-import { Upload, Video, Play, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight, Play, Search, Sparkles, Upload, Video } from "lucide-react";
 import { toast } from "sonner";
 import type { UgcAsset, UgcDecision, UgcReviewObjective } from "@/features/ugc-review/types/ugc";
-import { useEffect, useRef } from "react";
 import { DisabledActionHint } from "@/shared/ui/disabled-action-hint";
 import { cn } from "@/shared/lib/utils";
 import { captureVideoPoster, posterForDemoUploadFilename } from "@/shared/lib/demo-media";
@@ -74,6 +73,8 @@ type UploadFileMeta = {
     aspectRatio?: UgcAsset["mediaAspectRatio"];
 };
 
+type UgcFilter = "all" | "awaiting" | "revision" | "organic" | "spark";
+
 function UgcInbox() {
     const { campaignId, upload } = Route.useSearch();
     const navigate = useNavigate();
@@ -83,9 +84,7 @@ function UgcInbox() {
     const completeAnalysis = useAppStore((s) => s.completeUgcAnalysis);
     const jobs = useAppStore((s) => s.ugcJobs);
     const [query, setQuery] = useState("");
-    const [filter, setFilter] = useState<"all" | "awaiting" | "revision" | "organic" | "spark">(
-        "all",
-    );
+    const [filter, setFilter] = useState<UgcFilter>("all");
     const [uploadOpen, setUploadOpen] = useState(!!upload);
 
     useEffect(() => {
@@ -126,8 +125,11 @@ function UgcInbox() {
     );
 
     const summary = useMemo(() => {
-        const nonArchived = assets.filter((a) => !a.archived);
+        const nonArchived = assets.filter(
+            (asset) => !asset.archived && (!campaignId || asset.campaignId === campaignId),
+        );
         return {
+            all: nonArchived.length,
             awaiting: nonArchived.filter(
                 (a) => a.decision === "awaiting-analysis" || a.decision === "processing",
             ).length,
@@ -139,7 +141,7 @@ function UgcInbox() {
                 (a) => a.decision === "spark-ready" || a.decision === "small-spark-test",
             ).length,
         };
-    }, [assets]);
+    }, [assets, campaignId]);
 
     const filtered = useMemo(() => {
         return assets.filter((a) => {
@@ -168,11 +170,28 @@ function UgcInbox() {
                 const q = query.toLowerCase();
                 const creator =
                     seedCreators.find((c) => c.id === a.creatorId)?.name.toLowerCase() ?? "";
-                if (!a.title.toLowerCase().includes(q) && !creator.includes(q)) return false;
+                const campaign =
+                    campaigns
+                        .find((candidate) => candidate.id === a.campaignId)
+                        ?.name.toLowerCase() ?? "";
+                if (
+                    !a.title.toLowerCase().includes(q) &&
+                    !creator.includes(q) &&
+                    !campaign.includes(q)
+                )
+                    return false;
             }
             return true;
         });
-    }, [assets, campaignId, filter, query]);
+    }, [assets, campaignId, campaigns, filter, query]);
+
+    const clearFilters = () => {
+        setQuery("");
+        setFilter("all");
+        if (campaignId) {
+            void navigate({ to: "/ugc-review", search: {}, replace: true });
+        }
+    };
 
     return (
         <AppShell>
@@ -194,15 +213,15 @@ function UgcInbox() {
                 />
 
                 {handoffCampaign && (
-                    <SurfaceCard
-                        padding="md"
-                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                    <section
+                        aria-label="Campaign handoff"
+                        className="flex flex-col gap-3 border-y border-hairline py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                         <div className="min-w-0">
-                            <p className="text-xs uppercase tracking-wider text-text-tertiary">
+                            <p className="text-[11px] font-semibold uppercase text-primary-active">
                                 Campaign handoff
                             </p>
-                            <p className="mt-0.5 truncate text-sm font-medium text-text-primary">
+                            <p className="mt-0.5 break-words text-sm font-medium text-text-primary">
                                 {handoffCampaign.name}
                             </p>
                             <p className="mt-0.5 text-xs text-text-secondary">
@@ -211,7 +230,7 @@ function UgcInbox() {
                                 {handoffCampaign.deliverables ?? 0} deliverables
                             </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 sm:shrink-0">
                             <Button
                                 size="sm"
                                 variant="secondary"
@@ -223,59 +242,97 @@ function UgcInbox() {
                                 Upload for this campaign
                             </Button>
                         </div>
-                    </SurfaceCard>
+                    </section>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <SummaryCard
-                        label="Awaiting review"
-                        value={summary.awaiting}
-                        active={filter === "awaiting"}
-                        onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")}
-                    />
-                    <SummaryCard
-                        label="Needs revision"
-                        value={summary.revision}
-                        active={filter === "revision"}
-                        onClick={() => setFilter(filter === "revision" ? "all" : "revision")}
-                    />
-                    <SummaryCard
-                        label="Organic-ready"
-                        value={summary.organic}
-                        active={filter === "organic"}
-                        onClick={() => setFilter(filter === "organic" ? "all" : "organic")}
-                    />
-                    <SummaryCard
-                        label="Spark-ready"
-                        value={summary.spark}
-                        active={filter === "spark"}
-                        onClick={() => setFilter(filter === "spark" ? "all" : "spark")}
-                    />
+                <div className="max-w-full overflow-x-auto border-b border-hairline">
+                    <div
+                        role="toolbar"
+                        aria-label="Filter UGC by review decision"
+                        className="flex min-w-max items-stretch gap-1"
+                    >
+                        <StatusFilter
+                            label="All"
+                            value={summary.all}
+                            active={filter === "all"}
+                            onClick={() => setFilter("all")}
+                        />
+                        <StatusFilter
+                            label="Awaiting"
+                            value={summary.awaiting}
+                            active={filter === "awaiting"}
+                            onClick={() => setFilter("awaiting")}
+                        />
+                        <StatusFilter
+                            label="Needs revision"
+                            value={summary.revision}
+                            active={filter === "revision"}
+                            onClick={() => setFilter("revision")}
+                        />
+                        <StatusFilter
+                            label="Organic-ready"
+                            value={summary.organic}
+                            active={filter === "organic"}
+                            onClick={() => setFilter("organic")}
+                        />
+                        <StatusFilter
+                            label="Spark-ready"
+                            value={summary.spark}
+                            active={filter === "spark"}
+                            onClick={() => setFilter("spark")}
+                        />
+                    </div>
                 </div>
 
-                <SurfaceCard padding="sm" className="flex flex-wrap items-center gap-2">
-                    <Input
-                        placeholder="Search assets, creators, campaigns…"
-                        aria-label="Search assets, creators, and campaigns"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        className="max-w-xs"
-                    />
-                    {(query || filter !== "all") && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative min-w-0 flex-1 sm:max-w-sm">
+                        <Search
+                            aria-hidden
+                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary"
+                        />
+                        <Input
+                            placeholder="Search assets, creators, campaigns"
+                            aria-label="Search assets, creators, and campaigns"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            className="w-full pl-9"
+                        />
+                    </div>
+                    <Select
+                        value={campaignId ?? "all"}
+                        onValueChange={(value) =>
+                            void navigate({
+                                to: "/ugc-review",
+                                search: value === "all" ? {} : { campaignId: value },
+                                replace: true,
+                            })
+                        }
+                    >
+                        <SelectTrigger className="w-full sm:w-56" aria-label="Filter by campaign">
+                            <SelectValue placeholder="All campaigns" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All campaigns</SelectItem>
+                            {campaigns.map((campaign) => (
+                                <SelectItem key={campaign.id} value={campaign.id}>
+                                    {campaign.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {(query || filter !== "all" || campaignId) && (
                         <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                                setQuery("");
-                                setFilter("all");
-                            }}
+                            onClick={clearFilters}
+                            className="self-start sm:self-auto"
                         >
                             Clear filters
                         </Button>
                     )}
-                </SurfaceCard>
+                </div>
 
-                <SurfaceCard padding="none" className="overflow-hidden">
+                <SurfaceCard variant="outlined" padding="none" className="overflow-hidden">
                     {filtered.length === 0 ? (
                         <div className="p-10">
                             <EmptyState
@@ -315,7 +372,7 @@ function UgcInbox() {
     );
 }
 
-function SummaryCard({
+function StatusFilter({
     label,
     value,
     active,
@@ -330,18 +387,27 @@ function SummaryCard({
         <button
             type="button"
             onClick={onClick}
-            className={`surface-card inner-top-highlight flex flex-col gap-1 rounded-[14px] p-4 text-left transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${active ? "ring-1 ring-primary" : ""}`}
+            className={cn(
+                "relative flex min-h-11 items-center gap-2 px-3 py-2 text-sm font-medium text-text-secondary transition-colors duration-200 hover:bg-surface-soft hover:text-text-primary focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active && "bg-primary-softer text-primary-active",
+            )}
             aria-pressed={active}
         >
-            <span className="text-xs text-text-tertiary">{label}</span>
-            <span className="text-2xl font-semibold tracking-tight text-text-primary">{value}</span>
-            <span className="text-xs text-text-secondary">
-                {active
-                    ? "Showing this queue"
-                    : value === 0
-                      ? "Nothing to review"
-                      : "Filter this queue"}
+            <span>{label}</span>
+            <span
+                className={cn(
+                    "rounded-full bg-surface-muted px-1.5 py-0.5 text-[11px] tabular-nums text-text-tertiary",
+                    active && "bg-primary-soft text-primary-active",
+                )}
+            >
+                {value}
             </span>
+            {active && (
+                <span
+                    aria-hidden
+                    className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary"
+                />
+            )}
         </button>
     );
 }
@@ -359,37 +425,23 @@ function UgcRow({
     const creator = seedCreators.find((c) => c.id === asset.creatorId);
     const submitted = new Date(asset.submittedAt);
     return (
-        <li className="flex items-center gap-4 px-4 py-3">
-            <DemoMediaTile
-                mediaUrl={asset.mediaUrl}
-                mediaKind={asset.mediaUrl ? "video" : undefined}
-                posterUrl={asset.posterUrl}
-                alt={`${asset.title} preview`}
-                seed={asset.thumbSeed}
-                label={asset.objective}
-                badges={[`${asset.durationSec}s`]}
-                markers={[
-                    { at: 10, tone: "info" },
-                    { at: asset.decision === "request-revision" ? 42 : 28, tone: meta.tone },
-                    { at: 86, tone: asset.rightsStatus === "complete" ? "ok" : "warn" },
-                ]}
-                aspect={asset.mediaAspectRatio ?? "3 / 2"}
-                fit={asset.mediaAspectRatio === "9:16" ? "contain" : "cover"}
-                className="h-16 w-24 shrink-0 rounded-lg bg-black ring-1 ring-hairline"
-            />
+        <li className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[96px_minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+            <UgcThumbnail asset={asset} />
             <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium text-text-primary">{asset.title}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                    <p className="break-words text-sm font-medium text-text-primary">
+                        {asset.title}
+                    </p>
                     <StatusChip tone={meta.tone} dot>
                         {meta.label}
                     </StatusChip>
                 </div>
-                <p className="mt-0.5 truncate text-xs text-text-secondary">
+                <p className="mt-0.5 break-words text-xs text-text-secondary">
                     {creator?.name ?? "Unknown creator"} · {campaignName ?? "No campaign"} · v
                     {asset.submissionVersion} · {asset.durationSec}s · {formatUtcDate(submitted)}
                 </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
                 {asset.decision === "awaiting-analysis" && (
                     <Button size="sm" variant="secondary" onClick={onAnalyze}>
                         <Sparkles className="mr-1 h-3.5 w-3.5" />
@@ -408,6 +460,48 @@ function UgcRow({
                 </Button>
             </div>
         </li>
+    );
+}
+
+function UgcThumbnail({ asset }: { asset: UgcAsset }) {
+    const className = "h-36 w-full rounded-md bg-surface-soft ring-1 ring-hairline sm:h-16 sm:w-24";
+
+    if (asset.posterUrl) {
+        return (
+            <div className={`${className} overflow-hidden bg-black`}>
+                <img
+                    src={asset.posterUrl}
+                    alt={`${asset.title} preview frame`}
+                    loading="lazy"
+                    className="h-full w-full object-contain"
+                />
+            </div>
+        );
+    }
+
+    if (asset.mediaUrl) {
+        return (
+            <DemoMediaTile
+                mediaUrl={asset.mediaUrl}
+                mediaKind="video"
+                alt={`${asset.title} video preview`}
+                seed={asset.thumbSeed}
+                badges={[`${asset.durationSec}s`]}
+                aspect={asset.mediaAspectRatio ?? "3 / 2"}
+                fit="contain"
+                className={className}
+            />
+        );
+    }
+
+    return (
+        <div
+            className={`${className} grid place-items-center`}
+            role="img"
+            aria-label={`${asset.title} has no preview frame`}
+        >
+            <Video className="h-5 w-5 text-text-tertiary" aria-hidden />
+        </div>
     );
 }
 

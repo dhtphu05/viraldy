@@ -32,7 +32,7 @@ export function AngleCreatorHeatmap({
     const maxPositiveProfit = Math.max(1, ...cells.map((cell) => cell.grossProfit));
 
     return (
-        <SurfaceCard padding="none">
+        <SurfaceCard variant="outlined" padding="none">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-hairline px-5 py-3">
                 <div>
                     <h3 className="text-sm font-semibold text-text-primary">
@@ -242,7 +242,7 @@ function heatmapTone(value: number, maxPositiveProfit: number) {
 function Metric({ label, value }: { label: string; value: string }) {
     return (
         <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-text-tertiary">{label}</p>
+            <p className="text-[10px] uppercase text-text-tertiary">{label}</p>
             <p className="mt-0.5 truncate tabular text-sm font-semibold text-text-primary">
                 {value}
             </p>

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
 import { SurfaceCard } from "@/shared/ui/surface-card";
-import { MetricCard } from "@/shared/ui/metric-card";
+import { DecisionHero } from "@/shared/ui/decision-hero";
+import { MetricStrip, type MetricStripItem } from "@/shared/ui/metric-strip";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -32,21 +33,13 @@ import type { PerfRecommendation, DecisionGroup } from "@/features/performance/t
 import {
     BarChart3,
     TrendingUp,
-    ArrowRight,
     Sparkles,
-    AlertTriangle,
-    RefreshCcw,
-    Wrench,
-    Ban,
-    PauseCircle,
     Search,
     FileDown,
-    Download,
     Upload,
     ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Metric } from "@/shared/types";
 
 export const Route = createFileRoute("/performance/")({
     validateSearch: (search: Record<string, unknown>) => ({
@@ -71,17 +64,7 @@ export const Route = createFileRoute("/performance/")({
     component: PerformancePage,
 });
 
-const groupMeta: Record<
-    DecisionGroup,
-    { icon: typeof Sparkles; label: string; description: string }
-> = {
-    Scale: { icon: Sparkles, label: "Scale", description: "Ready for controlled expansion." },
-    Fix: { icon: Wrench, label: "Fix", description: "Creative or downstream fixes suggested." },
-    Rehire: { icon: RefreshCcw, label: "Rehire", description: "High-efficiency creators." },
-    Hold: { icon: PauseCircle, label: "Hold", description: "Pause paid amplification for now." },
-    Stop: { icon: Ban, label: "Stop", description: "Cut underperformers to protect margin." },
-    Refresh: { icon: TrendingUp, label: "Refresh", description: "Refresh hook or first scene." },
-};
+const decisionGroups: DecisionGroup[] = ["Scale", "Fix", "Rehire", "Refresh", "Hold", "Stop"];
 
 function PerformancePage() {
     const routeSearch = Route.useSearch();
@@ -111,13 +94,13 @@ function PerformancePage() {
 
     const business = overviewBusinessMetrics();
 
-    const metrics: Metric[] = [
+    const metrics: MetricStripItem[] = [
         {
             id: "m-gmv",
             label: "GMV influenced",
             value: fmtMoney(business.gmv),
             delta: "+18%",
-            deltaTone: "ok",
+            tone: "ok",
             hint: "vs previous 30 days",
         },
         {
@@ -125,7 +108,7 @@ function PerformancePage() {
             label: "Gross profit influenced",
             value: fmtMoney(business.grossProfit),
             delta: "+9%",
-            deltaTone: "ok",
+            tone: "ok",
             hint: "vs previous 30 days",
         },
         {
@@ -133,7 +116,7 @@ function PerformancePage() {
             label: "Sample efficiency",
             value: `$${business.sampleEfficiency.toFixed(1)}`,
             delta: "per $1 sample",
-            deltaTone: "neutral",
+            tone: "neutral",
             hint: "Blended across campaigns",
         },
         {
@@ -141,7 +124,7 @@ function PerformancePage() {
             label: "Active assets w/ data",
             value: fmtNum(business.activeAssets),
             delta: `${seedCampaignPerf.length} campaigns`,
-            deltaTone: "info",
+            tone: "info",
             hint: "Mapped to performance rows",
         },
     ];
@@ -209,12 +192,22 @@ function PerformancePage() {
         });
     };
 
+    const onAcceptRecommendation = (rec: PerfRecommendation) => {
+        acceptRec(rec.id);
+        toast.success("Recommendation accepted", {
+            action: {
+                label: "Undo",
+                onClick: () => unacceptRec(rec.id),
+            },
+        });
+    };
+
     return (
         <AppShell>
             <div className="flex flex-col gap-6">
                 <PageHeader
                     title="Performance"
-                    description="Connect creative decisions to GMV, gross profit, sample efficiency, and the next campaign action."
+                    description="Connect creative decisions to GMV, gross profit, sample efficiency, and the next campaign action. Current values are a demo scenario until imported data is added."
                     actions={
                         <>
                             <Button variant="ghost" size="sm" onClick={() => setOpenReports(true)}>
@@ -227,146 +220,25 @@ function PerformancePage() {
                     }
                 />
 
-                {/* Decision summary */}
-                <section aria-labelledby="what-next">
-                    <div className="mb-3 flex items-end justify-between gap-3">
-                        <div>
-                            <h2 id="what-next" className="text-sm font-semibold text-text-primary">
-                                What should you do next?
-                            </h2>
-                            <p className="mt-0.5 text-xs text-text-tertiary">
-                                Click a summary to filter recommendations below.
-                            </p>
-                        </div>
-                        {groupFilter !== "All" && (
-                            <Button variant="ghost" size="sm" onClick={() => setGroupFilter("All")}>
-                                Clear filter
-                            </Button>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                        {(Object.keys(groupMeta) as DecisionGroup[]).map((g) => {
-                            const items = decisionCounts[g];
-                            const meta = groupMeta[g];
-                            const active = groupFilter === g;
-                            const Icon = meta.icon;
-                            return (
-                                <button
-                                    key={g}
-                                    type="button"
-                                    onClick={() => setGroupFilter(active ? "All" : g)}
-                                    className={`surface-card inner-top-highlight flex flex-col gap-2 p-3 text-left transition ${active ? "ring-1 ring-primary" : "hover:bg-surface-soft/70"}`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <StatusChip tone={decisionTone[g]}>{meta.label}</StatusChip>
-                                        <Icon className="h-4 w-4 text-text-tertiary" />
-                                    </div>
-                                    <p className="tabular text-xl font-semibold text-text-primary">
-                                        {items.length}
-                                    </p>
-                                    <p className="line-clamp-2 text-xs text-text-secondary">
-                                        {meta.description}
-                                    </p>
-                                    {items[0] && (
-                                        <p className="truncate text-[11px] text-text-tertiary">
-                                            Top: {items[0].object}
-                                        </p>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </section>
-
-                {/* Business metrics */}
-                <section aria-labelledby="business-metrics">
-                    <h2 id="business-metrics" className="sr-only">
-                        Business metrics
-                    </h2>
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        {metrics.map((m) => (
-                            <MetricCard key={m.id} metric={m} />
-                        ))}
-                    </div>
-                </section>
-
-                {/* Filter bar */}
-                <SurfaceCard padding="none" className="flex flex-wrap items-center gap-2 p-3">
-                    <div className="relative min-w-[220px] flex-1">
-                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
-                        <Input
-                            placeholder="Search recommendations, campaigns, creators, assets"
-                            aria-label="Search recommendations, campaigns, creators, and assets"
-                            className="h-9 pl-8 text-sm"
-                            value={filters.search ?? ""}
-                            onChange={(e) => setFilters({ search: e.target.value })}
-                        />
-                    </div>
-                    <Select
-                        value={filters.dateRange}
-                        onValueChange={(v) =>
-                            setFilters({ dateRange: v as typeof filters.dateRange })
-                        }
-                    >
-                        <SelectTrigger className="h-9 w-[140px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="7d">Last 7 days</SelectItem>
-                            <SelectItem value="14d">Last 14 days</SelectItem>
-                            <SelectItem value="30d">Last 30 days</SelectItem>
-                            <SelectItem value="90d">Last 90 days</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={groupFilter}
-                        onValueChange={(v) => setGroupFilter(v as DecisionGroup | "All")}
-                    >
-                        <SelectTrigger className="h-9 w-[140px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="All">All decisions</SelectItem>
-                            {(Object.keys(groupMeta) as DecisionGroup[]).map((g) => (
-                                <SelectItem key={g} value={g}>
-                                    {groupMeta[g].label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <div className="ml-auto flex items-center gap-2">
-                        {(filters.search || groupFilter !== "All") && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                    setFilters({ search: "" });
-                                    setGroupFilter("All");
-                                }}
-                            >
-                                Clear all
-                            </Button>
-                        )}
-                    </div>
-                </SurfaceCard>
-
-                {activeFilterLabels.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        {activeFilterLabels.map((label) => (
-                            <span
-                                key={label}
-                                className="rounded-full bg-surface-soft px-2 py-0.5 text-xs text-text-secondary"
-                            >
-                                {label}
-                            </span>
-                        ))}
-                    </div>
-                )}
-
                 {topRecommendation && (
-                    <SurfaceCard padding="md" className="border-primary/20 bg-primary-soft/35">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            {topRecommendation.mediaUrl && (
+                    <DecisionHero
+                        eyebrow="Top recommended decision"
+                        actionLabel={topRecommendation.title}
+                        reason={
+                            <>
+                                <p>{topRecommendation.reason}</p>
+                                <p className="mt-1">
+                                    <span className="font-medium text-text-primary">Next:</span>{" "}
+                                    {topRecommendation.nextAction}
+                                </p>
+                            </>
+                        }
+                        confidence={topRecommendation.confidence}
+                        statusTone={decisionTone[topRecommendation.group]}
+                        score={topRecommendation.supportingMetrics[0]?.value}
+                        scoreLabel={topRecommendation.supportingMetrics[0]?.label}
+                        media={
+                            topRecommendation.mediaUrl ? (
                                 <DemoMediaTile
                                     mediaUrl={topRecommendation.mediaUrl}
                                     mediaKind={topRecommendation.mediaKind}
@@ -383,77 +255,195 @@ function PerformancePage() {
                                             ? "contain"
                                             : "cover"
                                     }
-                                    className="w-full max-w-[180px] rounded-md bg-black"
+                                    className="w-full max-w-[180px] rounded-md bg-black lg:ml-auto"
                                 />
-                            )}
-                            <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <StatusChip tone={decisionTone[topRecommendation.group]}>
-                                        {topRecommendation.kind}
-                                    </StatusChip>
-                                    <StatusChip
-                                        tone={
-                                            topRecommendation.confidence === "High"
-                                                ? "ok"
-                                                : topRecommendation.confidence === "Medium"
-                                                  ? "info"
-                                                  : "warn"
-                                        }
-                                    >
-                                        Confidence: {topRecommendation.confidence}
-                                    </StatusChip>
-                                </div>
-                                <p className="mt-2 text-sm font-semibold text-text-primary">
-                                    {topRecommendation.title}
-                                </p>
-                                <p className="mt-1 text-sm text-text-secondary">
-                                    {topRecommendation.nextAction}
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
+                            ) : undefined
+                        }
+                        primaryAction={
+                            topRecommendation.group === "Scale" ? (
                                 <Button
                                     size="sm"
-                                    variant="secondary"
-                                    onClick={() => setSelected(topRecommendation)}
+                                    onClick={() => onCreateVariants(topRecommendation)}
                                 >
-                                    View evidence
+                                    <Sparkles className="h-4 w-4" />
+                                    Create variants
                                 </Button>
-                                {topRecommendation.group === "Scale" && (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => onCreateVariants(topRecommendation)}
-                                    >
-                                        Create variants
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </SurfaceCard>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    onClick={() => onAcceptRecommendation(topRecommendation)}
+                                >
+                                    Accept recommendation
+                                </Button>
+                            )
+                        }
+                        secondaryAction={
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setSelected(topRecommendation)}
+                            >
+                                Review evidence
+                            </Button>
+                        }
+                    />
                 )}
 
-                {/* Two-column: recommendations + winning patterns/fatigue */}
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)]">
-                    <SurfaceCard padding="none" className="flex flex-col">
-                        <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
-                            <div>
-                                <h3 className="text-sm font-semibold">Recommended actions</h3>
-                                <p className="mt-0.5 text-xs text-text-tertiary">
-                                    {visibleRecs.length} active · {Object.keys(dismissed).length}{" "}
-                                    dismissed
-                                </p>
-                            </div>
-                            <Button variant="ghost" size="sm" asChild>
-                                <Link
-                                    to="/performance/$campaignId"
-                                    params={{ campaignId: seedCampaignPerf[0].campaignId }}
-                                >
-                                    View campaign details <ChevronRight className="h-4 w-4" />
-                                </Link>
+                <section aria-labelledby="decision-filter">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <h2
+                            id="decision-filter"
+                            className="text-xs font-semibold uppercase text-text-tertiary"
+                        >
+                            Decision filter
+                        </h2>
+                        {groupFilter !== "All" && (
+                            <Button variant="ghost" size="sm" onClick={() => setGroupFilter("All")}>
+                                Clear
                             </Button>
-                        </div>
-                        <div className="grid gap-3 p-4 md:grid-cols-2">
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-1 rounded-lg bg-surface p-1">
+                        {(["All", ...decisionGroups] as const).map((group) => {
+                            const active = groupFilter === group;
+                            const count =
+                                group === "All"
+                                    ? null
+                                    : decisionCounts[group as DecisionGroup].length;
+                            return (
+                                <button
+                                    key={group}
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() => setGroupFilter(group)}
+                                    className={`flex min-h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                        active
+                                            ? "bg-primary text-primary-foreground"
+                                            : "text-text-secondary hover:bg-surface-soft hover:text-text-primary"
+                                    }`}
+                                >
+                                    {group}
+                                    {count !== null && (
+                                        <span
+                                            className={`tabular text-xs ${active ? "text-primary-foreground/80" : "text-text-tertiary"}`}
+                                        >
+                                            {count}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </section>
+
+                <MetricStrip metrics={metrics} ariaLabel="Performance outcomes" />
+
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2
+                            id="performance-recommendations"
+                            className="text-sm font-semibold text-text-primary"
+                        >
+                            Recommended actions
+                        </h2>
+                        <p className="mt-0.5 text-xs text-text-tertiary">
+                            {visibleRecs.length} active · {Object.keys(dismissed).length} dismissed
+                        </p>
+                    </div>
+                    <Button variant="ghost" size="sm" asChild>
+                        <Link
+                            to="/performance/$campaignId"
+                            params={{ campaignId: seedCampaignPerf[0].campaignId }}
+                        >
+                            View campaign details <ChevronRight className="h-4 w-4" />
+                        </Link>
+                    </Button>
+                </div>
+
+                <div
+                    className="flex flex-wrap items-center gap-2"
+                    aria-label="Recommendation filters"
+                >
+                    <div className="relative min-w-0 flex-[1_1_280px]">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                        <Input
+                            placeholder="Search recommendations, campaigns, creators, assets"
+                            aria-label="Search recommendations, campaigns, creators, and assets"
+                            className="h-9 pl-8 text-sm"
+                            value={filters.search ?? ""}
+                            onChange={(e) => setFilters({ search: e.target.value })}
+                        />
+                    </div>
+                    <Select
+                        value={filters.dateRange}
+                        onValueChange={(v) =>
+                            setFilters({ dateRange: v as typeof filters.dateRange })
+                        }
+                    >
+                        <SelectTrigger
+                            className="h-9 min-w-0 flex-1 sm:w-[140px] sm:flex-none"
+                            aria-label="Performance date range"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="7d">Last 7 days</SelectItem>
+                            <SelectItem value="14d">Last 14 days</SelectItem>
+                            <SelectItem value="30d">Last 30 days</SelectItem>
+                            <SelectItem value="90d">Last 90 days</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={groupFilter}
+                        onValueChange={(v) => setGroupFilter(v as DecisionGroup | "All")}
+                    >
+                        <SelectTrigger
+                            className="h-9 min-w-0 flex-1 sm:w-[140px] sm:flex-none"
+                            aria-label="Performance objective"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="All">All decisions</SelectItem>
+                            {decisionGroups.map((group) => (
+                                <SelectItem key={group} value={group}>
+                                    {group}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {(filters.search || groupFilter !== "All") && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setFilters({ search: "" });
+                                setGroupFilter("All");
+                            }}
+                        >
+                            Clear all
+                        </Button>
+                    )}
+                </div>
+
+                {activeFilterLabels.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {activeFilterLabels.map((label) => (
+                            <span
+                                key={label}
+                                className="rounded-full bg-surface-soft px-2 py-0.5 text-xs text-text-secondary"
+                            >
+                                {label}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex flex-col gap-8">
+                    <section className="min-w-0" aria-labelledby="performance-recommendations">
+                        <div className="mt-3 divide-y divide-divider rounded-lg bg-surface">
                             {visibleRecs.length === 0 ? (
-                                <div className="col-span-full">
+                                <div>
                                     <EmptyState
                                         title="No urgent performance action detected"
                                         description="Current campaign signals are mixed or incomplete. Continue collecting data or review individual assets."
@@ -466,38 +456,30 @@ function PerformancePage() {
                                         key={r.id}
                                         rec={r}
                                         onOpen={() => setSelected(r)}
-                                        onAccept={() => {
-                                            acceptRec(r.id);
-                                            toast.success("Recommendation accepted", {
-                                                action: {
-                                                    label: "Undo",
-                                                    onClick: () => unacceptRec(r.id),
-                                                },
-                                            });
-                                        }}
+                                        onAccept={() => onAcceptRecommendation(r)}
                                         className={accepted.includes(r.id) ? "opacity-60" : ""}
                                     />
                                 ))
                             )}
                         </div>
-                    </SurfaceCard>
+                    </section>
 
-                    <div className="flex flex-col gap-4">
-                        <SurfaceCard padding="none">
-                            <div className="border-b border-hairline px-5 py-3">
+                    <section className="grid gap-8 border-t border-divider pt-6 lg:grid-cols-2">
+                        <div className="min-w-0">
+                            <div>
                                 <h3 className="text-sm font-semibold">Winning pattern</h3>
                                 <p className="mt-0.5 text-xs text-text-tertiary">
                                     Directional signal across active assets
                                 </p>
                             </div>
-                            <div className="space-y-3 p-4">
+                            <div className="mt-4 space-y-3">
                                 {seedPatterns.slice(0, 1).map((p) => (
                                     <div key={p.id} className="space-y-2 text-sm">
                                         <StatusChip tone="ok">{p.angle}</StatusChip>
                                         <p className="text-sm italic text-text-secondary">
                                             {p.hook}
                                         </p>
-                                        <dl className="mt-2 space-y-1 text-xs">
+                                        <dl className="mt-2 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
                                             <Row k="Creator type" v={p.creatorType} />
                                             <Row k="Product reveal" v={p.productReveal} />
                                             <Row k="Proof" v={p.proof} />
@@ -521,19 +503,19 @@ function PerformancePage() {
                                     </div>
                                 ))}
                             </div>
-                        </SurfaceCard>
+                        </div>
 
-                        <SurfaceCard padding="none">
-                            <div className="border-b border-hairline px-5 py-3">
+                        <div className="min-w-0">
+                            <div>
                                 <h3 className="text-sm font-semibold">Fatigue signals</h3>
                                 <p className="mt-0.5 text-xs text-text-tertiary">
                                     Directional decline in CTR or conversion
                                 </p>
                             </div>
-                            <div className="divide-y divide-hairline">
+                            <div className="mt-2 divide-y divide-divider">
                                 {seedFatigueAlerts.map((f) => (
-                                    <div key={f.id} className="p-4">
-                                        <div className="flex items-center gap-2">
+                                    <div key={f.id} className="py-3">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <StatusChip
                                                 tone={f.state === "high" ? "destructive" : "warn"}
                                             >
@@ -541,7 +523,7 @@ function PerformancePage() {
                                                     ? "High risk"
                                                     : "Prepare refresh"}
                                             </StatusChip>
-                                            <p className="truncate text-sm font-medium">
+                                            <p className="min-w-0 text-sm font-medium">
                                                 {f.assetName}
                                             </p>
                                         </div>
@@ -568,12 +550,12 @@ function PerformancePage() {
                                     </div>
                                 ))}
                             </div>
-                        </SurfaceCard>
-                    </div>
+                        </div>
+                    </section>
                 </div>
 
                 {/* Campaign performance table */}
-                <SurfaceCard padding="none">
+                <SurfaceCard variant="outlined" padding="none">
                     <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
                         <div>
                             <h3 className="text-sm font-semibold">Campaign performance</h3>
@@ -648,7 +630,7 @@ function PerformancePage() {
                     </div>
                     <div className="hidden overflow-x-auto sm:block">
                         <table className="w-full min-w-[900px] text-sm">
-                            <thead className="sticky top-0 z-10 bg-surface-soft/95 backdrop-blur-sm">
+                            <thead className="sticky top-0 z-10 bg-surface-soft">
                                 <tr className="text-left text-xs font-medium text-text-tertiary">
                                     <th className="px-4 py-2.5">Campaign</th>
                                     <th className="px-3 py-2.5">Status</th>
@@ -727,12 +709,11 @@ function PerformancePage() {
                     </div>
                 </SurfaceCard>
 
-                {/* Recent activity */}
-                <SurfaceCard padding="none">
-                    <div className="border-b border-hairline px-5 py-3">
+                <section className="border-t border-divider pt-6">
+                    <div>
                         <h3 className="text-sm font-semibold">Recent performance activity</h3>
                     </div>
-                    <div className="divide-y divide-hairline">
+                    <div className="mt-2 divide-y divide-divider">
                         {activity.length === 0 ? (
                             <EmptyState
                                 title="No recent activity yet"
@@ -743,7 +724,7 @@ function PerformancePage() {
                             activity.slice(0, 8).map((e) => (
                                 <div
                                     key={e.id}
-                                    className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
+                                    className="flex items-center justify-between gap-3 py-3 text-sm"
                                 >
                                     <div className="min-w-0">
                                         <p className="truncate text-text-primary">{e.detail}</p>
@@ -755,7 +736,7 @@ function PerformancePage() {
                             ))
                         )}
                     </div>
-                </SurfaceCard>
+                </section>
             </div>
 
             <EvidenceDrawer

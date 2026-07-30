@@ -30,7 +30,7 @@ export function WorkspaceSwitcher() {
                 </button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-[260px] p-1">
-                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-text-tertiary">
                     Workspaces
                 </div>
                 <div className="flex flex-col">

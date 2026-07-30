@@ -1,7 +1,7 @@
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { NotificationPopover } from "./notification-popover";
 import { SearchCommand } from "./search-command";
-import { Sheet, SheetContent, SheetTrigger } from "@/shared/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/shared/ui/sheet";
 import { MobileSidebarContent } from "./app-sidebar";
 import {
     DropdownMenu,
@@ -11,16 +11,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
-import { HelpCircle, Menu, Search } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Menu, Search } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 export function AppHeader() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
     return (
-        <header className="relative z-10 flex h-16 shrink-0 items-center gap-2 border-b border-hairline bg-surface/95 px-3 backdrop-blur sm:px-4">
+        <header className="relative z-10 flex h-16 shrink-0 items-center gap-2 border-b border-divider bg-surface px-3 sm:px-4">
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
                 <SheetTrigger asChild>
                     <button
@@ -32,6 +32,7 @@ export function AppHeader() {
                     </button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[280px] p-0">
+                    <SheetTitle className="sr-only">Primary navigation</SheetTitle>
                     <MobileSidebarContent onNavigate={() => setMobileNavOpen(false)} />
                 </SheetContent>
             </Sheet>
@@ -63,14 +64,6 @@ export function AppHeader() {
                 >
                     <Search className="h-4 w-4" />
                 </button>
-                <button
-                    type="button"
-                    aria-label="Help"
-                    onClick={() => toast("Help center", { description: "Docs coming soon." })}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                    <HelpCircle className="h-4 w-4" />
-                </button>
                 <NotificationPopover />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -94,17 +87,11 @@ export function AppHeader() {
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onSelect={() => toast("Account", { description: "Demo mode" })}
-                        >
-                            Account
+                        <DropdownMenuItem asChild>
+                            <Link to="/settings">Account settings</Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => toast("Preferences saved")}>
-                            Preferences
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => toast("Signed out (demo)")}>
-                            Sign out
+                        <DropdownMenuItem asChild>
+                            <Link to="/settings">Workspace preferences</Link>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

@@ -64,27 +64,29 @@ export function AdaptToProductDialog({
         });
         updateCreative(creativeId, { linkedProductId: selected });
         onOpenChange(false);
-        toast.success("Product linked", {
-            description:
-                "Product Adaptation workspace opens next phase — handoff shown on Campaigns.",
+        toast.success("Adaptation handoff ready", {
+            description: "Product linked and ready to continue from Campaigns.",
         });
-        setTimeout(() => navigate({ to: "/campaigns" }), 60);
+        void navigate({ to: "/campaigns" });
     }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex max-h-[calc(100dvh-4rem)] flex-col overflow-hidden sm:max-w-[640px]">
+            <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden sm:max-w-[640px]">
                 <DialogHeader>
-                    <DialogTitle>Adapt to product</DialogTitle>
+                    <DialogTitle>Adapt pattern to product</DialogTitle>
                     <DialogDescription>
-                        Pick which product should reuse this reference. We'll open the Campaign Pack
-                        workspace next.
+                        Choose the product that should reuse this creative structure. Viraldy will
+                        keep the reusable pattern and change the buyer context, proof, and
+                        execution.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="rounded-md bg-surface-soft/70 p-3 text-sm">
-                    <p className="text-xs uppercase tracking-wide text-text-tertiary">Reference</p>
-                    <p className="mt-0.5 truncate font-medium text-text-primary">{creativeTitle}</p>
+                <div className="rounded-md bg-surface-soft p-3 text-sm">
+                    <p className="text-xs uppercase text-text-tertiary">Reference</p>
+                    <p className="mt-0.5 break-words font-medium text-text-primary">
+                        {creativeTitle}
+                    </p>
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -95,13 +97,14 @@ export function AdaptToProductDialog({
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Search your products"
                             className="pl-9"
+                            aria-label="Search products"
                         />
                     </div>
                     <Select
                         value={category}
                         onValueChange={(v) => setCategory(v as typeof category)}
                     >
-                        <SelectTrigger className="sm:w-56">
+                        <SelectTrigger className="w-full sm:w-56" aria-label="Filter by category">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -114,7 +117,11 @@ export function AdaptToProductDialog({
                     </Select>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-hairline/70">
+                <div
+                    role="radiogroup"
+                    aria-label="Products"
+                    className="min-h-0 flex-1 overflow-y-auto rounded-md border border-control-border"
+                >
                     {products.length === 0 ? (
                         <div className="p-8 text-center text-sm text-text-tertiary">
                             No products match. Try clearing the filter.
@@ -128,24 +135,32 @@ export function AdaptToProductDialog({
                                         <button
                                             type="button"
                                             onClick={() => setSelected(p.id)}
-                                            aria-pressed={active}
+                                            role="radio"
+                                            aria-checked={active}
                                             className={cn(
-                                                "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+                                                "flex min-h-16 w-full items-start gap-3 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:items-center",
                                                 active
                                                     ? "bg-primary-softer"
                                                     : "hover:bg-surface-soft",
                                             )}
                                         >
-                                            <span
-                                                className="grid h-12 w-12 shrink-0 place-items-center rounded-md text-white"
-                                                style={{ backgroundColor: p.colorSeed }}
-                                                aria-hidden
-                                            >
-                                                <Package className="h-4 w-4" />
-                                            </span>
+                                            {p.imageUrl ? (
+                                                <img
+                                                    src={p.imageUrl}
+                                                    alt={p.imageAlt ?? ""}
+                                                    className="h-12 w-12 shrink-0 rounded-md bg-surface-muted object-cover"
+                                                />
+                                            ) : (
+                                                <span
+                                                    className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-surface-muted text-text-tertiary"
+                                                    aria-hidden
+                                                >
+                                                    <Package className="h-4 w-4" />
+                                                </span>
+                                            )}
                                             <span className="min-w-0 flex-1">
-                                                <span className="flex items-center gap-2">
-                                                    <span className="truncate text-sm font-medium text-text-primary">
+                                                <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                                                    <span className="break-words text-sm font-medium text-text-primary">
                                                         {p.name}
                                                     </span>
                                                     <span className="tabular text-xs text-text-tertiary">
@@ -210,7 +225,7 @@ export function AdaptToProductDialog({
                         Cancel
                     </Button>
                     <Button type="button" disabled={!selected} onClick={confirm}>
-                        Continue
+                        Continue to adaptation
                         <ArrowRight className="h-4 w-4" />
                     </Button>
                 </DialogFooter>

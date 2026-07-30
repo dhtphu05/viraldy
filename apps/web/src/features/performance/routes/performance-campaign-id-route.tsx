@@ -4,6 +4,8 @@ import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
 import { formatUtcDateTime } from "@/shared/lib/date-format";
 import { SurfaceCard } from "@/shared/ui/surface-card";
+import { DecisionHero } from "@/shared/ui/decision-hero";
+import { MetricStrip } from "@/shared/ui/metric-strip";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { EmptyState } from "@/shared/ui/empty-state";
@@ -68,7 +70,11 @@ import {
     ShieldCheck,
     ArrowUpRight,
 } from "lucide-react";
-import type { PerfAsset, PerfRecommendation } from "@/features/performance/types/performance";
+import type {
+    PerfAsset,
+    PerfRecommendation,
+    TrendPoint,
+} from "@/features/performance/types/performance";
 import {
     ResponsiveContainer,
     LineChart,
@@ -143,6 +149,10 @@ function CampaignPerformancePage() {
         if (dismissed[r.id]) continue;
         (grouped[r.group] ||= []).push(r);
     }
+    const strongestRecommendation =
+        recs.find((rec) => !dismissed[rec.id] && !accepted.includes(rec.id)) ??
+        recs.find((rec) => !dismissed[rec.id]);
+    const bestProfitAsset = bestOnProfit(assets);
 
     const toggleAsset = (id: string) =>
         setSelectedAssets((s) =>
@@ -217,7 +227,7 @@ function CampaignPerformancePage() {
                     </Link>
                     <PageHeader
                         title={summary.campaignName}
-                        description={`${summary.product} · ${summary.status} · Last updated ${formatUtcDateTime(summary.lastUpdated)}`}
+                        description={`${summary.product} · ${summary.status} · Demo scenario · Last updated ${formatUtcDateTime(summary.lastUpdated)}`}
                         actions={
                             <>
                                 <Button
@@ -238,25 +248,98 @@ function CampaignPerformancePage() {
                     />
                 </div>
 
-                {/* Compact metric strip */}
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                    <Stat label="GMV" value={fmtMoney(summary.gmv)} />
-                    <Stat label="Gross profit" value={fmtMoney(summary.grossProfit)} />
-                    <Stat
-                        label="Sample efficiency"
-                        value={`$${summary.sampleEfficiency.toFixed(1)}`}
-                        sub="per $1 sample"
+                {strongestRecommendation ? (
+                    <DecisionHero
+                        actionLabel={strongestRecommendation.title}
+                        reason={
+                            <>
+                                <p>{strongestRecommendation.reason}</p>
+                                <p className="mt-1">
+                                    <span className="font-medium text-text-primary">Next:</span>{" "}
+                                    {strongestRecommendation.nextAction}
+                                </p>
+                            </>
+                        }
+                        confidence={strongestRecommendation.confidence}
+                        statusTone={decisionTone[strongestRecommendation.group]}
+                        score={strongestRecommendation.supportingMetrics[0]?.value}
+                        scoreLabel={strongestRecommendation.supportingMetrics[0]?.label}
+                        primaryAction={
+                            strongestRecommendation.group === "Scale" ? (
+                                <Button size="sm" onClick={onGenerateVariants}>
+                                    <Sparkles className="h-4 w-4" />
+                                    Generate three next-test variants
+                                </Button>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    onClick={() => {
+                                        accept(strongestRecommendation.id);
+                                        toast.success("Recommendation accepted");
+                                    }}
+                                >
+                                    Accept recommendation
+                                </Button>
+                            )
+                        }
+                        secondaryAction={
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setSelectedRec(strongestRecommendation)}
+                            >
+                                Review evidence
+                            </Button>
+                        }
                     />
-                    <Stat
-                        label="ROAS"
-                        value={summary.roas === null ? "Organic" : summary.roas.toFixed(2)}
-                    />
-                    <Stat
-                        label="Active assets"
-                        value={String(summary.activeAssets)}
-                        sub={`${summary.rightsReady} Spark-ready`}
-                    />
-                </div>
+                ) : (
+                    patterns[0] && (
+                        <DecisionHero
+                            actionLabel={`Scale the ${patterns[0].angle.toLowerCase()} angle`}
+                            reason={`This angle is leading current assets on gross profit, orders, and sample efficiency.`}
+                            confidence={patterns[0].confidence}
+                            statusTone="ok"
+                            primaryAction={
+                                <Button size="sm" onClick={onGenerateVariants}>
+                                    <Sparkles className="h-4 w-4" />
+                                    Generate three next-test variants
+                                </Button>
+                            }
+                        />
+                    )
+                )}
+
+                <MetricStrip
+                    ariaLabel="Campaign performance outcomes"
+                    className="lg:grid-cols-5"
+                    metrics={[
+                        { id: "gmv", label: "GMV", value: fmtMoney(summary.gmv) },
+                        {
+                            id: "gross-profit",
+                            label: "Gross profit",
+                            value: fmtMoney(summary.grossProfit),
+                            tone: "ok",
+                        },
+                        {
+                            id: "sample-efficiency",
+                            label: "Sample efficiency",
+                            value: `$${summary.sampleEfficiency.toFixed(1)}`,
+                            hint: "per $1 sample",
+                        },
+                        {
+                            id: "roas",
+                            label: "ROAS",
+                            value: summary.roas === null ? "Organic" : summary.roas.toFixed(2),
+                        },
+                        {
+                            id: "active-assets",
+                            label: "Active assets",
+                            value: String(summary.activeAssets),
+                            hint: `${summary.rightsReady} Spark-ready`,
+                            tone: "info",
+                        },
+                    ]}
+                />
 
                 <Tabs value={tab} onValueChange={setTab}>
                     <TabsList className="w-full max-w-full justify-start overflow-x-auto sm:w-auto">
@@ -269,53 +352,6 @@ function CampaignPerformancePage() {
 
                     {/* -------- DECISIONS -------- */}
                     <TabsContent value="decisions" className="mt-4 space-y-4">
-                        {patterns[0] && (
-                            <SurfaceCard padding="none">
-                                <div className="border-b border-hairline px-5 py-3">
-                                    <h3 className="text-sm font-semibold">Scale winning angle</h3>
-                                </div>
-                                <div className="grid gap-4 p-5 md:grid-cols-[minmax(0,1fr)_auto]">
-                                    <div className="min-w-0">
-                                        <StatusChip tone="ok" className="mb-2">
-                                            {patterns[0].angle}
-                                        </StatusChip>
-                                        <p className="text-sm text-text-primary">
-                                            The {patterns[0].angle.toLowerCase()} angle is
-                                            outperforming other groups on gross profit, orders, and
-                                            sample efficiency.
-                                        </p>
-                                        <p className="mt-1 text-xs text-text-secondary">
-                                            Estimated opportunity:{" "}
-                                            <span className="font-medium">
-                                                +$2,600 gross profit
-                                            </span>{" "}
-                                            if the next controlled test performs within the current
-                                            range.
-                                        </p>
-                                        <div className="mt-3 flex flex-wrap gap-2">
-                                            <Button size="sm" onClick={onGenerateVariants}>
-                                                <Sparkles className="h-4 w-4" /> Generate three
-                                                variants
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                onClick={() => {
-                                                    savePattern(patterns[0]);
-                                                    toast.success("Pattern saved");
-                                                }}
-                                            >
-                                                Save to Pattern Library
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <StatusChip tone="info">
-                                        Confidence: {patterns[0].confidence}
-                                    </StatusChip>
-                                </div>
-                            </SurfaceCard>
-                        )}
-
                         {Object.keys(grouped).length === 0 ? (
                             <SurfaceCard>
                                 <EmptyState
@@ -340,25 +376,26 @@ function CampaignPerformancePage() {
                                                 {grouped[g].map((r) => (
                                                     <div
                                                         key={r.id}
-                                                        className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 ${accepted.includes(r.id) ? "opacity-60" : ""}`}
+                                                        className={`flex flex-col gap-3 px-5 py-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${accepted.includes(r.id) ? "opacity-60" : ""}`}
                                                     >
                                                         <button
                                                             type="button"
                                                             onClick={() => setSelectedRec(r)}
                                                             className="min-w-0 rounded-md text-left transition-colors duration-200 hover:bg-surface-soft/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                                         >
-                                                            <p className="truncate text-sm font-medium">
+                                                            <p className="text-sm font-medium">
                                                                 {r.title}
                                                             </p>
                                                             <p className="mt-1 line-clamp-2 text-xs text-text-secondary">
                                                                 {r.reason}
                                                             </p>
                                                             <p className="mt-1 text-xs text-text-tertiary">
-                                                                Impact: {r.estimatedImpact} ·
-                                                                Confidence: {r.confidence}
+                                                                Demo scenario estimate:{" "}
+                                                                {r.estimatedImpact} · Confidence:{" "}
+                                                                {r.confidence}
                                                             </p>
                                                         </button>
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex flex-wrap items-center gap-2">
                                                             <Button
                                                                 size="sm"
                                                                 variant="ghost"
@@ -387,7 +424,7 @@ function CampaignPerformancePage() {
 
                     {/* -------- ASSETS -------- */}
                     <TabsContent value="assets" className="mt-4 space-y-4">
-                        <SurfaceCard padding="none">
+                        <SurfaceCard variant="outlined" padding="none">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-5 py-3">
                                 <div>
                                     <h3 className="text-sm font-semibold">Asset performance</h3>
@@ -410,7 +447,7 @@ function CampaignPerformancePage() {
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full min-w-[1100px] text-sm">
-                                    <thead className="sticky top-0 z-10 bg-surface-soft/95 backdrop-blur-sm">
+                                    <thead className="sticky top-0 z-10 bg-surface-soft">
                                         <tr className="text-left text-xs font-medium text-text-tertiary">
                                             <th className="w-10 px-3 py-2.5" />
                                             <th className="px-3 py-2.5">Asset</th>
@@ -535,9 +572,9 @@ function CampaignPerformancePage() {
                                     .map((c) => (
                                         <div
                                             key={c.creatorId}
-                                            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-4 px-5 py-3 text-sm"
+                                            className="grid min-w-0 grid-cols-2 items-center gap-3 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:gap-4"
                                         >
-                                            <div className="min-w-0">
+                                            <div className="col-span-2 min-w-0 sm:col-span-1">
                                                 <p className="truncate font-medium">{c.handle}</p>
                                                 <p className="text-xs text-text-tertiary">
                                                     {c.assets} asset{c.assets > 1 ? "s" : ""} · avg
@@ -557,6 +594,7 @@ function CampaignPerformancePage() {
                                                 </p>
                                             </div>
                                             <StatusChip
+                                                className="justify-self-start sm:justify-self-auto"
                                                 tone={
                                                     c.recommendation === "Rehire"
                                                         ? "ok"
@@ -581,7 +619,7 @@ function CampaignPerformancePage() {
                             onSelect={setHeatmapSelection}
                         />
 
-                        <SurfaceCard padding="none">
+                        <SurfaceCard variant="outlined" padding="none">
                             <div className="border-b border-hairline px-5 py-3">
                                 <h3 className="text-sm font-semibold">Pattern → GMV map</h3>
                                 <p className="text-xs text-text-tertiary">
@@ -590,7 +628,7 @@ function CampaignPerformancePage() {
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full min-w-[700px] text-sm">
-                                    <thead className="sticky top-0 z-10 bg-surface-soft/95 backdrop-blur-sm">
+                                    <thead className="sticky top-0 z-10 bg-surface-soft">
                                         <tr className="text-left text-xs font-medium text-text-tertiary">
                                             <th className="px-4 py-2.5">Pattern</th>
                                             <th className="px-3 py-2.5 text-right">Assets</th>
@@ -682,13 +720,15 @@ function CampaignPerformancePage() {
                     {/* -------- TRENDS -------- */}
                     <TabsContent value="trends" className="mt-4 space-y-4">
                         <SurfaceCard padding="none">
-                            <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
-                                <h3 className="text-sm font-semibold">Trend over time</h3>
+                            <div className="flex flex-col gap-3 border-b border-hairline px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <h3 className="text-sm font-semibold">
+                                    {trendInsightTitle(chartMetric, trend)}
+                                </h3>
                                 <Select
                                     value={chartMetric}
                                     onValueChange={(v) => setChartMetric(v as typeof chartMetric)}
                                 >
-                                    <SelectTrigger className="h-8 w-[200px]">
+                                    <SelectTrigger className="h-8 w-full sm:w-[200px]">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -711,7 +751,7 @@ function CampaignPerformancePage() {
                                     >
                                         <CartesianGrid
                                             strokeDasharray="3 3"
-                                            stroke="hsl(0 0% 90%)"
+                                            stroke="var(--divider)"
                                         />
                                         <XAxis
                                             dataKey="date"
@@ -805,7 +845,9 @@ function CampaignPerformancePage() {
                         <SurfaceCard padding="none">
                             <div className="border-b border-hairline px-5 py-3">
                                 <h3 className="text-sm font-semibold">
-                                    Asset scatter — spend vs gross profit
+                                    {bestProfitAsset
+                                        ? `${bestProfitAsset.name} leads gross profit at current spend`
+                                        : "Gross profit by asset and spend"}
                                 </h3>
                                 <p className="text-xs text-text-tertiary">
                                     Bubble size = orders. Table alternative below.
@@ -818,7 +860,7 @@ function CampaignPerformancePage() {
                                     >
                                         <CartesianGrid
                                             strokeDasharray="3 3"
-                                            stroke="hsl(0 0% 90%)"
+                                            stroke="var(--divider)"
                                         />
                                         <XAxis
                                             dataKey="adSpend"
@@ -986,15 +1028,15 @@ function CampaignPerformancePage() {
                                 ].map((r) => (
                                     <div
                                         key={`${r.state}-${r.row}`}
-                                        className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
+                                        className="flex flex-col gap-3 px-5 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                                     >
-                                        <div>
+                                        <div className="min-w-0">
                                             <p className="font-medium">
                                                 Row {r.row}: {r.asset}
                                             </p>
                                             <p className="text-xs text-text-tertiary">{r.note}</p>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <StatusChip tone="warn">{r.state}</StatusChip>
                                             <Button
                                                 size="sm"
@@ -1044,14 +1086,37 @@ function CampaignPerformancePage() {
     );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-    return (
-        <SurfaceCard padding="none" className="min-h-[96px] p-4">
-            <p className="text-xs uppercase tracking-wide text-text-tertiary">{label}</p>
-            <p className="mt-1 tabular text-xl font-semibold text-text-primary">{value}</p>
-            {sub && <p className="mt-0.5 text-xs text-text-tertiary">{sub}</p>}
-        </SurfaceCard>
-    );
+function trendInsightTitle(
+    metric: "gmv" | "orders" | "ctr" | "sampleEfficiency",
+    trend: TrendPoint[],
+) {
+    const first = trend[0];
+    const last = trend[trend.length - 1];
+    if (!first || !last) return "Performance trend needs more data";
+
+    const change = (start: number, end: number) =>
+        start === 0 ? 0 : Math.round(((end - start) / start) * 100);
+    const direction = (value: number) =>
+        value > 4 ? `up ${value}%` : value < -4 ? `down ${Math.abs(value)}%` : "holding steady";
+
+    if (metric === "gmv") {
+        return `Gross profit is ${direction(
+            change(first.grossProfit, last.grossProfit),
+        )} while GMV is ${direction(change(first.gmv, last.gmv))}`;
+    }
+    if (metric === "orders") {
+        return `Orders are ${direction(
+            change(first.orders, last.orders),
+        )} while product clicks are ${direction(change(first.productClicks, last.productClicks))}`;
+    }
+    if (metric === "ctr") {
+        return `Click-through is ${direction(
+            change(first.ctr, last.ctr),
+        )} while watch rate is ${direction(change(first.watchRate, last.watchRate))}`;
+    }
+    return `Sample efficiency is ${direction(
+        change(first.sampleEfficiency, last.sampleEfficiency),
+    )} across the period`;
 }
 
 function Kpi({
@@ -1066,7 +1131,7 @@ function Kpi({
     return (
         <SurfaceCard padding="none" className="p-4">
             <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-wide text-text-tertiary">{label}</p>
+                <p className="text-xs uppercase text-text-tertiary">{label}</p>
                 <StatusChip tone={tone}>{tone === "ok" ? "Complete" : "Attention"}</StatusChip>
             </div>
             <p className="mt-2 tabular text-lg font-semibold">{value}</p>
@@ -1234,7 +1299,7 @@ function CompareTable({ assets }: { assets: PerfAsset[] }) {
 function Callout({ label, v }: { label: string; v?: string }) {
     return (
         <div className="rounded-md border border-hairline p-2.5">
-            <p className="text-[10px] uppercase tracking-wide text-text-tertiary">{label}</p>
+            <p className="text-[10px] uppercase text-text-tertiary">{label}</p>
             <p className="mt-0.5 line-clamp-2 text-xs font-medium text-text-primary">{v ?? "—"}</p>
         </div>
     );

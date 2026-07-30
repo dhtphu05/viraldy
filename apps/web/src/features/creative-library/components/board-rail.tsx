@@ -72,14 +72,12 @@ export function BoardRail({
     return (
         <nav aria-label="Boards" className={cn("flex flex-col gap-3", className)}>
             <div className="flex items-center justify-between px-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                    Boards
-                </p>
+                <p className="text-[10px] font-semibold uppercase text-text-tertiary">Boards</p>
                 <button
                     type="button"
                     onClick={onNewBoard}
                     aria-label="New board"
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     <Plus className="h-3.5 w-3.5" />
                 </button>
@@ -94,9 +92,10 @@ export function BoardRail({
                             <button
                                 type="button"
                                 onClick={() => onSelect(b.id)}
-                                aria-current={active ? "true" : undefined}
+                                aria-current={active ? "page" : undefined}
                                 className={cn(
-                                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                    "flex min-h-10 w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    !b.system && "pr-10",
                                     active
                                         ? "bg-primary-soft text-primary-active"
                                         : "text-text-secondary hover:bg-surface-soft hover:text-text-primary",
@@ -124,7 +123,7 @@ export function BoardRail({
                                         <button
                                             type="button"
                                             aria-label={`Options for ${b.name}`}
-                                            className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-muted hover:text-text-primary group-hover/board:inline-flex focus-visible:inline-flex"
+                                            className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:opacity-0 sm:group-hover/board:opacity-100 sm:focus-visible:opacity-100"
                                         >
                                             <MoreHorizontal className="h-3.5 w-3.5" />
                                         </button>

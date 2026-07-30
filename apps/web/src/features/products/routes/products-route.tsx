@@ -321,12 +321,8 @@ function ProductsPage() {
 function Metric({ label, value, hint }: { label: string; value: number; hint: string }) {
     return (
         <SurfaceCard padding="md" className="min-h-[104px]">
-            <p className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
-                {label}
-            </p>
-            <p className="mt-2 tabular text-3xl font-semibold tracking-tight text-text-primary">
-                {value}
-            </p>
+            <p className="text-xs font-medium uppercase text-text-tertiary">{label}</p>
+            <p className="mt-2 tabular text-3xl font-semibold text-text-primary">{value}</p>
             <p className="mt-1 text-xs text-text-secondary">{hint}</p>
         </SurfaceCard>
     );
@@ -397,7 +393,7 @@ function ProductDrawer({
                     </StatusChip>
                 </div>
                 <SurfaceCard padding="sm" className="bg-surface-soft">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Suggested next action
                     </p>
                     <p className="mt-1 text-sm text-text-primary">{nextAction}</p>

@@ -51,7 +51,7 @@ export function EvidenceDrawer({
             description={`${rec.kind} · ${rec.object}`}
             size="lg"
             footer={
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -103,7 +103,7 @@ export function EvidenceDrawer({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         {onGenerateVariants && rec.group === "Scale" && (
                             <Button
                                 size="sm"
@@ -163,7 +163,10 @@ export function EvidenceDrawer({
                 </div>
 
                 <Section title="Business impact">
-                    <p className="text-sm text-text-primary">{rec.estimatedImpact}</p>
+                    <p className="text-sm text-text-primary">
+                        <span className="font-medium">Demo scenario estimate:</span>{" "}
+                        {rec.estimatedImpact}
+                    </p>
                 </Section>
 
                 <Section title="Reason">
@@ -185,7 +188,7 @@ export function EvidenceDrawer({
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {rec.supportingMetrics.map((m) => (
                             <div key={m.label} className="rounded-md border border-hairline p-2.5">
-                                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">
+                                <p className="text-[10px] uppercase text-text-tertiary">
                                     {m.label}
                                 </p>
                                 <p className="tabular text-sm font-semibold text-text-primary">
@@ -228,9 +231,7 @@ export function EvidenceDrawer({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div>
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-text-tertiary">
-                {title}
-            </p>
+            <p className="mb-1.5 text-xs font-medium uppercase text-text-tertiary">{title}</p>
             {children}
         </div>
     );

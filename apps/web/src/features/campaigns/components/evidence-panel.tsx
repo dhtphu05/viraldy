@@ -15,11 +15,14 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
     const product = seedProducts.find((p) => p.id === pack.productId);
     const primaryAngle = pack.angleOptions.find((a) => a.id === pack.primaryAngleId);
     return (
-        <div className="flex flex-col gap-4">
-            <SurfaceCard padding="sm">
+        <SurfaceCard
+            padding="none"
+            className="divide-y divide-divider overflow-hidden border-y border-divider"
+        >
+            <section className="p-4">
                 <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-primary" />
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Selected direction
                     </p>
                 </div>
@@ -40,12 +43,10 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
                         );
                     })}
                 </div>
-            </SurfaceCard>
+            </section>
 
-            <SurfaceCard padding="sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                    Product
-                </p>
+            <section className="p-4">
+                <p className="text-xs font-semibold uppercase text-text-tertiary">Product</p>
                 {product ? (
                     <div className="mt-2">
                         <p className="text-sm font-medium text-text-primary">{product.name}</p>
@@ -72,12 +73,10 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
                 ) : (
                     <p className="mt-2 text-xs text-text-secondary">No product selected.</p>
                 )}
-            </SurfaceCard>
+            </section>
 
-            <SurfaceCard padding="sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                    Reference DNA
-                </p>
+            <section className="p-4">
+                <p className="text-xs font-semibold uppercase text-text-tertiary">Reference DNA</p>
                 {refs.length === 0 ? (
                     <p className="mt-2 text-xs text-text-secondary">No references selected.</p>
                 ) : (
@@ -110,20 +109,18 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
                         })}
                     </ul>
                 )}
-            </SurfaceCard>
+            </section>
 
-            <SurfaceCard padding="sm" className="bg-info-soft/40">
+            <section className="bg-info-soft/40 p-4">
                 <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-info" />
-                    <p className="text-xs font-semibold uppercase tracking-wide text-info">
-                        Why this direction
-                    </p>
+                    <p className="text-xs font-semibold uppercase text-info">Why this direction</p>
                 </div>
                 <p className="mt-2 text-xs text-text-secondary">
                     Viraldy retains the source narrative and reveal pattern, and adapts the buyer
                     problem, proof, and environment to your product to avoid direct copying.
                 </p>
-            </SurfaceCard>
-        </div>
+            </section>
+        </SurfaceCard>
     );
 }

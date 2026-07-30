@@ -119,20 +119,20 @@ export function DemoMediaTile({
                 />
             )}
             <div className="pointer-events-none absolute right-2.5 top-2.5 flex items-center gap-1.5">
-                <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-primary shadow-sm">
+                <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-text-primary shadow-sm">
                     {kind}
                 </span>
             </div>
             <div
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/55 to-transparent"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-black/45"
             />
             {badges.length > 0 && (
                 <div className="pointer-events-none absolute left-2.5 top-2.5 flex flex-wrap items-center gap-1.5">
                     {badges.map((badge) => (
                         <span
                             key={badge}
-                            className="rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white backdrop-blur-sm"
+                            className="rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-medium uppercase text-white"
                         >
                             {badge}
                         </span>

@@ -3,38 +3,42 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     CheckCircle2,
     Clipboard,
-    Info,
     FileVideo,
     Loader2,
     Play,
     RefreshCw,
     Sparkles,
-    Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, KeyboardEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { apiGet, apiPost, hasConfiguredApiBaseUrl } from "@/shared/api/client";
 import { getJob, type JobResponse } from "@/shared/api/jobs";
 import { queryKeys } from "@/shared/api/query-keys";
-import { getAiReadiness, type AiReadiness } from "@/shared/api/system";
+import { getAiReadiness } from "@/shared/api/system";
 import { uploadAsset, type Asset } from "@/shared/api/uploads";
-import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { Progress } from "@/shared/ui/progress";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Textarea } from "@/shared/ui/textarea";
-import { Skeleton } from "@/shared/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import { DisabledActionHint } from "@/shared/ui/disabled-action-hint";
-import { formatPercentScore, formatSystemValue, humanizeLabel } from "@/shared/lib/display";
-import { AnalysisThinkingSkeleton } from "@/shared/ui/analysis-thinking-skeleton";
+import { formatSystemValue, humanizeLabel } from "@/shared/lib/display";
 import { AnalysisTimelineSvg } from "@/shared/ui/analysis-timeline-svg";
+import { ActionTray } from "@/shared/ui/action-tray";
+import { DecisionHero } from "@/shared/ui/decision-hero";
+import { ExpectedObservedTable } from "@/shared/ui/expected-observed-table";
+import { Input } from "@/shared/ui/input";
+import { ValueReceipt } from "@/shared/ui/value-receipt";
+import type { WorkflowRailStep } from "@/shared/ui/workflow-rail";
+import { InputStep } from "@/features/mvp-flow/components/input-step";
+import { JobProgress } from "@/features/mvp-flow/components/job-progress";
+import { ProductionRunHeader } from "@/features/mvp-flow/components/production-run-header";
+import { ProductionRunRail } from "@/features/mvp-flow/components/production-run-rail";
 
-export const Route = createFileRoute("/production")({
-    head: () => ({ meta: [{ title: "Production Studio - Viraldy" }] }),
+export const Route = createFileRoute("/mvp")({
+    head: () => ({ meta: [{ title: "Production Run - Viraldy" }] }),
     validateSearch: (search: Record<string, unknown>): MvpSearch => ({
         quickRunId: optionalSearchString(search.quickRunId),
         quickJobId: optionalSearchString(search.quickJobId),
@@ -271,11 +275,15 @@ function ProductionRunRoute() {
     });
     const [briefDraft, setBriefDraft] = useState("");
     const [draftVersionId, setDraftVersionId] = useState<string | null>(null);
+    const [selectedConceptId, setSelectedConceptId] = useState("concept_1");
+    const [revisionDraft, setRevisionDraft] = useState("");
+    const [revisionSaved, setRevisionSaved] = useState(false);
+    const [revisionRunId, setRevisionRunId] = useState<string | null>(null);
     const backendConfigured = hasConfiguredApiBaseUrl;
 
     const updateWorkflowSearch = (updates: Partial<MvpSearch>) => {
         void navigate({
-            to: "/production",
+            to: "/mvp",
             replace: true,
             search: compactSearch({ ...search, ...updates }),
         });
@@ -386,6 +394,20 @@ function ProductionRunRoute() {
         setDraftVersionId(version.id);
     }, [draftVersionId, pack.data?.current_version]);
 
+    useEffect(() => {
+        if (!preflight.data || preflight.data.id === revisionRunId) return;
+        setRevisionDraft(preflight.data.revision_message);
+        setRevisionSaved(false);
+        setRevisionRunId(preflight.data.id);
+    }, [preflight.data, revisionRunId]);
+
+    useEffect(() => {
+        const concepts = adaptation.data?.result_json.concepts;
+        if (!concepts?.length || concepts.some((concept) => concept.id === selectedConceptId))
+            return;
+        setSelectedConceptId(concepts[0].id);
+    }, [adaptation.data, selectedConceptId]);
+
     const runQuick = useMutation({
         mutationFn: async () => {
             const response = await apiPost<{ score_run: ScoreRun; job: JobResponse }>(
@@ -416,6 +438,8 @@ function ProductionRunRoute() {
             return response;
         },
         onSuccess: () => toast.success("Reference analysis queued"),
+        onError: (error) =>
+            toast.error(error instanceof Error ? error.message : "Reference analysis failed"),
     });
 
     const loadDnaFromJob = async () => {
@@ -443,15 +467,20 @@ function ProductionRunRoute() {
             }),
         onSuccess: (run) => {
             updateWorkflowSearch({ adaptationId: run.id });
+            setSelectedConceptId(run.result_json.concepts[0]?.id ?? "concept_1");
             toast.success("Adaptation generated");
         },
+        onError: (error) =>
+            toast.error(
+                error instanceof Error ? error.message : "Adaptation could not be generated",
+            ),
     });
 
     const createPack = useMutation({
         mutationFn: async () =>
             apiPost<CampaignPack>(`/workspaces/${workspaceId}/campaign-packs`, {
                 adaptation_run_id: adaptationId,
-                concept_id: "concept_1",
+                concept_id: selectedConceptId,
             }),
         onSuccess: (created) => {
             updateWorkflowSearch({ packId: created.id });
@@ -462,6 +491,10 @@ function ProductionRunRoute() {
             });
             toast.success("Campaign Pack created");
         },
+        onError: (error) =>
+            toast.error(
+                error instanceof Error ? error.message : "Campaign Pack could not be created",
+            ),
     });
 
     const savePackVersion = useMutation({
@@ -471,7 +504,7 @@ function ProductionRunRoute() {
                 `/workspaces/${workspaceId}/campaign-packs/${packId}/versions`,
                 {
                     brief,
-                    change_note: "Edited in Production Studio",
+                    change_note: "Edited in Production Run",
                 },
             );
         },
@@ -484,6 +517,10 @@ function ProductionRunRoute() {
             });
             toast.success("New Campaign Pack version saved");
         },
+        onError: (error) =>
+            toast.error(
+                error instanceof Error ? error.message : "Campaign Pack could not be saved",
+            ),
     });
 
     const runPreflight = useMutation({
@@ -500,6 +537,8 @@ function ProductionRunRoute() {
             return response;
         },
         onSuccess: () => toast.success("UGC Preflight queued"),
+        onError: (error) =>
+            toast.error(error instanceof Error ? error.message : "UGC Preflight could not start"),
     });
 
     const quickReason = disabledReason([
@@ -513,7 +552,7 @@ function ProductionRunRoute() {
     ]);
     const loadDnaReason = disabledReason([
         [
-            dnaJob.data?.status !== "completed",
+            !["succeeded", "completed"].includes(dnaJob.data?.status ?? ""),
             "Finish reference analysis before loading Creative DNA.",
         ],
     ]);
@@ -526,9 +565,12 @@ function ProductionRunRoute() {
         [!adaptationId, "Generate at least one concept before creating the brief."],
         [createPack.isPending, "Campaign brief creation is already running."],
     ]);
+    const briefDraftError = briefDraft ? campaignBriefDraftError(briefDraft) : null;
     const savePackReason = disabledReason([
         [!packId, "Create a campaign brief before saving a new version."],
         [!briefDraft, "Brief JSON is empty."],
+        [Boolean(briefDraftError), briefDraftError ?? "Campaign Pack brief is invalid."],
+        [savePackVersion.isPending, "A new Campaign Pack version is already being saved."],
     ]);
     const preflightReason = disabledReason([
         [!ugcAsset, "Add a creator video before review."],
@@ -546,6 +588,123 @@ function ProductionRunRoute() {
             assets.isLoading ||
             boards.isLoading ||
             references.isLoading);
+    const runtimeError = backendConfigured
+        ? (aiReadiness.error ??
+          workspaces.error ??
+          products.error ??
+          assets.error ??
+          boards.error ??
+          references.error ??
+          null)
+        : null;
+    const inputItems = [
+        {
+            label: "Product",
+            value: product?.name ?? (workspaceId ? "No product selected" : "Waiting for workspace"),
+            complete: Boolean(product),
+        },
+        {
+            label: "Reference board",
+            value:
+                boards.data?.[0]?.name ??
+                (workspaceId ? "No board selected" : "Waiting for workspace"),
+            complete: Boolean(boards.data?.[0]),
+        },
+        {
+            label: "Winning reference",
+            value: reference?.title ?? "No reference selected",
+            complete: Boolean(reference),
+        },
+        {
+            label: "Quick reference asset",
+            value: assetTitle(
+                quickAsset,
+                workspaceId ? "No video selected" : "Waiting for workspace",
+            ),
+            complete: Boolean(quickAsset),
+        },
+        {
+            label: "Creator video",
+            value: assetTitle(
+                ugcAsset,
+                workspaceId ? "No video selected" : "Waiting for workspace",
+            ),
+            complete: Boolean(ugcAsset),
+        },
+    ];
+    const missingRequirements = inputItems
+        .filter((item) => !item.complete)
+        .map((item) => item.label.toLowerCase());
+    const inputComplete = missingRequirements.length === 0;
+    const dnaComplete = Boolean(dnaId && dna.data);
+    const adaptationComplete = Boolean(adaptationId && adaptation.data);
+    const packComplete = Boolean(packId && pack.data?.current_version);
+    const preflightComplete = Boolean(preflightRunId && preflight.data);
+    const ready = isPreflightReady(preflight.data);
+    const workflowSteps: WorkflowRailStep[] = [
+        {
+            id: "input",
+            label: "Input",
+            state: inputComplete ? "complete" : "current",
+            description: inputComplete ? "Production context ready" : "Complete required inputs",
+            onSelect: () => scrollToStep("input"),
+        },
+        {
+            id: "creative-dna",
+            label: "Creative DNA",
+            state: dnaComplete
+                ? "complete"
+                : dnaJob.data?.status === "failed"
+                  ? "blocked"
+                  : inputComplete
+                    ? "current"
+                    : "future",
+            description: dnaComplete ? "Reusable pattern extracted" : "Analyze the reference",
+            blockedReason: dnaJob.data?.error_message ?? undefined,
+            onSelect: () => scrollToStep("creative-dna"),
+        },
+        {
+            id: "product-adaptation",
+            label: "Adaptation",
+            state: adaptationComplete
+                ? "complete"
+                : dnaComplete
+                  ? "current"
+                  : dnaJob.data?.status === "failed"
+                    ? "blocked"
+                    : "future",
+            description: adaptationComplete ? "Product concepts ready" : "Adapt the source pattern",
+            onSelect: () => scrollToStep("product-adaptation"),
+        },
+        {
+            id: "campaign-brief",
+            label: "Campaign Pack",
+            state: packComplete ? "complete" : adaptationComplete ? "current" : "future",
+            description: packComplete ? "Current version available" : "Build creator guidance",
+            onSelect: () => scrollToStep("campaign-brief"),
+        },
+        {
+            id: "ugc-preflight",
+            label: "UGC Preflight",
+            state: preflightComplete
+                ? "complete"
+                : preflightJob.data?.status === "failed"
+                  ? "blocked"
+                  : packComplete
+                    ? "current"
+                    : "future",
+            description: preflightComplete ? "Creator video reviewed" : "Validate brief alignment",
+            blockedReason: preflightJob.data?.error_message ?? undefined,
+            onSelect: () => scrollToStep("ugc-preflight"),
+        },
+        {
+            id: "ready",
+            label: "Ready",
+            state: ready ? "complete" : preflightComplete ? "current" : "future",
+            description: ready ? "Production Run complete" : "Resolve review blockers",
+            onSelect: () => scrollToStep("ready"),
+        },
+    ];
 
     async function handleUpload(file: File | null) {
         if (!file || !workspaceId) return;
@@ -571,223 +730,65 @@ function ProductionRunRoute() {
     return (
         <AppShell>
             <div className="flex flex-col gap-5">
-                <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
-                            Production Studio
-                        </h1>
-                        <p className="mt-1 max-w-3xl text-sm text-text-secondary">
-                            Move from reference analysis to campaign brief and creator review in one
-                            guided workflow. Demo analysis is clearly labeled until your AI provider
-                            is connected.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <ModeBadge
-                            mode={
-                                quickScore.data?.analysis_mode ??
-                                dna.data?.analysis_mode ??
-                                adaptation.data?.analysis_mode ??
-                                preflight.data?.analysis_mode ??
-                                aiReadiness.data?.mode ??
-                                "fixture"
-                            }
-                        />
-                        <ProviderBadge readiness={aiReadiness.data} />
-                        <Badge variant="outline">
-                            {workspaces.data?.[0]?.name ?? "Workspace unavailable"}
-                        </Badge>
-                    </div>
-                </header>
-
-                <RuntimeState
+                <ProductionRunHeader
                     backendConfigured={backendConfigured}
                     loading={workflowLoading}
-                    error={
-                        backendConfigured
-                            ? (aiReadiness.error ??
-                              workspaces.error ??
-                              products.error ??
-                              assets.error ??
-                              boards.error ??
-                              references.error ??
-                              null)
-                            : null
-                    }
+                    error={runtimeError}
                     readiness={aiReadiness.data}
+                    workspaceName={workspaces.data?.[0]?.name}
                 />
-
-                <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <Summary
-                        label="Product"
-                        value={
-                            product?.name ??
-                            (workspaceId ? "No product selected" : "Waiting for workspace")
-                        }
-                        loading={workflowLoading}
-                    />
-                    <Summary
-                        label="Reference board"
-                        value={
-                            boards.data?.[0]?.name ??
-                            (workspaceId ? "No board selected" : "Waiting for workspace")
-                        }
-                        loading={workflowLoading}
-                    />
-                    <Summary
-                        label="Reference video"
-                        value={assetTitle(
-                            quickAsset,
-                            workspaceId ? "No video selected" : "Waiting for workspace",
-                        )}
-                        loading={workflowLoading}
-                    />
-                    <Summary
-                        label="Creator video"
-                        value={assetTitle(
-                            ugcAsset,
-                            workspaceId ? "No video selected" : "Waiting for workspace",
-                        )}
-                        loading={workflowLoading}
-                    />
-                </section>
-
-                <WorkflowProgress
-                    steps={[
-                        {
-                            label: "Score reference",
-                            state: workflowState(!!quickRunId, quickJob.data),
-                            detail: quickScore.data?.action_label
-                                ? humanizeLabel(quickScore.data.action_label)
-                                : "Check structure",
-                        },
-                        {
-                            label: "Extract Creative DNA",
-                            state: workflowState(!!dnaId, dnaJob.data),
-                            detail: dna.data?.confidence ?? "Find reusable patterns",
-                        },
-                        {
-                            label: "Adapt to product",
-                            state: adaptationId ? "done" : "idle",
-                            detail: adaptation.data
-                                ? "Concepts ready"
-                                : "Generate product concepts",
-                        },
-                        {
-                            label: "Build campaign brief",
-                            state: packId ? "done" : "idle",
-                            detail: pack.data?.current_version
-                                ? "Brief ready to edit"
-                                : "Prepare creator guidance",
-                        },
-                        {
-                            label: "Review creator video",
-                            state: workflowState(!!preflightRunId, preflightJob.data),
-                            detail: preflight.data?.action_label
-                                ? humanizeLabel(preflight.data.action_label)
-                                : "Check brief alignment",
-                        },
-                    ]}
-                />
-
-                <section className="rounded-md border border-hairline bg-surface p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <h2 className="text-sm font-semibold text-text-primary">Add media</h2>
-                            <p className="text-sm text-text-secondary">
-                                Upload a reference or creator video. Demo mode can analyze the
-                                included samples.
-                            </p>
-                        </div>
-                        <label
-                            className={cn(
-                                "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-hairline bg-surface px-3 py-2 text-sm font-medium text-text-primary hover:bg-surface-soft",
-                                workspaceId
-                                    ? "cursor-pointer"
-                                    : "cursor-not-allowed opacity-60 hover:bg-surface",
-                            )}
-                        >
-                            <Upload className="h-4 w-4" />
-                            Upload video
-                            <input
-                                type="file"
-                                aria-label="Upload video"
-                                accept="video/mp4,video/quicktime"
-                                className="hidden"
-                                disabled={!workspaceId}
-                                onChange={(event) => handleUpload(event.target.files?.[0] ?? null)}
-                            />
-                        </label>
-                    </div>
-                    {uploadState.status !== "idle" && (
-                        <div className="mt-3" role="status" aria-live="polite">
-                            <Progress value={uploadState.progress} />
-                            <p className="mt-2 text-xs text-text-secondary">
-                                Upload {humanizeLabel(uploadState.status)}
-                                {uploadState.filename ? `: ${uploadState.filename}` : ""}
-                                {uploadState.message ? ` - ${uploadState.message}` : ""}
-                            </p>
-                        </div>
-                    )}
-                </section>
 
                 <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start">
-                    <ProductionRunRail
-                        steps={[
-                            {
-                                id: "quick-score",
-                                label: "Score reference",
-                                state: workflowState(!!quickRunId, quickJob.data),
-                            },
-                            {
-                                id: "creative-dna",
-                                label: "Extract Creative DNA",
-                                state: workflowState(!!dnaId, dnaJob.data),
-                            },
-                            {
-                                id: "product-adaptation",
-                                label: "Adapt to product",
-                                state: adaptationId ? "done" : "idle",
-                            },
-                            {
-                                id: "campaign-brief",
-                                label: "Build campaign brief",
-                                state: packId ? "done" : "idle",
-                            },
-                            {
-                                id: "ugc-preflight",
-                                label: "Review creator video",
-                                state: workflowState(!!preflightRunId, preflightJob.data),
-                            },
-                        ]}
-                    />
+                    <ProductionRunRail steps={workflowSteps} />
                     <div className="flex min-w-0 flex-col gap-5">
-                        <ActionPanel
-                            id="quick-score"
-                            eyebrow="Step 1"
-                            title="Score reference video"
-                            summary="Check whether the hook, proof, pacing, and CTA are strong enough to reuse."
-                            icon={FileVideo}
-                        >
-                            <DisabledActionHint reason={quickReason}>
-                                <Button onClick={() => runQuick.mutate()} disabled={!!quickReason}>
-                                    {runQuick.isPending ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Play className="h-4 w-4" />
+                        <InputStep
+                            items={inputItems}
+                            loading={workflowLoading}
+                            uploadDisabled={!workspaceId}
+                            uploadState={uploadState}
+                            onUpload={handleUpload}
+                            missingRequirements={missingRequirements}
+                            quickCheck={
+                                <div className="flex flex-col gap-4">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <DisabledActionHint reason={quickReason}>
+                                            <Button
+                                                onClick={() => runQuick.mutate()}
+                                                disabled={!!quickReason}
+                                            >
+                                                {runQuick.isPending ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Play className="h-4 w-4" />
+                                                )}
+                                                Score reference
+                                            </Button>
+                                        </DisabledActionHint>
+                                        <p className="text-xs text-text-secondary">
+                                            Optional. Checks structure without replacing Creative
+                                            DNA analysis.
+                                        </p>
+                                    </div>
+                                    <JobProgress job={quickJob.data} />
+                                    {quickScore.isError && (
+                                        <WorkflowError
+                                            title="Quick score could not be loaded"
+                                            error={quickScore.error}
+                                            onRetry={() => void quickScore.refetch()}
+                                        />
                                     )}
-                                    Score reference
-                                </Button>
-                            </DisabledActionHint>
-                            <JobBlock job={quickJob.data} />
-                            {quickScore.data && <ScoreBlock score={quickScore.data} />}
-                        </ActionPanel>
+                                    {quickScore.data?.status === "completed" && (
+                                        <ScoreBlock score={quickScore.data} />
+                                    )}
+                                </div>
+                            }
+                        />
 
                         <ActionPanel
                             id="creative-dna"
-                            eyebrow="Step 2"
-                            title="Extract Creative DNA"
-                            summary="Extract reusable hooks, proof, pacing, and creator mechanics."
+                            eyebrow="Creative DNA"
+                            title="Extract reusable creative mechanics"
+                            summary="Analyze the winning reference for hooks, proof, pacing, and creator patterns."
                             icon={Sparkles}
                         >
                             <div className="grid gap-3 sm:grid-cols-2">
@@ -811,14 +812,33 @@ function ProductionRunRoute() {
                                     </Button>
                                 </DisabledActionHint>
                             </div>
-                            <JobBlock job={dnaJob.data} />
+                            <JobProgress
+                                job={dnaJob.data}
+                                recoveryAction={
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => analyzeReference.mutate()}
+                                        disabled={analyzeReference.isPending}
+                                    >
+                                        Retry analysis
+                                    </Button>
+                                }
+                            />
+                            {dna.isError && (
+                                <WorkflowError
+                                    title="Creative DNA could not be loaded"
+                                    error={dna.error}
+                                    onRetry={() => void dna.refetch()}
+                                />
+                            )}
                             {dna.data && <DnaBlock dna={dna.data} />}
                         </ActionPanel>
 
                         <ActionPanel
                             id="product-adaptation"
-                            eyebrow="Step 3"
-                            title="Adapt concept to product"
+                            eyebrow="Adaptation"
+                            title="Adapt the pattern to this product"
                             summary="Turn reference DNA into product-specific creative concepts."
                             icon={Sparkles}
                         >
@@ -831,15 +851,26 @@ function ProductionRunRoute() {
                                     Generate concepts
                                 </Button>
                             </DisabledActionHint>
+                            {adaptation.isError && (
+                                <WorkflowError
+                                    title="Adaptation could not be loaded"
+                                    error={adaptation.error}
+                                    onRetry={() => void adaptation.refetch()}
+                                />
+                            )}
                             {adaptation.data && (
-                                <ConceptBlock concepts={adaptation.data.result_json.concepts} />
+                                <ConceptBlock
+                                    concepts={adaptation.data.result_json.concepts}
+                                    selectedId={selectedConceptId}
+                                    onSelect={setSelectedConceptId}
+                                />
                             )}
                         </ActionPanel>
 
                         <ActionPanel
                             id="campaign-brief"
-                            eyebrow="Step 4"
-                            title="Build campaign brief"
+                            eyebrow="Campaign Pack"
+                            title="Build creator-ready guidance"
                             summary="Turn the selected concept into clear, editable guidance for creators."
                             icon={Clipboard}
                         >
@@ -853,21 +884,19 @@ function ProductionRunRoute() {
                                         Create brief
                                     </Button>
                                 </DisabledActionHint>
-                                <DisabledActionHint reason={savePackReason} className="min-w-0">
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => savePackVersion.mutate()}
-                                        disabled={!!savePackReason}
-                                    >
-                                        <CheckCircle2 className="h-4 w-4" />
-                                        Save version
-                                    </Button>
-                                </DisabledActionHint>
                             </div>
+                            {pack.isError && (
+                                <WorkflowError
+                                    title="Campaign Pack could not be loaded"
+                                    error={pack.error}
+                                    onRetry={() => void pack.refetch()}
+                                />
+                            )}
                             {pack.data?.current_version && (
                                 <>
-                                    <CampaignBriefPreview
-                                        brief={pack.data.current_version.brief_json}
+                                    <CampaignBriefEditor
+                                        value={briefDraft}
+                                        onChange={setBriefDraft}
                                     />
                                     <details className="rounded-md border border-hairline bg-surface-soft p-3">
                                         <summary className="cursor-pointer text-sm font-medium text-text-primary">
@@ -879,7 +908,37 @@ function ProductionRunRoute() {
                                             value={briefDraft}
                                             onChange={(event) => setBriefDraft(event.target.value)}
                                         />
+                                        {briefDraftError && (
+                                            <p
+                                                className="mt-2 text-xs font-medium text-destructive"
+                                                role="alert"
+                                            >
+                                                {briefDraftError}
+                                            </p>
+                                        )}
                                     </details>
+                                    <ActionTray
+                                        context={
+                                            <span>
+                                                Current version{" "}
+                                                <strong className="text-text-primary">
+                                                    {pack.data.current_version.version_number}
+                                                </strong>{" "}
+                                                · Save edits as a new immutable version.
+                                            </span>
+                                        }
+                                        primaryAction={
+                                            <DisabledActionHint reason={savePackReason}>
+                                                <Button
+                                                    onClick={() => savePackVersion.mutate()}
+                                                    disabled={!!savePackReason}
+                                                >
+                                                    <CheckCircle2 className="h-4 w-4" />
+                                                    Save new version
+                                                </Button>
+                                            </DisabledActionHint>
+                                        }
+                                    />
                                 </>
                             )}
                             <VersionHistory
@@ -890,8 +949,8 @@ function ProductionRunRoute() {
 
                         <ActionPanel
                             id="ugc-preflight"
-                            eyebrow="Step 5"
-                            title="Review creator video"
+                            eyebrow="UGC Preflight"
+                            title="Validate the creator video"
                             summary="Compare the creator asset against the campaign brief before approval."
                             icon={FileVideo}
                         >
@@ -904,9 +963,76 @@ function ProductionRunRoute() {
                                     Run UGC review
                                 </Button>
                             </DisabledActionHint>
-                            <JobBlock job={preflightJob.data} />
-                            {preflight.data && <PreflightBlock run={preflight.data} />}
+                            <JobProgress
+                                job={preflightJob.data}
+                                recoveryAction={
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => runPreflight.mutate()}
+                                        disabled={runPreflight.isPending}
+                                    >
+                                        Retry review
+                                    </Button>
+                                }
+                            />
+                            {preflight.isError && (
+                                <WorkflowError
+                                    title="UGC Preflight result could not be loaded"
+                                    error={preflight.error}
+                                    onRetry={() => void preflight.refetch()}
+                                />
+                            )}
+                            {preflight.data?.status === "completed" && (
+                                <PreflightBlock
+                                    run={preflight.data}
+                                    revisionDraft={revisionDraft}
+                                    revisionSaved={revisionSaved}
+                                    onRevisionChange={(value) => {
+                                        setRevisionDraft(value);
+                                        setRevisionSaved(false);
+                                    }}
+                                    onRevisionSave={() => {
+                                        setRevisionSaved(true);
+                                        toast.success("Revision message saved locally");
+                                    }}
+                                />
+                            )}
                         </ActionPanel>
+
+                        <section id="ready" className="scroll-mt-20">
+                            {ready ? (
+                                <ValueReceipt
+                                    title="Production Run complete"
+                                    description="The campaign guidance and creator video are ready for the next operating step."
+                                    items={[
+                                        "Creative DNA analyzed",
+                                        "One adaptation selected",
+                                        "Campaign Pack version saved",
+                                        "UGC Preflight completed without blockers",
+                                    ]}
+                                    action={
+                                        <Button
+                                            size="sm"
+                                            onClick={() => scrollToStep("campaign-brief")}
+                                        >
+                                            Open Campaign Pack
+                                        </Button>
+                                    }
+                                />
+                            ) : (
+                                <div className="rounded-2xl bg-surface px-5 py-4 shadow-soft-card">
+                                    <p className="text-sm font-semibold text-text-primary">
+                                        Ready checkpoint
+                                    </p>
+                                    <p className="mt-1 text-sm text-text-secondary">
+                                        {preflightComplete
+                                            ? `${preflight.data?.blockers_json.length ?? 0} blockers remain before this run is ready.`
+                                            : "Complete UGC Preflight to confirm production readiness."}
+                                    </p>
+                                </div>
+                            )}
+                        </section>
                     </div>
                 </div>
             </div>
@@ -921,7 +1047,9 @@ function useJob(workspaceId: string | undefined, jobId: string | null) {
         enabled: !!workspaceId && !!jobId,
         refetchInterval: (query) => {
             const status = query.state.data?.status;
-            return status && ["completed", "failed", "cancelled"].includes(status) ? false : 1200;
+            return status && ["succeeded", "completed", "failed", "cancelled"].includes(status)
+                ? false
+                : 1200;
         },
     });
 }
@@ -930,156 +1058,35 @@ function disabledReason(entries: Array<[boolean, string]>) {
     return entries.find(([blocked]) => blocked)?.[1] ?? null;
 }
 
-function workflowState(done: boolean, job?: JobResponse): "done" | "active" | "failed" | "idle" {
-    if (done) return "done";
-    if (!job) return "idle";
-    if (job.status === "failed" || job.status === "cancelled") return "failed";
-    if (["queued", "running", "retrying"].includes(job.status)) return "active";
-    return "idle";
+function scrollToStep(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function requirementTone(status: string) {
-    const normalized = status.toLowerCase();
-    if (normalized.includes("pass") || normalized.includes("met") || normalized.includes("ok")) {
+function decisionTone(actionLabel: string, blockerCount: number) {
+    const normalized = actionLabel.toLowerCase();
+    if (normalized.includes("reject")) return "destructive" as const;
+    if (
+        blockerCount > 0 ||
+        normalized.includes("revise") ||
+        normalized.includes("hold") ||
+        normalized.includes("fix")
+    ) {
+        return "warn" as const;
+    }
+    if (
+        normalized.includes("ready") ||
+        normalized.includes("approve") ||
+        normalized.includes("pass")
+    ) {
         return "ok" as const;
     }
-    if (normalized.includes("fail") || normalized.includes("missing")) {
-        return "destructive" as const;
-    }
-    if (normalized.includes("partial") || normalized.includes("warn")) return "warn" as const;
     return "info" as const;
 }
 
-function WorkflowProgress({
-    steps,
-}: {
-    steps: Array<{
-        label: string;
-        detail: string;
-        state: "done" | "active" | "failed" | "idle";
-    }>;
-}) {
-    return (
-        <section
-            aria-label="Production Studio progress"
-            className="rounded-md border border-hairline bg-surface p-3"
-        >
-            <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                {steps.map((step, index) => (
-                    <li
-                        key={step.label}
-                        className={cn(
-                            "min-w-0 rounded-md border px-3 py-2 sm:last:col-span-2 xl:last:col-span-1",
-                            step.state === "done" && "border-ok/30 bg-ok-soft",
-                            step.state === "active" && "border-primary/30 bg-primary-soft",
-                            step.state === "failed" && "border-destructive/30 bg-destructive-soft",
-                            step.state === "idle" && "border-hairline bg-surface-soft",
-                        )}
-                    >
-                        <div className="flex items-center gap-2">
-                            <span
-                                className={cn(
-                                    "grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold tabular",
-                                    step.state === "done" && "bg-ok text-ok-foreground",
-                                    step.state === "active" && "bg-primary text-primary-foreground",
-                                    step.state === "failed" &&
-                                        "bg-destructive text-destructive-foreground",
-                                    step.state === "idle" && "bg-surface-muted text-text-tertiary",
-                                )}
-                            >
-                                {index + 1}
-                            </span>
-                            <p className="min-w-0 break-words text-sm font-medium leading-snug text-text-primary">
-                                {step.label}
-                            </p>
-                        </div>
-                        <p className="mt-1 break-words text-xs leading-snug text-text-secondary">
-                            {step.detail}
-                        </p>
-                    </li>
-                ))}
-            </ol>
-        </section>
-    );
-}
-
-function ProductionRunRail({
-    steps,
-}: {
-    steps: Array<{
-        id: string;
-        label: string;
-        state: "done" | "active" | "failed" | "idle";
-    }>;
-}) {
-    const tone = {
-        done: "ok",
-        active: "info",
-        failed: "destructive",
-        idle: "neutral",
-    } as const;
-    return (
-        <aside className="rounded-md border border-hairline bg-surface p-3 xl:sticky xl:top-20">
-            <div className="mb-3">
-                <p className="text-sm font-semibold text-text-primary">Workflow steps</p>
-                <p className="mt-0.5 text-xs text-text-secondary">
-                    Complete each step in order. Results stay open for review.
-                </p>
-            </div>
-            <ol className="grid gap-2 sm:grid-cols-2 xl:flex xl:flex-col">
-                {steps.map((step, index) => (
-                    <li key={step.label} className="min-w-0 sm:last:col-span-2 xl:last:col-span-1">
-                        <a
-                            href={`#${step.id}`}
-                            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        >
-                            <span
-                                className={cn(
-                                    "grid h-6 w-6 place-items-center rounded-full text-[11px] font-semibold",
-                                    step.state === "done" && "bg-ok text-ok-foreground",
-                                    step.state === "active" && "bg-primary text-primary-foreground",
-                                    step.state === "failed" &&
-                                        "bg-destructive text-destructive-foreground",
-                                    step.state === "idle" && "bg-surface-muted text-text-tertiary",
-                                )}
-                            >
-                                {index + 1}
-                            </span>
-                            <span className="min-w-0 break-words font-medium leading-snug text-text-primary">
-                                {step.label}
-                            </span>
-                            <StatusChip tone={tone[step.state]}>
-                                {humanizeLabel(step.state)}
-                            </StatusChip>
-                        </a>
-                    </li>
-                ))}
-            </ol>
-        </aside>
-    );
-}
-
-function Summary({
-    label,
-    value,
-    loading = false,
-}: {
-    label: string;
-    value: string;
-    loading?: boolean;
-}) {
-    return (
-        <div className="rounded-md border border-hairline bg-surface p-4">
-            <p className="text-xs font-medium uppercase text-text-tertiary">{label}</p>
-            {loading ? (
-                <Skeleton className="mt-2 h-4 w-3/4" />
-            ) : (
-                <p className="mt-1 break-words text-sm font-semibold leading-snug text-text-primary">
-                    {value}
-                </p>
-            )}
-        </div>
-    );
+function isPreflightReady(run?: PreflightRun) {
+    if (!run || run.status !== "completed" || run.blockers_json.length > 0) return false;
+    const action = run.action_label.toLowerCase();
+    return !["revise", "reject", "hold", "block"].some((label) => action.includes(label));
 }
 
 function ActionPanel({
@@ -1098,7 +1105,10 @@ function ActionPanel({
     children: ReactNode;
 }) {
     return (
-        <section id={id} className="scroll-mt-20 rounded-md border border-hairline bg-surface p-4">
+        <section
+            id={id}
+            className="scroll-mt-20 rounded-2xl bg-surface p-5 shadow-soft-card sm:p-6"
+        >
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 gap-3">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary-active">
@@ -1106,7 +1116,7 @@ function ActionPanel({
                     </span>
                     <div className="min-w-0">
                         {eyebrow && (
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                            <p className="text-[10px] font-semibold uppercase text-text-tertiary">
                                 {eyebrow}
                             </p>
                         )}
@@ -1120,229 +1130,341 @@ function ActionPanel({
     );
 }
 
-function ModeBadge({ mode }: { mode: string }) {
-    const fixture = mode === "fixture";
-    return (
-        <Badge className={cn(fixture ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok")}>
-            {fixture ? "Demo analysis" : `${humanizeLabel(mode)} analysis`}
-        </Badge>
-    );
-}
-
-function ProviderBadge({ readiness }: { readiness?: AiReadiness }) {
-    if (!readiness) return <Badge variant="outline">AI provider not connected</Badge>;
-    return (
-        <Badge variant={readiness.configured ? "secondary" : "outline"}>
-            {readiness.configured
-                ? `${humanizeLabel(readiness.provider)} ready`
-                : "AI provider not connected"}
-        </Badge>
-    );
-}
-
-function RuntimeState({
-    backendConfigured,
-    loading,
+function WorkflowError({
+    title,
     error,
-    readiness,
+    onRetry,
 }: {
-    backendConfigured: boolean;
-    loading: boolean;
+    title: string;
     error: unknown;
-    readiness?: AiReadiness;
+    onRetry: () => void;
 }) {
-    if (!backendConfigured) {
-        return (
-            <div
-                role="status"
-                aria-live="polite"
-                className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-soft p-3 text-sm text-text-primary lg:flex-row lg:items-center lg:justify-between"
-            >
-                <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 text-warn" />
-                    <span>Workspace data is not connected.</span>
-                </div>
-                <span className="text-xs text-text-secondary">
-                    Connect the backend to use your products and media.
-                </span>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div
-                role="status"
-                aria-live="polite"
-                className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-text-primary"
-            >
-                {errorMessage(error)}
-            </div>
-        );
-    }
-    if (!loading && readiness?.configured !== false) return null;
     return (
         <div
-            role="status"
-            aria-live="polite"
-            className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-soft p-3 text-sm text-text-primary lg:flex-row lg:items-center lg:justify-between"
+            role="alert"
+            className="flex flex-col gap-3 rounded-2xl bg-destructive-soft p-4 sm:flex-row sm:items-center sm:justify-between"
         >
-            <div className="flex items-center gap-2">
-                {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-text-secondary" />
-                ) : (
-                    <Info className="h-4 w-4 text-warn" />
-                )}
-                <span>
-                    {loading ? "Loading workspace..." : "AI analysis is running in demo mode."}
-                </span>
-            </div>
-            {!loading && readiness?.missing.length ? (
-                <span className="text-xs text-text-secondary">
-                    Missing: {readiness.missing.map((item) => humanizeLabel(item)).join(", ")}
-                </span>
-            ) : null}
-        </div>
-    );
-}
-
-function JobBlock({ job }: { job?: JobResponse }) {
-    if (!job) return null;
-    const active = ["queued", "running", "retrying"].includes(job.status);
-    const statusTone =
-        job.status === "failed" || job.status === "cancelled"
-            ? "destructive"
-            : job.status === "completed"
-              ? "ok"
-              : "info";
-    return (
-        <div
-            role="status"
-            aria-live="polite"
-            className="rounded-md border border-primary/15 bg-primary-soft/35 p-3"
-        >
-            <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="inline-flex items-center gap-2 font-medium text-text-primary">
-                    {active && <Loader2 className="h-4 w-4 animate-spin text-text-secondary" />}
-                    {humanizeLabel(job.job_type)}
-                </span>
-                <StatusChip tone={statusTone}>{humanizeLabel(job.status)}</StatusChip>
-            </div>
-            <Progress className="mt-3" value={job.progress} />
-            <p className="mt-2 text-xs text-text-secondary">
-                Stage: {humanizeLabel(job.stage ?? "queued")}{" "}
-                {job.error_message ? `- ${job.error_message}` : ""}
-            </p>
-            {job.error_code && (
-                <p className="mt-1 text-xs font-medium text-destructive">
-                    Error code: {humanizeLabel(job.error_code)}
+            <div>
+                <p className="text-sm font-semibold text-destructive">{title}</p>
+                <p className="mt-1 text-xs text-text-secondary">
+                    {error instanceof Error
+                        ? error.message
+                        : "The backend response was unavailable. Retry the current step."}
                 </p>
-            )}
-            {active && (
-                <AnalysisThinkingSkeleton
-                    compact
-                    className="mt-3"
-                    title="Backend is analyzing"
-                    description="Preparing structured evidence, scores, recommendations, and next-step modules."
-                />
-            )}
+            </div>
+            <Button size="sm" variant="secondary" onClick={onRetry}>
+                Retry
+            </Button>
         </div>
     );
 }
 
 function ScoreBlock({ score }: { score: ScoreRun }) {
+    const reason =
+        score.blockers_json[0]?.message ??
+        score.fixes_json[0]?.why ??
+        score.fixes_json[0]?.instruction ??
+        "The structure check is complete. Review the evidence before reusing this pattern.";
     return (
-        <ResultShell
-            title={formatPercentScore(score.structural_score)}
-            subtitle={humanizeLabel(score.action_label)}
-            mode={score.analysis_mode}
-            outcome="System score"
-        >
-            <AnalysisTimelineSvg
-                title="Scoring timeline"
-                durationSec={30}
-                currentTime={30}
-                markers={scoreMarkers}
+        <div className="flex flex-col gap-4">
+            <DecisionHero
+                eyebrow="Quick check decision"
+                actionLabel={humanizeLabel(score.action_label)}
+                reason={reason}
+                score={score.structural_score}
+                confidence={score.confidence}
+                blockerCount={score.blockers_json.length}
+                effort={`${humanizeLabel(score.analysis_mode)} analysis`}
+                statusTone={decisionTone(score.action_label, score.blockers_json.length)}
+                primaryAction={
+                    <Button size="sm" onClick={() => scrollToStep("creative-dna")}>
+                        Analyze Creative DNA
+                    </Button>
+                }
+                secondaryAction={
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => scrollToStep("quick-score-evidence")}
+                    >
+                        Review evidence
+                    </Button>
+                }
             />
-            <DimensionGrid dimensions={score.dimension_scores_json} />
-            <SignalBlock dimensions={score.dimension_scores_json} />
-            <Fixes blockers={score.blockers_json} fixes={score.fixes_json} />
-            <p className="text-xs text-text-tertiary">
-                Structural readiness score. This is not a guarantee of viral reach, sales, or GMV.
-            </p>
-        </ResultShell>
+            <div id="quick-score-evidence" className="scroll-mt-20 space-y-4">
+                <AnalysisTimelineSvg
+                    title="Scoring timeline"
+                    durationSec={30}
+                    currentTime={30}
+                    markers={scoreMarkers}
+                />
+                <DimensionGrid dimensions={score.dimension_scores_json} />
+                <SignalBlock dimensions={score.dimension_scores_json} />
+                <Fixes blockers={score.blockers_json} fixes={score.fixes_json} />
+                <p className="text-xs text-text-tertiary">
+                    Structural readiness score. This is not a guarantee of viral reach, sales, or
+                    GMV.
+                </p>
+            </div>
+        </div>
     );
 }
 
 function DnaBlock({ dna }: { dna: Dna }) {
     const data = dna.dna_json;
     return (
-        <ResultShell
-            title={observedText(data.narrative?.angle, "Creative DNA")}
-            subtitle={`Confidence: ${formatSystemValue(data.overall_confidence ?? dna.confidence)}`}
-            mode={dna.analysis_mode}
-            outcome="System extraction"
-        >
+        <div className="flex flex-col gap-4">
+            <DecisionHero
+                eyebrow="Creative DNA extracted"
+                actionLabel={observedText(data.narrative?.angle, "Reusable pattern ready")}
+                reason={
+                    <>
+                        Opening: {observedText(data.opening?.hook_text)}. Strongest proof:{" "}
+                        {observedText(data.proof?.strongest_proof)}.
+                    </>
+                }
+                confidence={formatSystemValue(data.overall_confidence ?? dna.confidence)}
+                effort={`${humanizeLabel(dna.analysis_mode)} analysis`}
+                statusTone="info"
+                primaryAction={
+                    <Button size="sm" onClick={() => scrollToStep("product-adaptation")}>
+                        Adapt to product
+                    </Button>
+                }
+                secondaryAction={
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => scrollToStep("dna-evidence")}
+                    >
+                        Review evidence
+                    </Button>
+                }
+            />
             <AnalysisTimelineSvg
                 title="Extracted Creative DNA timeline"
                 durationSec={30}
                 currentTime={30}
                 markers={dnaMarkers}
             />
-            <DimensionGrid
-                dimensions={{
-                    Hook: { score: "-", reason: observedText(data.opening?.hook_text) },
-                    Product: {
-                        score: "-",
-                        reason: `${observedText(data.product?.first_appearance_ms)}ms first reveal`,
-                    },
-                    Demo: { score: "-", reason: observedText(data.demo?.demo_type) },
-                    Proof: { score: "-", reason: observedText(data.proof?.strongest_proof) },
-                    CTA: { score: "-", reason: observedText(data.cta?.cta_types) },
-                    Creator: { score: "-", reason: observedText(data.creator?.delivery_style) },
-                }}
-            />
-            <ListBlock title="Reusable mechanisms" items={toTextList(data.reusable_mechanisms)} />
-            <ListBlock title="Claims" items={toTextList(data.claims)} />
-            <ListBlock title="Risks" items={toTextList(data.risks)} />
-            <ListBlock title="Uncertainties" items={data.uncertainties ?? []} />
+            <div id="dna-evidence" className="scroll-mt-20">
+                <p className="mb-3 text-sm font-semibold text-text-primary">Creative DNA ribbon</p>
+                <div className="grid overflow-hidden rounded-2xl bg-surface-soft sm:grid-cols-2 lg:grid-cols-5">
+                    <DnaRibbonItem label="Opening" value={observedText(data.opening?.hook_text)} />
+                    <DnaRibbonItem
+                        label="Product"
+                        value={`${observedText(data.product?.first_appearance_ms)}ms reveal`}
+                    />
+                    <DnaRibbonItem
+                        label="Narrative"
+                        value={observedText(data.narrative?.structure)}
+                    />
+                    <DnaRibbonItem label="Demo" value={observedText(data.demo?.demo_type)} />
+                    <DnaRibbonItem
+                        label="Proof"
+                        value={observedText(data.proof?.strongest_proof)}
+                    />
+                    <DnaRibbonItem
+                        label="Creator"
+                        value={observedText(data.creator?.delivery_style)}
+                    />
+                    <DnaRibbonItem label="Editing" value={observedText(data.editing?.pacing)} />
+                    <DnaRibbonItem label="Offer" value={observedText(data.offer?.offer_types)} />
+                    <DnaRibbonItem label="CTA" value={observedText(data.cta?.cta_types)} />
+                    <DnaRibbonItem label="Platform" value={observedText(data.platform?.format)} />
+                </div>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+                <ListBlock
+                    title="Reusable mechanisms"
+                    items={toTextList(data.reusable_mechanisms)}
+                />
+                <ListBlock title="Claims" items={toTextList(data.claims)} />
+                <ListBlock title="Risks" items={toTextList(data.risks)} />
+                <ListBlock title="Uncertainties" items={data.uncertainties ?? []} />
+            </div>
             <KeyValueBlock title="Completeness" values={data.completeness ?? {}} />
-        </ResultShell>
-    );
-}
-
-function ConceptBlock({ concepts }: { concepts: AdaptationConcept[] }) {
-    return (
-        <div className="grid gap-3 lg:grid-cols-3">
-            {concepts.map((concept) => (
-                <article
-                    key={concept.id}
-                    className="rounded-md border border-hairline bg-surface-soft p-4"
-                >
-                    <h3 className="font-semibold text-text-primary">{concept.name}</h3>
-                    <p className="mt-1 text-sm text-text-secondary">
-                        {concept.hook_options?.[0] ?? concept.angle ?? "No hook option"}
-                    </p>
-                    <p className="mt-2 text-xs text-text-secondary">
-                        {formatSystemValue(concept.strategic_axis, "No strategic axis")} -{" "}
-                        {formatSystemValue(concept.delivery_style, "No delivery style")}
-                    </p>
-                    <ListBlock title="Must show" items={concept.must_show ?? []} compact />
-                    <p className="mt-3 text-xs text-text-tertiary">{concept.test_hypothesis}</p>
-                </article>
-            ))}
+            <details className="rounded-2xl bg-surface-soft p-4">
+                <summary className="cursor-pointer text-sm font-medium text-text-primary">
+                    Advanced data
+                </summary>
+                <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-text-secondary">
+                    {JSON.stringify(data, null, 2)}
+                </pre>
+            </details>
         </div>
     );
 }
 
-function PreflightBlock({ run }: { run: PreflightRun }) {
+function DnaRibbonItem({ label, value }: { label: string; value: string }) {
     return (
-        <ResultShell
-            title={formatPercentScore(run.preflight_score)}
-            subtitle={humanizeLabel(run.action_label)}
-            mode={run.analysis_mode}
-            outcome="System decision"
-        >
+        <div className="min-w-0 border-b border-divider p-3 last:border-b-0 sm:border-r lg:[&:nth-child(5n)]:border-r-0">
+            <p className="text-[10px] font-semibold uppercase text-text-tertiary">{label}</p>
+            <p className="mt-1 line-clamp-2 break-words text-sm text-text-primary">{value}</p>
+        </div>
+    );
+}
+
+function ConceptBlock({
+    concepts,
+    selectedId,
+    onSelect,
+}: {
+    concepts: AdaptationConcept[];
+    selectedId: string;
+    onSelect: (id: string) => void;
+}) {
+    function handleConceptKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+        const isPrevious = event.key === "ArrowLeft" || event.key === "ArrowUp";
+        const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
+        if (!isPrevious && !isNext && event.key !== "Home" && event.key !== "End") return;
+
+        event.preventDefault();
+        const nextIndex =
+            event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? concepts.length - 1
+                  : isPrevious
+                    ? (index - 1 + concepts.length) % concepts.length
+                    : (index + 1) % concepts.length;
+        onSelect(concepts[nextIndex].id);
+        const radios =
+            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                '[role="radio"]',
+            );
+        radios?.[nextIndex]?.focus();
+    }
+
+    return (
+        <div>
+            <div
+                className="grid gap-3 lg:grid-cols-3"
+                role="radiogroup"
+                aria-label="Adaptation concepts"
+            >
+                {concepts.map((concept, index) => {
+                    const selected = concept.id === selectedId;
+                    return (
+                        <button
+                            key={concept.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            tabIndex={selected ? 0 : -1}
+                            onClick={() => onSelect(concept.id)}
+                            onKeyDown={(event) => handleConceptKeyDown(event, index)}
+                            className={cn(
+                                "min-w-0 rounded-2xl bg-surface-soft p-4 text-left transition-[box-shadow,background-color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                selected
+                                    ? "bg-primary-soft/55 shadow-[inset_0_0_0_2px_var(--primary)]"
+                                    : "hover:-translate-y-0.5 hover:bg-surface-muted",
+                            )}
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <h3 className="font-semibold text-text-primary">{concept.name}</h3>
+                                {selected && <StatusChip tone="info">Selected</StatusChip>}
+                            </div>
+                            <p className="mt-2 text-sm leading-5 text-text-secondary">
+                                {concept.hook_options?.[0] ?? concept.angle ?? "No hook option"}
+                            </p>
+                            <dl className="mt-4 space-y-2 text-xs">
+                                <ConceptField
+                                    label="Strategic axis"
+                                    value={concept.strategic_axis}
+                                />
+                                <ConceptField label="Buyer pain" value={concept.buyer_pain} />
+                                <ConceptField
+                                    label="Desired outcome"
+                                    value={concept.desired_outcome}
+                                />
+                                <ConceptField
+                                    label="Creator"
+                                    value={
+                                        concept.creator_persona && concept.delivery_style
+                                            ? `${concept.creator_persona} · ${concept.delivery_style}`
+                                            : (concept.creator_persona ?? concept.delivery_style)
+                                    }
+                                />
+                                <ConceptField label="Demo" value={concept.demo_mechanism} />
+                                <ConceptField label="Proof" value={concept.proof_mechanism} />
+                            </dl>
+                            <p className="mt-4 text-xs leading-5 text-text-tertiary">
+                                {concept.test_hypothesis}
+                            </p>
+                        </button>
+                    );
+                })}
+            </div>
+            <p className="mt-3 text-xs text-text-secondary">
+                The selected concept becomes the source for Campaign Pack creation.
+            </p>
+        </div>
+    );
+}
+
+function ConceptField({ label, value }: { label: string; value?: string }) {
+    return (
+        <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
+            <dt className="text-text-tertiary">{label}</dt>
+            <dd className="break-words text-text-primary">
+                {formatSystemValue(value, "Not specified")}
+            </dd>
+        </div>
+    );
+}
+
+function PreflightBlock({
+    run,
+    revisionDraft,
+    revisionSaved,
+    onRevisionChange,
+    onRevisionSave,
+}: {
+    run: PreflightRun;
+    revisionDraft: string;
+    revisionSaved: boolean;
+    onRevisionChange: (value: string) => void;
+    onRevisionSave: () => void;
+}) {
+    const requirements = run.brief_alignment_json.requirements ?? [];
+    const reason =
+        run.blockers_json[0]?.message ??
+        run.fixes_json[0]?.why ??
+        run.fixes_json[0]?.instruction ??
+        "The creator video has been compared with the current Campaign Pack.";
+    return (
+        <div className="flex flex-col gap-4">
+            <DecisionHero
+                eyebrow="UGC Preflight decision"
+                actionLabel={humanizeLabel(run.action_label)}
+                reason={reason}
+                score={run.preflight_score}
+                confidence={run.brief_alignment_json.confidence}
+                blockerCount={run.blockers_json.length}
+                effort={`${humanizeLabel(run.analysis_mode)} analysis`}
+                statusTone={decisionTone(run.action_label, run.blockers_json.length)}
+                primaryAction={
+                    run.blockers_json.length ? (
+                        <Button size="sm" onClick={() => scrollToStep("preflight-revision")}>
+                            Review required fixes
+                        </Button>
+                    ) : (
+                        <Button size="sm" onClick={() => scrollToStep("ready")}>
+                            Continue to Ready
+                        </Button>
+                    )
+                }
+                secondaryAction={
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => scrollToStep("preflight-evidence")}
+                    >
+                        Review evidence
+                    </Button>
+                }
+            />
             <AnalysisTimelineSvg
                 title="Preflight evidence timeline"
                 durationSec={30}
@@ -1361,37 +1483,131 @@ function PreflightBlock({ run }: { run: PreflightRun }) {
                     },
                 }}
             />
-            <RequirementCoverage run={run} />
-            <Fixes blockers={run.blockers_json} fixes={run.fixes_json} />
-            <div className="rounded-md bg-info-soft p-3 text-sm text-text-primary">
-                {run.revision_message}
+            <div id="preflight-evidence" className="scroll-mt-20">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-text-primary">
+                        Expected vs observed
+                    </h3>
+                    <span className="text-xs text-text-secondary">
+                        {formatSystemValue(run.brief_alignment_json.coverage ?? {})}
+                    </span>
+                </div>
+                <ExpectedObservedTable
+                    rows={requirements.map((requirement) => ({
+                        id: requirement.requirement_id,
+                        requirement: (
+                            <div>
+                                <p className="font-medium">
+                                    {humanizeLabel(requirement.requirement_id)}
+                                </p>
+                                <p className="mt-1 text-xs text-text-secondary">
+                                    {formatSystemValue(requirement.expected)}
+                                </p>
+                            </div>
+                        ),
+                        observed: (
+                            <div>
+                                <p>{formatSystemValue(requirement.observed)}</p>
+                                <p className="mt-1 text-xs text-text-secondary">
+                                    {requirement.reason}
+                                </p>
+                            </div>
+                        ),
+                        status: requirement.status,
+                        confidence: requirement.confidence,
+                        evidence: requirement.evidence_ids.length
+                            ? `${requirement.evidence_ids.length} evidence ${
+                                  requirement.evidence_ids.length === 1 ? "item" : "items"
+                              }`
+                            : "No evidence linked",
+                    }))}
+                />
             </div>
-            <div className="rounded-md border border-hairline bg-surface-soft p-3 text-sm text-text-primary">
+            <Fixes blockers={run.blockers_json} fixes={run.fixes_json} />
+            <div id="preflight-revision" className="scroll-mt-20 rounded-2xl bg-info-soft p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 className="text-sm font-semibold text-text-primary">
+                            Creator revision message
+                        </h3>
+                        <p className="mt-1 text-xs text-text-secondary">
+                            Edit the message before sharing it with the creator.
+                        </p>
+                    </div>
+                    <StatusChip tone={revisionSaved ? "ok" : "neutral"}>
+                        {revisionSaved ? "Saved locally" : "Unsaved"}
+                    </StatusChip>
+                </div>
+                <Textarea
+                    aria-label="Creator revision message"
+                    className="mt-3 min-h-28 bg-surface"
+                    value={revisionDraft}
+                    onChange={(event) => onRevisionChange(event.target.value)}
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" onClick={onRevisionSave}>
+                        Save message
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                            void navigator.clipboard.writeText(revisionDraft);
+                            toast.success("Revision message copied");
+                        }}
+                    >
+                        <Clipboard className="h-4 w-4" />
+                        Copy message
+                    </Button>
+                </div>
+            </div>
+            <div className="rounded-2xl bg-surface-soft p-3 text-sm text-text-primary">
                 Spark or paid usage remains pending until creator rights and authorization are
                 confirmed.
             </div>
-            <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigator.clipboard.writeText(run.revision_message)}
-            >
-                <Clipboard className="h-4 w-4" />
-                Copy revision message
-            </Button>
-        </ResultShell>
+        </div>
     );
 }
 
-function CampaignBriefPreview({ brief }: { brief: CampaignPackBrief }) {
+function CampaignBriefEditor({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    let brief: CampaignPackBrief;
+    try {
+        brief = JSON.parse(value) as CampaignPackBrief;
+    } catch {
+        return (
+            <div className="rounded-2xl bg-destructive-soft p-4 text-sm text-destructive">
+                Restore valid JSON in Advanced JSON to continue editing the Campaign Pack.
+            </div>
+        );
+    }
+
+    const identity = getRecordValue(brief.product_snapshot, "identity");
     const productName =
+        getRecordValue(identity, "name") ??
         getRecordValue(brief.product_snapshot, "name") ??
         getRecordValue(brief.product_snapshot, "product_name");
+
+    function updateField(section: keyof CampaignPackBrief, field: string, nextValue: string) {
+        const currentSection = brief[section];
+        const nextSection =
+            currentSection && typeof currentSection === "object" && !Array.isArray(currentSection)
+                ? { ...(currentSection as Record<string, unknown>), [field]: nextValue }
+                : { [field]: nextValue };
+        onChange(JSON.stringify({ ...brief, [section]: nextSection }, null, 2));
+    }
+
     return (
-        <div className="rounded-md border border-primary/15 bg-primary-soft/30 p-4">
+        <div className="rounded-2xl bg-primary-soft/35 p-4 sm:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-                        Generated campaign brief
+                    <p className="text-[10px] font-semibold uppercase text-primary">
+                        Structured Campaign Pack
                     </p>
                     <h3 className="mt-1 text-base font-semibold text-text-primary">
                         {formatSystemValue(productName, "Campaign Pack")}
@@ -1401,13 +1617,61 @@ function CampaignBriefPreview({ brief }: { brief: CampaignPackBrief }) {
                     Ready to review
                 </StatusChip>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-                <BriefField title="Objective" value={brief.objective} />
-                <BriefField title="Audience" value={brief.audience} />
-                <BriefField title="Angle" value={brief.angle} />
-                <BriefField title="CTA" value={brief.cta} />
+
+            <div className="grid gap-4 md:grid-cols-2">
+                <BriefEditField
+                    label="Objective"
+                    value={getRecordValue(brief.objective, "objective_type")}
+                    onChange={(nextValue) => updateField("objective", "objective_type", nextValue)}
+                />
+                <BriefEditField
+                    label="Primary action"
+                    value={getRecordValue(brief.objective, "primary_action")}
+                    onChange={(nextValue) => updateField("objective", "primary_action", nextValue)}
+                />
+                <BriefEditField
+                    label="Audience"
+                    value={getRecordValue(brief.audience, "persona_label")}
+                    onChange={(nextValue) => updateField("audience", "persona_label", nextValue)}
+                />
+                <BriefEditField
+                    label="Awareness stage"
+                    value={getRecordValue(brief.audience, "awareness_stage")}
+                    onChange={(nextValue) => updateField("audience", "awareness_stage", nextValue)}
+                />
+                <BriefEditField
+                    label="Angle"
+                    value={getRecordValue(brief.angle, "name")}
+                    onChange={(nextValue) => updateField("angle", "name", nextValue)}
+                />
+                <BriefEditField
+                    label="Promise"
+                    value={getRecordValue(brief.angle, "promise")}
+                    onChange={(nextValue) => updateField("angle", "promise", nextValue)}
+                />
+                <BriefEditField
+                    label="Mechanism"
+                    value={getRecordValue(brief.angle, "mechanism")}
+                    onChange={(nextValue) => updateField("angle", "mechanism", nextValue)}
+                />
+                <BriefEditField
+                    label="Emotional driver"
+                    value={getRecordValue(brief.angle, "emotional_driver")}
+                    onChange={(nextValue) => updateField("angle", "emotional_driver", nextValue)}
+                />
+                <BriefEditField
+                    label="CTA spoken"
+                    value={getRecordValue(brief.cta, "spoken")}
+                    onChange={(nextValue) => updateField("cta", "spoken", nextValue)}
+                />
+                <BriefEditField
+                    label="CTA overlay"
+                    value={getRecordValue(brief.cta, "overlay")}
+                    onChange={(nextValue) => updateField("cta", "overlay", nextValue)}
+                />
             </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
                 <ListBlock
                     title="Must show"
                     items={(brief.must_show ?? []).map((item) => formatBriefRequirement(item))}
@@ -1419,12 +1683,30 @@ function CampaignBriefPreview({ brief }: { brief: CampaignPackBrief }) {
     );
 }
 
+function BriefEditField({
+    label,
+    value,
+    onChange,
+}: {
+    label: string;
+    value: unknown;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
+            {label}
+            <Input
+                value={formatSystemValue(value, "")}
+                onChange={(event) => onChange(event.target.value)}
+            />
+        </label>
+    );
+}
+
 function BriefField({ title, value }: { title: string; value: unknown }) {
     return (
         <div className="rounded-md border border-hairline bg-surface p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                {title}
-            </p>
+            <p className="text-xs font-semibold uppercase text-text-tertiary">{title}</p>
             <p className="mt-1 text-sm text-text-primary">{formatSystemValue(value)}</p>
         </div>
     );
@@ -1495,36 +1777,6 @@ function VersionHistory({
                     <p className="text-sm text-text-secondary">No saved versions yet.</p>
                 )}
             </div>
-        </div>
-    );
-}
-
-function ResultShell({
-    title,
-    subtitle,
-    mode,
-    outcome = "System response",
-    children,
-}: {
-    title: string;
-    subtitle: string;
-    mode: string;
-    outcome?: string;
-    children: ReactNode;
-}) {
-    return (
-        <div className="rounded-md border border-hairline bg-surface p-4">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary-soft/45 p-4">
-                <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-                        {outcome}
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold text-text-primary">{title}</p>
-                    <p className="text-sm text-text-secondary">{subtitle}</p>
-                </div>
-                <ModeBadge mode={mode} />
-            </div>
-            <div className="flex flex-col gap-4">{children}</div>
         </div>
     );
 }
@@ -1602,48 +1854,6 @@ function SignalBlock({ dimensions }: { dimensions: Record<string, DimensionResul
                     ))
                 ) : (
                     <p className="text-sm text-text-secondary">No signals returned.</p>
-                )}
-            </div>
-        </div>
-    );
-}
-
-function RequirementCoverage({ run }: { run: PreflightRun }) {
-    const requirements = run.brief_alignment_json.requirements ?? [];
-    return (
-        <div className="rounded-md border border-hairline bg-surface-soft p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-text-primary">Requirement coverage</h3>
-                <span className="text-xs text-text-secondary">
-                    {formatSystemValue(run.brief_alignment_json.coverage ?? {})}
-                </span>
-            </div>
-            <div className="mt-3 grid gap-2">
-                {requirements.length ? (
-                    requirements.map((requirement) => (
-                        <div
-                            key={requirement.requirement_id}
-                            className="rounded-md border border-hairline bg-surface p-3 text-sm"
-                        >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="font-medium text-text-primary">
-                                    {humanizeLabel(requirement.requirement_id)}
-                                </span>
-                                <StatusChip tone={requirementTone(requirement.status)}>
-                                    {humanizeLabel(requirement.status)} · {requirement.score}
-                                </StatusChip>
-                            </div>
-                            <p className="mt-1 text-xs text-text-secondary">{requirement.reason}</p>
-                            <p className="mt-2 text-xs text-text-tertiary">
-                                Expected: {formatSystemValue(requirement.expected)}
-                            </p>
-                            <p className="mt-1 text-xs text-text-tertiary">
-                                Observed: {formatSystemValue(requirement.observed)}
-                            </p>
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-sm text-text-secondary">No requirements returned.</p>
                 )}
             </div>
         </div>
@@ -1746,7 +1956,11 @@ function parseCampaignBriefDraft(value: string): CampaignPackBrief {
     return brief;
 }
 
-function errorMessage(error: unknown) {
-    if (error instanceof Error) return error.message;
-    return "Backend workflow state could not be loaded.";
+function campaignBriefDraftError(value: string) {
+    try {
+        parseCampaignBriefDraft(value);
+        return null;
+    } catch (error) {
+        return error instanceof Error ? error.message : "Campaign Pack brief is invalid.";
+    }
 }

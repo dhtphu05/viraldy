@@ -1,6 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { Bell } from "lucide-react";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { useState } from "react";
 
 const items = [
     {
@@ -27,6 +28,8 @@ const items = [
 ];
 
 export function NotificationPopover() {
+    const [allRead, setAllRead] = useState(false);
+
     return (
         <Popover>
             <PopoverTrigger asChild>
@@ -36,14 +39,21 @@ export function NotificationPopover() {
                     className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                     <Bell className="h-4 w-4" />
-                    <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" />
+                    {!allRead && (
+                        <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" />
+                    )}
                 </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[340px] p-0">
                 <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
                     <p className="text-sm font-semibold text-text-primary">Notifications</p>
-                    <button className="text-xs text-text-tertiary hover:text-text-primary">
-                        Mark all read
+                    <button
+                        type="button"
+                        disabled={allRead}
+                        onClick={() => setAllRead(true)}
+                        className="text-xs text-text-tertiary hover:text-text-primary disabled:text-text-disabled"
+                    >
+                        {allRead ? "All read" : "Mark all read"}
                     </button>
                 </div>
                 <ul className="max-h-[360px] divide-y divide-hairline overflow-y-auto">
