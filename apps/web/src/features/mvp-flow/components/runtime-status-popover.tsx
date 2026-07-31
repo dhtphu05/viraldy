@@ -5,6 +5,7 @@ import type { AiReadiness } from "@/shared/api/system";
 import { Button } from "@/shared/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { deriveRuntimeStatus } from "@/features/mvp-flow/lib/runtime-status";
 
 export function RuntimeStatusPopover({
     backendConfigured,
@@ -19,22 +20,21 @@ export function RuntimeStatusPopover({
     readiness?: AiReadiness;
     workspaceName?: string;
 }) {
-    const failed = Boolean(error);
-    const status = failed
-        ? "Connection issue"
-        : loading
-          ? "Connecting"
-          : backendConfigured
-            ? readiness?.configured
-                ? "Live runtime"
-                : "Demo analysis"
-            : "Not connected";
-    const tone = failed ? "destructive" : loading ? "info" : readiness?.configured ? "ok" : "warn";
+    const runtime = deriveRuntimeStatus({
+        backendConfigured,
+        loading,
+        error,
+        readiness,
+    });
 
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="secondary" size="sm" aria-label={`Runtime status: ${status}`}>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-label={`Runtime status: ${runtime.label}`}
+                >
                     {loading ? (
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                     ) : (
@@ -43,7 +43,13 @@ export function RuntimeStatusPopover({
                     Runtime
                     <span
                         className={`h-2 w-2 rounded-full ${
-                            failed ? "bg-destructive" : readiness?.configured ? "bg-ok" : "bg-warn"
+                            runtime.tone === "destructive"
+                                ? "bg-destructive"
+                                : runtime.active
+                                  ? "bg-ok"
+                                  : runtime.tone === "info"
+                                    ? "bg-info"
+                                    : "bg-warn"
                         }`}
                         aria-hidden
                     />
@@ -60,7 +66,7 @@ export function RuntimeStatusPopover({
                             Connection and analysis provenance for this production run.
                         </p>
                     </div>
-                    <StatusChip tone={tone}>{status}</StatusChip>
+                    <StatusChip tone={runtime.tone}>{runtime.label}</StatusChip>
                 </div>
 
                 <dl className="mt-4 divide-y divide-divider text-sm">
@@ -77,11 +83,7 @@ export function RuntimeStatusPopover({
                     />
                     <RuntimeRow
                         label="Provider"
-                        value={
-                            readiness?.configured
-                                ? humanizeLabel(readiness.provider)
-                                : "Not connected"
-                        }
+                        value={runtime.provider ? humanizeLabel(runtime.provider) : "Not connected"}
                     />
                 </dl>
 
@@ -89,21 +91,28 @@ export function RuntimeStatusPopover({
                     role="status"
                     aria-live="polite"
                     className={`mt-4 flex gap-2 rounded-xl p-3 text-xs leading-5 ${
-                        failed
+                        runtime.tone === "destructive"
                             ? "bg-destructive-soft text-destructive"
-                            : readiness?.configured
+                            : runtime.active
                               ? "bg-ok-soft text-text-primary"
-                              : "bg-warn-soft text-text-primary"
+                              : runtime.tone === "info"
+                                ? "bg-info-soft text-text-primary"
+                                : "bg-warn-soft text-text-primary"
                     }`}
                 >
-                    {failed ? (
+                    {runtime.tone === "destructive" ? (
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                    ) : readiness?.configured ? (
+                    ) : runtime.active ? (
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-hidden />
                     ) : (
-                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden />
+                        <Info
+                            className={`mt-0.5 h-4 w-4 shrink-0 ${
+                                runtime.tone === "info" ? "text-info" : "text-warn"
+                            }`}
+                            aria-hidden
+                        />
                     )}
-                    <span>{runtimeMessage({ backendConfigured, loading, error, readiness })}</span>
+                    <span>{runtime.message}</span>
                 </div>
             </PopoverContent>
         </Popover>
@@ -119,27 +128,4 @@ function RuntimeRow({ label, value }: { label: string; value: string }) {
             </dd>
         </div>
     );
-}
-
-function runtimeMessage({
-    backendConfigured,
-    loading,
-    error,
-    readiness,
-}: {
-    backendConfigured: boolean;
-    loading: boolean;
-    error: unknown;
-    readiness?: AiReadiness;
-}) {
-    if (error) return error instanceof Error ? error.message : "The backend could not be reached.";
-    if (!backendConfigured) return "Connect the backend to use workspace products and media.";
-    if (loading) return "Loading workspace data and analysis readiness.";
-    if (readiness?.configured) return "Live analysis is configured for this workflow.";
-    if (readiness?.missing.length) {
-        return `Demo analysis is active. Missing: ${readiness.missing
-            .map((item) => humanizeLabel(item))
-            .join(", ")}.`;
-    }
-    return "Demo analysis is active until an AI provider is connected.";
 }
