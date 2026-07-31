@@ -70,7 +70,6 @@ class AiModelRunResponse(BaseModel):
     input_summary_json: dict[str, object]
     output_summary_json: dict[str, object]
     usage_json: dict[str, object]
-    estimated_cost: Decimal | None
     latency_ms: int | None
     http_status: int | None
     provider_request_id: str | None
@@ -81,3 +80,14 @@ class AiModelRunResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AiUsageAggregateResponse(BaseModel):
+    completed_run_count: int = Field(ge=0)
+    usage_reported_run_count: int = Field(ge=0)
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    estimated_cost: Decimal | None = Field(default=None, ge=0)
+    cost_estimate_complete: bool

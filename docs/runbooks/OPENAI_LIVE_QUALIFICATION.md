@@ -53,7 +53,7 @@ Required:
 - Python 3.12 and `uv`;
 - backend dependencies installed;
 - PostgreSQL, Redis, private S3-compatible storage, API, worker, and Beat;
-- migration head, including `0012_openai_provenance`;
+- migration head, including `0013_media_request_cache`;
 - `ffmpeg` or an explicit seller-owned MP4 for application smoke;
 - authenticated workspace access with the required operation permissions;
 - a real OpenAI key held only by the backend;

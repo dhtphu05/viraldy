@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 from uuid import UUID, uuid4
@@ -9,7 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from viraldy.modules.ai_gateway.models import AiModelRunModel
+from viraldy.modules.ai_gateway.request_identity import structured_request_hash
 from viraldy.platform.clock.utc import utc_now
+
+
+@dataclass(frozen=True, slots=True)
+class AiUsageRecord:
+    usage_json: dict[str, object]
+    estimated_cost: Decimal | None
 
 
 class AiModelRunRepository:
@@ -101,6 +109,27 @@ class AiModelRunRepository:
             AiModelRunModel.id == model_run_id,
         )
         return cast(AiModelRunModel | None, await self._session.scalar(statement))
+
+    async def list_completed_for_usage(
+        self,
+        workspace_id: UUID,
+    ) -> list[AiUsageRecord]:
+        statement = (
+            select(AiModelRunModel.usage_json, AiModelRunModel.estimated_cost)
+            .where(
+                AiModelRunModel.workspace_id == workspace_id,
+                AiModelRunModel.status == "completed",
+            )
+            .order_by(AiModelRunModel.created_at.asc(), AiModelRunModel.id.asc())
+        )
+        rows = (await self._session.execute(statement)).all()
+        return [
+            AiUsageRecord(
+                usage_json=cast(dict[str, object], row[0]),
+                estimated_cost=cast(Decimal | None, row[1]),
+            )
+            for row in rows
+        ]
 
     async def complete(
         self,
@@ -209,6 +238,27 @@ class SyncAiModelRunRepository:
         self._session.flush()
         return run
 
+    def list_completed_for_usage(
+        self,
+        workspace_id: UUID,
+    ) -> list[AiUsageRecord]:
+        statement = (
+            select(AiModelRunModel.usage_json, AiModelRunModel.estimated_cost)
+            .where(
+                AiModelRunModel.workspace_id == workspace_id,
+                AiModelRunModel.status == "completed",
+            )
+            .order_by(AiModelRunModel.created_at.asc(), AiModelRunModel.id.asc())
+        )
+        rows = self._session.execute(statement).all()
+        return [
+            AiUsageRecord(
+                usage_json=cast(dict[str, object], row[0]),
+                estimated_cost=cast(Decimal | None, row[1]),
+            )
+            for row in rows
+        ]
+
     def complete(
         self,
         run: AiModelRunModel,
@@ -233,6 +283,18 @@ class SyncAiModelRunRepository:
         run.provider_request_id = provider_request_id
         run.latency_ms = latency_ms
         run.completed_at = utc_now()
+        self._session.flush()
+        return run
+
+    def update_identity(
+        self,
+        run: AiModelRunModel,
+        *,
+        input_hash: str,
+        request_hash: str,
+    ) -> AiModelRunModel:
+        run.input_hash = input_hash
+        run.request_hash = request_hash
         self._session.flush()
         return run
 
@@ -286,6 +348,14 @@ def _run(
     request_id: str | None = None,
 ) -> AiModelRunModel:
     run_id = uuid4()
+    canonical_input_hash = input_hash or request_hash
+    canonical_request_hash = structured_request_hash(
+        operation=operation or capability,
+        model=model,
+        prompt_version=prompt_version,
+        schema_version=schema_version or response_schema_version,
+        input_hash=canonical_input_hash,
+    )
     return AiModelRunModel(
         id=run_id,
         workspace_id=workspace_id,
@@ -307,8 +377,8 @@ def _run(
         attempt_count=attempt_count,
         repair_attempt_count=repair_attempt_count,
         request_id=request_id or str(run_id),
-        request_hash=request_hash,
-        input_hash=input_hash or request_hash,
+        request_hash=canonical_request_hash,
+        input_hash=canonical_input_hash,
         input_summary_json=input_summary,
         output_summary_json={},
         usage_json={},

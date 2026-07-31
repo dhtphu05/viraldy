@@ -57,24 +57,55 @@ class SyncMediaAnalysisRepository:
         provider: str,
         model_version: str | None,
         pipeline_version: str,
+        analysis_request_hash: str | None = None,
     ) -> list[EvidenceItemModel]:
+        filters = [
+            EvidenceItemModel.workspace_id == workspace_id,
+            EvidenceItemModel.asset_version_id == asset_version_id,
+            EvidenceItemModel.provider == provider,
+            EvidenceItemModel.model_version == model_version,
+            EvidenceItemModel.pipeline_version == pipeline_version,
+            EvidenceItemModel.evidence_schema_version == EVIDENCE_SCHEMA_VERSION,
+        ]
+        if analysis_request_hash is not None:
+            filters.append(EvidenceItemModel.analysis_request_hash == analysis_request_hash)
         return list(
             self._session.execute(
                 select(EvidenceItemModel)
-                .where(
-                    EvidenceItemModel.workspace_id == workspace_id,
-                    EvidenceItemModel.asset_version_id == asset_version_id,
-                    EvidenceItemModel.provider == provider,
-                    EvidenceItemModel.model_version == model_version,
-                    EvidenceItemModel.pipeline_version == pipeline_version,
-                    EvidenceItemModel.evidence_schema_version == EVIDENCE_SCHEMA_VERSION,
-                )
+                .where(*filters)
                 .order_by(
                     EvidenceItemModel.start_ms.asc().nulls_last(),
                     EvidenceItemModel.created_at.asc(),
                 )
             ).scalars()
         )
+
+    def get_reusable_observation_inputs(
+        self,
+        workspace_id: UUID,
+        asset_version_id: UUID,
+        provider: str,
+        model_version: str | None,
+        pipeline_version: str,
+    ) -> tuple[dict[str, object], dict[str, object]] | None:
+        rows = self._session.execute(
+            select(MediaArtifactModel.artifact_type, MediaArtifactModel.payload_json).where(
+                MediaArtifactModel.workspace_id == workspace_id,
+                MediaArtifactModel.asset_version_id == asset_version_id,
+                MediaArtifactModel.provider == provider,
+                MediaArtifactModel.model_version == model_version,
+                MediaArtifactModel.pipeline_version == pipeline_version,
+                MediaArtifactModel.artifact_type.in_(("transcript", "ocr")),
+            )
+        ).all()
+        payloads = {
+            artifact_type: payload for artifact_type, payload in rows if isinstance(payload, dict)
+        }
+        transcript = payloads.get("transcript")
+        ocr = payloads.get("ocr")
+        if transcript is None or ocr is None:
+            return None
+        return transcript, ocr
 
     def replace_artifacts_and_evidence(
         self,
@@ -129,6 +160,7 @@ class SyncMediaAnalysisRepository:
                 ),
                 observation_id=item.get("observation_id"),
                 identity_hash=item.get("identity_hash"),
+                analysis_request_hash=item.get("analysis_request_hash"),
                 start_ms=item.get("start_ms"),
                 end_ms=item.get("end_ms"),
                 frame_storage_key=item.get("frame_storage_key"),

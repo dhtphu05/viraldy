@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from contextlib import AbstractContextManager, nullcontext
 from typing import cast
+from uuid import UUID
 
 import structlog
 from openai import (
@@ -46,6 +48,12 @@ from viraldy.modules.ai_gateway.structured_output import (
     validate_structured_output,
 )
 from viraldy.modules.ai_gateway.usage import extract_provider_usage
+from viraldy.modules.ai_gateway.workspace_limiter import (
+    WorkspaceConcurrencyBusy,
+    WorkspaceLimiterUnavailable,
+    WorkspaceRequestLimiter,
+    redis_workspace_request_limiter,
+)
 from viraldy.platform.config.settings import Settings
 
 logger = structlog.get_logger(__name__)
@@ -54,8 +62,16 @@ logger = structlog.get_logger(__name__)
 class OpenAINativeProvider:
     provider_name = "openai"
 
-    def __init__(self, settings: Settings, client: OpenAI | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: OpenAI | None = None,
+        workspace_limiter: WorkspaceRequestLimiter | None = None,
+    ) -> None:
         self._settings = settings
+        self._workspace_limiter = workspace_limiter or redis_workspace_request_limiter(
+            settings.redis_url
+        )
         if client is not None:
             self._client = client
             return
@@ -74,6 +90,32 @@ class OpenAINativeProvider:
         )
 
     def generate_structured(
+        self, request: StructuredGenerationRequest
+    ) -> StructuredGenerationResult:
+        try:
+            with self._workspace_slot(
+                request.workspace_id,
+                repair_attempts=request.max_repair_attempts,
+            ):
+                return self._generate_structured(request)
+        except WorkspaceConcurrencyBusy as exc:
+            raise _provider_error(
+                ProviderErrorCode.WORKSPACE_BUSY,
+                "This workspace already has the maximum number of OpenAI requests in progress.",
+                operation=request.operation,
+                endpoint_family=ProviderEndpointFamily.RESPONSES,
+                retryable=True,
+            ) from exc
+        except WorkspaceLimiterUnavailable as exc:
+            raise _provider_error(
+                ProviderErrorCode.GUARDRAIL_UNAVAILABLE,
+                "The OpenAI concurrency guardrail is unavailable; the request was not sent.",
+                operation=request.operation,
+                endpoint_family=ProviderEndpointFamily.RESPONSES,
+                retryable=True,
+            ) from exc
+
+    def _generate_structured(
         self, request: StructuredGenerationRequest
     ) -> StructuredGenerationResult:
         messages = _response_input(
@@ -214,6 +256,8 @@ class OpenAINativeProvider:
                 refusal=None,
                 incomplete_reason=None,
                 repair_attempt_count=repair_attempt_count,
+                input_hash=request.input_hash,
+                request_hash=request.request_hash,
             )
 
     def transcribe_audio(self, request: AudioTranscriptionRequest) -> AudioTranscriptionResult:
@@ -225,6 +269,27 @@ class OpenAINativeProvider:
                 endpoint_family=ProviderEndpointFamily.AUDIO_TRANSCRIPTIONS,
             )
 
+        try:
+            with self._workspace_slot(request.workspace_id, repair_attempts=0):
+                return self._transcribe_audio(request)
+        except WorkspaceConcurrencyBusy as exc:
+            raise _provider_error(
+                ProviderErrorCode.WORKSPACE_BUSY,
+                "This workspace already has the maximum number of OpenAI requests in progress.",
+                operation=request.operation,
+                endpoint_family=ProviderEndpointFamily.AUDIO_TRANSCRIPTIONS,
+                retryable=True,
+            ) from exc
+        except WorkspaceLimiterUnavailable as exc:
+            raise _provider_error(
+                ProviderErrorCode.GUARDRAIL_UNAVAILABLE,
+                "The OpenAI concurrency guardrail is unavailable; the request was not sent.",
+                operation=request.operation,
+                endpoint_family=ProviderEndpointFamily.AUDIO_TRANSCRIPTIONS,
+                retryable=True,
+            ) from exc
+
+    def _transcribe_audio(self, request: AudioTranscriptionRequest) -> AudioTranscriptionResult:
         started = time.monotonic()
         try:
             with request.audio_path.open("rb") as audio_file:
@@ -284,6 +349,29 @@ class OpenAINativeProvider:
             duration_ms=round(response.duration * 1000),
             full_text=response.text,
             segments=segments,
+            input_hash=request.input_hash,
+            request_hash=request.request_hash,
+        )
+
+    def _workspace_slot(
+        self,
+        workspace_id: UUID | None,
+        *,
+        repair_attempts: int,
+    ) -> AbstractContextManager[None]:
+        if workspace_id is None:
+            return nullcontext()
+        request_attempts = self._settings.openai_max_retries + 1
+        response_attempts = repair_attempts + 1
+        lease_seconds = (
+            self._settings.openai_request_timeout_seconds * request_attempts * response_attempts
+            + 30
+        )
+        return self._workspace_limiter.slot(
+            workspace_id,
+            max_parallel=self._settings.openai_max_parallel_requests_per_workspace,
+            wait_timeout_seconds=self._settings.openai_request_timeout_seconds,
+            lease_seconds=lease_seconds,
         )
 
 

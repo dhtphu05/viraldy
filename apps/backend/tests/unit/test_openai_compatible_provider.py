@@ -76,6 +76,7 @@ def _request() -> StructuredGenerationRequest:
         schema_version="test_schema_v1",
         request_id="test-request",
         input_hash="a" * 64,
+        request_hash="b" * 64,
         max_repair_attempts=1,
     )
 
@@ -95,6 +96,8 @@ def test_mock_compatible_provider_validates_output_and_records_chat_family() -> 
     assert result.provider_request_id == "mock-provider-request"
     assert result.total_tokens == 14
     assert result.repair_attempt_count == 0
+    assert result.input_hash == "a" * 64
+    assert result.request_hash == "b" * 64
     assert client.requests[0]["response_format"]["type"] == "json_schema"
 
 

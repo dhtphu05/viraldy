@@ -71,7 +71,11 @@ def test_openai_defaults_and_operation_model_routing() -> None:
     assert settings.resolve_openai_model("unknown_operation") == "gpt-5"
 
 
-def test_live_native_openai_requires_openai_key() -> None:
+def test_live_native_openai_requires_openai_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("openai_api_key", raising=False)
     with pytest.raises(ValidationError, match="OPENAI_API_KEY"):
         Settings(
             _env_file=None,

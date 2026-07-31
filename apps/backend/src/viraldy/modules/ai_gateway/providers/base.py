@@ -5,8 +5,9 @@ from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, Protocol, runtime_checkable
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from viraldy.modules.ai_gateway.usage import ProviderUsage
 
@@ -16,6 +17,8 @@ class ProviderErrorCode(StrEnum):
     UNAUTHORIZED = "OPENAI_UNAUTHORIZED"
     MODEL_NOT_AVAILABLE = "OPENAI_MODEL_NOT_AVAILABLE"
     RATE_LIMITED = "OPENAI_RATE_LIMITED"
+    WORKSPACE_BUSY = "OPENAI_WORKSPACE_BUSY"
+    GUARDRAIL_UNAVAILABLE = "OPENAI_GUARDRAIL_UNAVAILABLE"
     TIMEOUT = "OPENAI_TIMEOUT"
     REFUSED = "OPENAI_REFUSED"
     INCOMPLETE = "OPENAI_INCOMPLETE"
@@ -84,9 +87,17 @@ class StructuredGenerationRequest(BaseModel):
     max_output_tokens: int | None = Field(default=None, ge=1)
     request_id: str = Field(min_length=1, max_length=255)
     input_hash: str = Field(min_length=1, max_length=128)
+    request_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    workspace_id: UUID | None = None
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
     output_validator: OutputValidator | None = Field(default=None, exclude=True, repr=False)
     max_repair_attempts: Literal[0, 1] = 1
+
+    @model_validator(mode="after")
+    def require_request_identity_for_workspace(self) -> StructuredGenerationRequest:
+        if self.workspace_id is not None and self.request_hash is None:
+            raise ValueError("request_hash is required for workspace-scoped requests")
+        return self
 
 
 class StructuredGenerationResult(BaseModel):
@@ -107,6 +118,8 @@ class StructuredGenerationResult(BaseModel):
     refusal: str | None = None
     incomplete_reason: str | None = None
     repair_attempt_count: int = Field(ge=0, le=1)
+    input_hash: str | None = Field(default=None, min_length=1, max_length=128)
+    request_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
     @property
     def input_tokens(self) -> int | None:
@@ -133,6 +146,8 @@ class AudioTranscriptionRequest(BaseModel):
     model: str = Field(min_length=1)
     request_id: str = Field(min_length=1, max_length=255)
     input_hash: str = Field(min_length=1, max_length=128)
+    request_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    workspace_id: UUID | None = None
     language: str | None = Field(default=None, min_length=2, max_length=35)
     prompt: str | None = Field(default=None, max_length=1000)
     response_format: Literal["verbose_json"] = "verbose_json"
@@ -140,6 +155,12 @@ class AudioTranscriptionRequest(BaseModel):
         default_factory=_default_timestamp_granularities, min_length=1
     )
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def require_request_identity_for_workspace(self) -> AudioTranscriptionRequest:
+        if self.workspace_id is not None and self.request_hash is None:
+            raise ValueError("request_hash is required for workspace-scoped requests")
+        return self
 
 
 class AudioTranscriptSegment(BaseModel):
@@ -165,6 +186,8 @@ class AudioTranscriptionResult(BaseModel):
     duration_ms: int = Field(ge=0)
     full_text: str
     segments: list[AudioTranscriptSegment]
+    input_hash: str | None = Field(default=None, min_length=1, max_length=128)
+    request_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class ProviderErrorInfo(BaseModel):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess  # nosec B404
 import tempfile
@@ -13,6 +14,8 @@ from typing import Any, TypeVar, cast
 from uuid import UUID
 
 import structlog
+from PIL import Image
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,7 +25,16 @@ from viraldy.modules.ai_gateway.public import (
     AiModelRunModel,
 )
 from viraldy.modules.ai_gateway.repository import SyncAiModelRunRepository
+from viraldy.modules.ai_gateway.request_identity import (
+    stable_json_hash,
+    structured_request_hash,
+)
 from viraldy.modules.ai_gateway.usage import ProviderUsage
+from viraldy.modules.ai_gateway.workspace_limiter import (
+    WorkspaceConcurrencyBusy,
+    WorkspaceLimiterUnavailable,
+    redis_workspace_request_limiter,
+)
 from viraldy.modules.assets.public import AssetVersionModel, AssetVersionSnapshot
 from viraldy.modules.creative_domain.schema_versions import (
     EVIDENCE_SCHEMA_VERSION,
@@ -37,15 +49,16 @@ from viraldy.modules.media_analysis.provider import (
     ProviderCallMetadata,
     SceneContract,
     TranscriptContract,
+    bounded_transcript_payload,
 )
 from viraldy.modules.media_analysis.repository import SyncMediaAnalysisRepository
-from viraldy.modules.products.public import SyncProductQueries
+from viraldy.modules.products.public import ProductContextSnapshot, SyncProductQueries
 from viraldy.platform.config.settings import Settings
 from viraldy.platform.storage.ports import StoragePort
 from viraldy.platform.storage.s3 import S3StorageAdapter
 from viraldy.shared.errors.base import AppError
 
-MEDIA_PIPELINE_VERSION = "media_pipeline_v1"
+MEDIA_PIPELINE_VERSION = "media_pipeline_v2_scene_cost_controls"
 MEDIA_ANALYSIS_PROMPT_VERSION = "media_analysis_prompt_v1"
 MEDIA_ANALYSIS_SCHEMA_VERSION = "media_analysis_schema_v1"
 SUPPORTED_CONTAINERS = {"mov,mp4,m4a,3gp,3g2,mj2", "mp4", "mov"}
@@ -186,21 +199,68 @@ class SyncMediaEvidencePipeline:
     def _process_live(
         self, snapshot: AssetVersionSnapshot, run_type: str, processing_job_id: UUID | None
     ) -> MediaEvidencePipelineResult:
+        product_snapshot = self._product_context_snapshot(snapshot)
+        claim_hash = _media_analysis_claim_hash(
+            snapshot,
+            self._settings,
+            product_context_version=(
+                product_snapshot.product_context_version if product_snapshot is not None else None
+            ),
+        )
+        lease_seconds = (
+            self._settings.openai_request_timeout_seconds
+            * (self._settings.openai_max_retries + 1)
+            * 4
+            + 120
+        )
+        limiter = redis_workspace_request_limiter(self._settings.redis_url)
+        try:
+            with limiter.named_slot(
+                (f"media-analysis:workspace:{snapshot.workspace_id}" f":request:{claim_hash}"),
+                max_parallel=1,
+                wait_timeout_seconds=min(
+                    float(self._settings.job_stale_after_seconds),
+                    lease_seconds,
+                ),
+                lease_seconds=lease_seconds,
+            ):
+                return self._process_live_claimed(
+                    snapshot,
+                    run_type,
+                    processing_job_id,
+                    product_snapshot,
+                )
+        except WorkspaceConcurrencyBusy as exc:
+            raise AppError(
+                "OPENAI_WORKSPACE_BUSY",
+                "An identical media analysis is already in progress.",
+                status_code=429,
+            ) from exc
+        except WorkspaceLimiterUnavailable as exc:
+            raise AppError(
+                "OPENAI_GUARDRAIL_UNAVAILABLE",
+                "The media-analysis concurrency guardrail is unavailable; no request was sent.",
+                status_code=503,
+            ) from exc
+
+    def _process_live_claimed(
+        self,
+        snapshot: AssetVersionSnapshot,
+        run_type: str,
+        processing_job_id: UUID | None,
+        product_snapshot: ProductContextSnapshot | None,
+    ) -> MediaEvidencePipelineResult:
         provider_name = self._settings.ai_provider
         model_version = (
             self._settings.resolve_openai_model("media_observation", vision=True)
             if provider_name == "openai"
             else self._settings.ai_vision_model or self._settings.ai_text_model or "live"
         )
-        reusable = self._repository.list_reusable_evidence(
-            snapshot.workspace_id,
-            snapshot.asset_version_id,
-            provider_name,
-            model_version,
-            MEDIA_PIPELINE_VERSION,
+        product_context = (
+            product_snapshot.product_context.model_dump(mode="json")
+            if product_snapshot is not None
+            else None
         )
-        if reusable:
-            return MediaEvidencePipelineResult(reusable, None)
         prefix = f"viraldy-{processing_job_id or snapshot.asset_version_id}-"
         with tempfile.TemporaryDirectory(prefix=prefix) as temp_dir:
             work_dir = Path(temp_dir)
@@ -213,12 +273,22 @@ class SyncMediaEvidencePipeline:
 
             metadata = self.probe_local_file(source_path)
             self._update_version_metadata(snapshot.asset_version_id, metadata)
+            duration_ms = int(cast(int, metadata["duration_ms"]))
             has_audio = int(cast(int, metadata.get("audio_stream_count") or 0)) > 0
+            scenes = _detect_scenes(source_path, duration_ms)
 
             thumbnail_path = work_dir / "thumbnail.jpg"
             audio_path = work_dir / "audio.wav"
             frame_dir = work_dir / "frames"
             frame_dir.mkdir()
+            required_timestamps = tuple(
+                evidence.start_ms
+                for evidence in self._repository.list_evidence(
+                    snapshot.workspace_id,
+                    snapshot.asset_version_id,
+                )
+                if evidence.frame_storage_key is not None and evidence.start_ms is not None
+            )
             _run_ffmpeg(
                 ["-ss", "0.5", "-i", str(source_path), "-frames:v", "1", str(thumbnail_path)]
             )
@@ -239,12 +309,171 @@ class SyncMediaEvidencePipeline:
             frame_paths = _sample_frames(
                 source_path,
                 frame_dir,
-                int(cast(int, metadata["duration_ms"])),
+                duration_ms,
                 snapshot.workspace_id,
                 snapshot.asset_id,
                 snapshot.asset_version_id,
+                scenes=scenes,
+                max_frames=(
+                    self._settings.openai_max_frames_per_video
+                    if self._settings.ai_provider == "openai"
+                    else 30
+                ),
+                max_long_edge=self._settings.openai_max_frame_long_edge,
+                required_timestamps=required_timestamps,
             )
+            persisted_inputs = self._repository.get_reusable_observation_inputs(
+                snapshot.workspace_id,
+                snapshot.asset_version_id,
+                provider_name,
+                model_version,
+                MEDIA_PIPELINE_VERSION,
+            )
+            if persisted_inputs is not None:
+                try:
+                    cached_transcript = TranscriptContract.model_validate(persisted_inputs[0])
+                    cached_ocr = OcrContract.model_validate(persisted_inputs[1])
+                except ValidationError:
+                    cached_transcript = None
+                    cached_ocr = None
+                if cached_transcript is not None and cached_ocr is not None:
+                    cached_request_hash = _media_analysis_request_hash(
+                        snapshot,
+                        self._settings,
+                        product_context_version=(
+                            product_snapshot.product_context_version
+                            if product_snapshot is not None
+                            else None
+                        ),
+                        product_context=product_context,
+                        metadata=metadata,
+                        scenes=scenes,
+                        frame_paths=frame_paths,
+                        audio_path=audio_path if has_audio else None,
+                        transcript=cached_transcript,
+                        ocr=cached_ocr,
+                    )
+                    reusable = self._repository.list_reusable_evidence(
+                        snapshot.workspace_id,
+                        snapshot.asset_version_id,
+                        provider_name,
+                        model_version,
+                        MEDIA_PIPELINE_VERSION,
+                        cached_request_hash,
+                    )
+                    if reusable:
+                        return MediaEvidencePipelineResult(reusable, None)
 
+            provider = LiveAnalysisProvider(self._settings)
+            if has_audio:
+                transcript, transcript_run_id = self._tracked_provider_call(
+                    snapshot,
+                    processing_job_id,
+                    "audio_transcription",
+                    (
+                        self._settings.openai_transcription_model
+                        if self._settings.ai_provider == "openai"
+                        else self._settings.asr_model or "asr"
+                    ),
+                    {
+                        "asset_version_id": str(snapshot.asset_version_id),
+                        "audio_artifact": "audio.wav",
+                        "run_type": run_type,
+                    },
+                    lambda: provider.transcribe_audio_with_response(
+                        audio_path,
+                        request_id=str(processing_job_id or snapshot.asset_version_id),
+                        workspace_id=snapshot.workspace_id,
+                        source_filename=snapshot.original_filename,
+                    ),
+                )
+            else:
+                transcript = TranscriptContract(segments=[], full_text="")
+                transcript_run_id = None
+            if self._settings.ocr_provider == "vision" and self._settings.ai_provider != "openai":
+                ocr, ocr_run_id = self._tracked_provider_call(
+                    snapshot,
+                    processing_job_id,
+                    "visual_ocr",
+                    self._settings.ai_vision_model or "vision",
+                    {
+                        "asset_version_id": str(snapshot.asset_version_id),
+                        "frame_count": len(frame_paths[:8]),
+                        "run_type": run_type,
+                    },
+                    lambda: provider.extract_ocr_with_response(
+                        frame_paths,
+                        product_context,
+                        source_filename=snapshot.original_filename,
+                    ),
+                )
+            else:
+                ocr = provider.extract_ocr(
+                    frame_paths,
+                    product_context,
+                    source_filename=snapshot.original_filename,
+                )
+                ocr_run_id = None
+
+            analysis_request_hash = _media_analysis_request_hash(
+                snapshot,
+                self._settings,
+                product_context_version=(
+                    product_snapshot.product_context_version
+                    if product_snapshot is not None
+                    else None
+                ),
+                product_context=product_context,
+                metadata=metadata,
+                scenes=scenes,
+                frame_paths=frame_paths,
+                audio_path=audio_path if has_audio else None,
+                transcript=transcript,
+                ocr=ocr,
+            )
+            reusable = self._repository.list_reusable_evidence(
+                snapshot.workspace_id,
+                snapshot.asset_version_id,
+                provider_name,
+                model_version,
+                MEDIA_PIPELINE_VERSION,
+                analysis_request_hash,
+            )
+            if reusable:
+                return MediaEvidencePipelineResult(reusable, None)
+
+            observations, vision_run_id = self._tracked_provider_call(
+                snapshot,
+                processing_job_id,
+                "visual_observations",
+                (
+                    self._settings.resolve_openai_model(
+                        "media_observation",
+                        vision=True,
+                    )
+                    if self._settings.ai_provider == "openai"
+                    else self._settings.ai_vision_model or "vision"
+                ),
+                {
+                    "asset_version_id": str(snapshot.asset_version_id),
+                    "frame_count": len(frame_paths),
+                    "transcript_segments": len(transcript.segments),
+                    "ocr_segments": len(ocr.segments),
+                    "run_type": run_type,
+                },
+                lambda: provider.extract_visual_observations_with_response(
+                    frame_paths,
+                    transcript,
+                    ocr,
+                    product_context,
+                    int(cast(int, metadata["duration_ms"])),
+                    workspace_id=snapshot.workspace_id,
+                    asset_id=snapshot.asset_id,
+                    asset_version_id=snapshot.asset_version_id,
+                    source_filename=snapshot.original_filename,
+                    request_id=str(processing_job_id or snapshot.asset_version_id),
+                ),
+            )
             base_key = (
                 f"workspaces/{snapshot.workspace_id}/assets/{snapshot.asset_id}"
                 f"/versions/{snapshot.asset_version_id}/artifacts"
@@ -257,103 +486,14 @@ class SyncMediaEvidencePipeline:
                 if has_audio and audio_key is not None:
                     uploaded_keys.append(audio_key)
                     self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
-                uploaded_frames: list[tuple[int, Path, str]] = []
-                for timestamp_ms, path, storage_key in frame_paths:
+                for _, path, storage_key in frame_paths:
                     uploaded_keys.append(storage_key)
                     self._storage.upload_file(str(path), storage_key, "image/jpeg")
-                    uploaded_frames.append((timestamp_ms, path, storage_key))
-
-                provider = LiveAnalysisProvider(self._settings)
-                if has_audio:
-                    transcript, transcript_run_id = self._tracked_provider_call(
-                        snapshot,
-                        processing_job_id,
-                        "audio_transcription",
-                        (
-                            self._settings.openai_transcription_model
-                            if self._settings.ai_provider == "openai"
-                            else self._settings.asr_model or "asr"
-                        ),
-                        {
-                            "asset_version_id": str(snapshot.asset_version_id),
-                            "audio_artifact": "audio.wav",
-                            "run_type": run_type,
-                        },
-                        lambda: provider.transcribe_audio_with_response(
-                            audio_path,
-                            request_id=str(processing_job_id or snapshot.asset_version_id),
-                            source_filename=snapshot.original_filename,
-                        ),
-                    )
-                else:
-                    transcript = TranscriptContract(segments=[], full_text="")
-                    transcript_run_id = None
-                if (
-                    self._settings.ocr_provider == "vision"
-                    and self._settings.ai_provider != "openai"
-                ):
-                    product_context = self._product_context_json(snapshot)
-                    ocr, ocr_run_id = self._tracked_provider_call(
-                        snapshot,
-                        processing_job_id,
-                        "visual_ocr",
-                        self._settings.ai_vision_model or "vision",
-                        {
-                            "asset_version_id": str(snapshot.asset_version_id),
-                            "frame_count": len(uploaded_frames[:8]),
-                            "run_type": run_type,
-                        },
-                        lambda: provider.extract_ocr_with_response(
-                            uploaded_frames,
-                            product_context,
-                            source_filename=snapshot.original_filename,
-                        ),
-                    )
-                else:
-                    ocr = provider.extract_ocr(
-                        uploaded_frames,
-                        self._product_context_json(snapshot),
-                        source_filename=snapshot.original_filename,
-                    )
-                    ocr_run_id = None
-                scenes = _detect_scenes(int(cast(int, metadata["duration_ms"])))
-                observations, vision_run_id = self._tracked_provider_call(
-                    snapshot,
-                    processing_job_id,
-                    "visual_observations",
-                    (
-                        self._settings.resolve_openai_model(
-                            "media_observation",
-                            vision=True,
-                        )
-                        if self._settings.ai_provider == "openai"
-                        else self._settings.ai_vision_model or "vision"
-                    ),
-                    {
-                        "asset_version_id": str(snapshot.asset_version_id),
-                        "frame_count": len(uploaded_frames[:12]),
-                        "transcript_segments": len(transcript.segments),
-                        "ocr_segments": len(ocr.segments),
-                        "run_type": run_type,
-                    },
-                    lambda: provider.extract_visual_observations_with_response(
-                        uploaded_frames,
-                        transcript,
-                        ocr,
-                        self._product_context_json(snapshot),
-                        int(cast(int, metadata["duration_ms"])),
-                        workspace_id=snapshot.workspace_id,
-                        asset_id=snapshot.asset_id,
-                        asset_version_id=snapshot.asset_version_id,
-                        source_filename=snapshot.original_filename,
-                        request_id=str(processing_job_id or snapshot.asset_version_id),
-                    ),
-                )
                 contract = _live_contract(
                     metadata,
                     thumbnail_key,
                     audio_key,
-                    uploaded_frames,
+                    frame_paths,
                     transcript,
                     ocr,
                     scenes,
@@ -363,7 +503,14 @@ class SyncMediaEvidencePipeline:
                 artifacts = self._artifact_rows(
                     snapshot.workspace_id, snapshot.asset_version_id, contract
                 )
-                evidence = self._evidence_rows(snapshot.asset_version_id, run_type, contract)
+                evidence = [
+                    {**item, "analysis_request_hash": analysis_request_hash}
+                    for item in self._evidence_rows(
+                        snapshot.asset_version_id,
+                        run_type,
+                        contract,
+                    )
+                ]
                 persisted = self._repository.replace_artifacts_and_evidence(
                     snapshot.workspace_id,
                     snapshot.asset_version_id,
@@ -372,6 +519,7 @@ class SyncMediaEvidencePipeline:
                     artifacts,
                     evidence,
                 )
+                self._session.commit()
                 return MediaEvidencePipelineResult(
                     persisted, vision_run_id or ocr_run_id or transcript_run_id
                 )
@@ -391,7 +539,8 @@ class SyncMediaEvidencePipeline:
                 native_openai=self._settings.ai_provider == "openai",
             )
         )
-        model_run = SyncAiModelRunRepository(self._session).create_running(
+        model_run_repository = SyncAiModelRunRepository(self._session)
+        model_run = model_run_repository.create_running(
             workspace_id=snapshot.workspace_id,
             processing_job_id=processing_job_id,
             subject_type="asset_version",
@@ -413,14 +562,30 @@ class SyncMediaEvidencePipeline:
         try:
             result, response = call()
         except AppError as exc:
+            error_input_hash = exc.details.get("input_hash")
+            error_request_hash = exc.details.get("request_hash")
+            if isinstance(error_input_hash, str) and isinstance(error_request_hash, str):
+                model_run_repository.update_identity(
+                    model_run,
+                    input_hash=error_input_hash,
+                    request_hash=error_request_hash,
+                )
             _fail_tracked_model_run(self._session, model_run, exc)
             raise
         if response is None:
-            SyncAiModelRunRepository(self._session).complete(model_run, {}, None, None, None)
+            model_run_repository.complete(model_run, {}, None, None, None)
         else:
             usage = getattr(response, "usage", None)
             repair_attempt_count = getattr(response, "repair_attempt_count", 0)
-            SyncAiModelRunRepository(self._session).complete(
+            response_input_hash = getattr(response, "input_hash", None)
+            response_request_hash = getattr(response, "request_hash", None)
+            if isinstance(response_input_hash, str) and isinstance(response_request_hash, str):
+                model_run_repository.update_identity(
+                    model_run,
+                    input_hash=response_input_hash,
+                    request_hash=response_request_hash,
+                )
+            model_run_repository.complete(
                 model_run,
                 _provider_output_summary(result),
                 response.http_status,
@@ -875,15 +1040,15 @@ class SyncMediaEvidencePipeline:
         )
         return rows
 
-    def _product_context_json(self, snapshot: AssetVersionSnapshot) -> dict[str, object] | None:
+    def _product_context_snapshot(
+        self,
+        snapshot: AssetVersionSnapshot,
+    ) -> ProductContextSnapshot | None:
         if snapshot.product_id is None:
             return None
-        product_snapshot = SyncProductQueries(self._session).get_product_context_snapshot(
+        return SyncProductQueries(self._session).get_product_context_snapshot(
             snapshot.workspace_id, snapshot.product_id
         )
-        if product_snapshot is None:
-            return None
-        return product_snapshot.product_context.model_dump(mode="json")
 
 
 def _row(
@@ -961,6 +1126,116 @@ def _extension(filename: str) -> str:
     return suffix if suffix in {".mp4", ".mov", ".qt"} else ".mp4"
 
 
+def _media_analysis_request_hash(
+    snapshot: AssetVersionSnapshot,
+    settings: Settings,
+    *,
+    product_context_version: int | None,
+    product_context: dict[str, object] | None,
+    metadata: dict[str, object],
+    scenes: SceneContract,
+    frame_paths: list[tuple[int, Path, str]],
+    audio_path: Path | None,
+    transcript: TranscriptContract,
+    ocr: OcrContract,
+) -> str:
+    model = (
+        settings.resolve_openai_model("media_observation", vision=True)
+        if settings.ai_provider == "openai"
+        else settings.ai_vision_model or settings.ai_text_model or "live"
+    )
+    input_hash = stable_json_hash(
+        {
+            "source_artifact_id": str(snapshot.asset_id),
+            "source_version_id": str(snapshot.asset_version_id),
+            "source_checksum_sha256": snapshot.checksum_sha256,
+            "source_size_bytes": snapshot.size_bytes,
+            "product_id": str(snapshot.product_id) if snapshot.product_id else None,
+            "product_context_version": product_context_version,
+            "product_context": product_context,
+            "pipeline_version": MEDIA_PIPELINE_VERSION,
+            "media_metadata": metadata,
+            "scene_boundaries": scenes.model_dump(mode="json"),
+            "selected_frames": [
+                {
+                    "timestamp_ms": timestamp_ms,
+                    "storage_key": storage_key,
+                    "content_sha256": _file_sha256(path),
+                }
+                for timestamp_ms, path, storage_key in frame_paths
+            ],
+            "audio_content_sha256": (_file_sha256(audio_path) if audio_path is not None else None),
+            "transcript": bounded_transcript_payload(
+                transcript,
+                settings.openai_max_transcript_chars,
+            ),
+            "ocr": ocr.model_dump(mode="json"),
+            "transcription_provider": (
+                "openai" if settings.ai_provider == "openai" else settings.asr_provider
+            ),
+            "transcription_model": (
+                settings.openai_transcription_model
+                if settings.ai_provider == "openai"
+                else settings.asr_model
+            ),
+            "ocr_provider": settings.ocr_provider,
+            "ocr_model": settings.ocr_model,
+            "max_frames": (
+                settings.openai_max_frames_per_video if settings.ai_provider == "openai" else 30
+            ),
+            "max_frame_long_edge": settings.openai_max_frame_long_edge,
+            "image_detail": settings.openai_image_detail,
+            "max_transcript_chars": settings.openai_max_transcript_chars,
+        }
+    )
+    return structured_request_hash(
+        operation="media_observation",
+        model=model,
+        prompt_version=(
+            MEDIA_OBSERVATION_PROMPT_VERSION
+            if settings.ai_provider == "openai"
+            else MEDIA_ANALYSIS_PROMPT_VERSION
+        ),
+        schema_version=MEDIA_OBSERVATION_SCHEMA_VERSION,
+        input_hash=input_hash,
+    )
+
+
+def _media_analysis_claim_hash(
+    snapshot: AssetVersionSnapshot,
+    settings: Settings,
+    *,
+    product_context_version: int | None,
+) -> str:
+    return stable_json_hash(
+        {
+            "workspace_id": str(snapshot.workspace_id),
+            "source_artifact_id": str(snapshot.asset_id),
+            "source_version_id": str(snapshot.asset_version_id),
+            "source_checksum_sha256": snapshot.checksum_sha256,
+            "product_context_version": product_context_version,
+            "pipeline_version": MEDIA_PIPELINE_VERSION,
+            "provider": settings.ai_provider,
+            "vision_model": (
+                settings.resolve_openai_model("media_observation", vision=True)
+                if settings.ai_provider == "openai"
+                else settings.ai_vision_model or settings.ai_text_model
+            ),
+            "transcription_model": (
+                settings.openai_transcription_model
+                if settings.ai_provider == "openai"
+                else settings.asr_model
+            ),
+            "max_frames": (
+                settings.openai_max_frames_per_video if settings.ai_provider == "openai" else 30
+            ),
+            "max_frame_long_edge": settings.openai_max_frame_long_edge,
+            "image_detail": settings.openai_image_detail,
+            "max_transcript_chars": settings.openai_max_transcript_chars,
+        }
+    )
+
+
 def _run_ffmpeg(args: list[str]) -> None:
     ffmpeg_path = shutil.which("ffmpeg")
     if not ffmpeg_path:
@@ -997,8 +1272,18 @@ def _sample_frames(
     workspace_id: UUID,
     asset_id: UUID,
     asset_version_id: UUID,
+    *,
+    scenes: SceneContract,
+    max_frames: int,
+    max_long_edge: int,
+    required_timestamps: tuple[int, ...] = (),
 ) -> list[tuple[int, Path, str]]:
-    timestamps = _sample_timestamps(duration_ms)
+    timestamps = _representative_timestamps(
+        duration_ms=duration_ms,
+        scenes=scenes,
+        max_frames=max_frames,
+        required_timestamps=required_timestamps,
+    )
     frames: list[tuple[int, Path, str]] = []
     base_key = (
         f"workspaces/{workspace_id}/assets/{asset_id}/versions/{asset_version_id}/artifacts/frames"
@@ -1016,27 +1301,119 @@ def _sample_frames(
                 str(path),
             ]
         )
+        _resize_frame(path, max_long_edge)
         frames.append((timestamp_ms, path, f"{base_key}/frame_{index:03d}.jpg"))
     return frames
 
 
-def _sample_timestamps(duration_ms: int) -> list[int]:
-    opening = [500, 1000, 1500, 2000, 2500]
-    regular = list(range(3000, duration_ms, 2000))
-    timestamps = sorted({value for value in [*opening, *regular] if value < duration_ms})
-    return timestamps[:30] or [0]
+def _representative_timestamps(
+    *,
+    duration_ms: int,
+    scenes: SceneContract,
+    max_frames: int,
+    required_timestamps: tuple[int, ...] = (),
+) -> list[int]:
+    if duration_ms <= 0:
+        return [0]
+    required = {timestamp for timestamp in required_timestamps if 0 <= timestamp < duration_ms}
+    capacity = max(max_frames, len(required), 1)
+    selected = set(required)
+
+    def add_candidates(values: list[int]) -> None:
+        available = capacity - len(selected)
+        if available <= 0:
+            return
+        candidates = [
+            value
+            for value in dict.fromkeys(values)
+            if 0 <= value < duration_ms and value not in selected
+        ]
+        selected.update(_evenly_select(candidates, available))
+
+    add_candidates([min(500, duration_ms - 1)])
+    add_candidates(
+        [
+            min(duration_ms - 1, scene.start_ms + (scene.end_ms - scene.start_ms) // 2)
+            for scene in scenes.scenes
+            if scene.end_ms > scene.start_ms
+        ]
+    )
+    add_candidates(
+        [
+            min(duration_ms - 1, round(duration_ms * index / (max_frames + 1)))
+            for index in range(1, max_frames + 1)
+        ]
+    )
+    return sorted(selected) or [0]
 
 
-def _detect_scenes(duration_ms: int) -> SceneContract:
-    scene_length_ms = 3000
-    scenes = []
-    start_ms = 0
-    index = 0
-    while start_ms < duration_ms:
-        end_ms = min(start_ms + scene_length_ms, duration_ms)
-        scenes.append({"scene_index": index, "start_ms": start_ms, "end_ms": end_ms})
-        index += 1
-        start_ms = end_ms
+def _evenly_select(values: list[int], limit: int) -> list[int]:
+    if limit <= 0:
+        return []
+    if len(values) <= limit:
+        return values
+    if limit == 1:
+        return [values[len(values) // 2]]
+    return [values[round(index * (len(values) - 1) / (limit - 1))] for index in range(limit)]
+
+
+def _resize_frame(path: Path, max_long_edge: int) -> None:
+    with Image.open(path) as source:
+        source.load()
+        if max(source.size) <= max_long_edge:
+            return
+        frame = source.convert("RGB")
+    frame.thumbnail((max_long_edge, max_long_edge), Image.Resampling.LANCZOS)
+    frame.save(path, format="JPEG", quality=88, optimize=True)
+
+
+def _detect_scenes(source_path: Path, duration_ms: int) -> SceneContract:
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path is None:
+        return _scene_contract(duration_ms, ())
+    try:
+        result = _run_subprocess(
+            [
+                ffmpeg_path,
+                "-hide_banner",
+                "-v",
+                "info",
+                "-i",
+                str(source_path),
+                "-filter:v",
+                "select='gt(scene,0.30)',showinfo",
+                "-an",
+                "-f",
+                "null",
+                "-",
+            ],
+            "SCENE_DETECTION_FAILED",
+            "ffmpeg could not detect scene boundaries.",
+        )
+    except AppError:
+        logger.warning("scene_detection_fallback", source_path=source_path.name)
+        return _scene_contract(duration_ms, ())
+    changes = tuple(
+        round(float(match.group(1)) * 1000)
+        for match in re.finditer(r"pts_time:(\d+(?:\.\d+)?)", result.stderr)
+    )
+    return _scene_contract(duration_ms, changes)
+
+
+def _scene_contract(
+    duration_ms: int,
+    changes: tuple[int, ...],
+) -> SceneContract:
+    boundaries = [0]
+    for value in sorted(set(changes)):
+        if 250 <= value <= duration_ms - 250 and value - boundaries[-1] >= 250:
+            boundaries.append(value)
+    boundaries.append(duration_ms)
+    scenes = [
+        {"scene_index": index, "start_ms": start_ms, "end_ms": end_ms}
+        for index, (start_ms, end_ms) in enumerate(zip(boundaries, boundaries[1:], strict=False))
+        if end_ms > start_ms
+    ]
     return SceneContract.model_validate({"scenes": scenes})
 
 
@@ -1092,6 +1469,14 @@ def _artifact_stage(artifact_type: str) -> str:
 def _hash_json(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _tracked_operation_metadata(

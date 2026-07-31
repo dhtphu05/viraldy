@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -70,6 +72,8 @@ def test_responses_api_uses_strict_schema_roles_images_and_usage() -> None:
     assert result.total_tokens == 17
     assert result.cached_input_tokens == 4
     assert result.repair_attempt_count == 0
+    assert result.input_hash == "input-hash"
+    assert result.request_hash == "a" * 64
 
 
 def test_responses_api_uses_configured_reasoning_and_token_defaults() -> None:
@@ -88,6 +92,46 @@ def test_responses_api_uses_configured_reasoning_and_token_defaults() -> None:
     assert body["reasoning"] == {"effort": "medium"}
     assert body["max_output_tokens"] == 16000
     assert result.parsed_output == SampleOutput(answer="configured defaults")
+
+
+def test_workspace_request_uses_distributed_concurrency_slot() -> None:
+    captured: list[httpx.Request] = []
+    limiter = _RecordingLimiter()
+    workspace_id = uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _response_http('{"answer":"guarded"}')
+
+    provider = OpenAINativeProvider(
+        _settings(
+            openai_max_parallel_requests_per_workspace=3,
+            openai_request_timeout_seconds=20,
+            openai_max_retries=1,
+        ),
+        client=_openai_client(handler, max_retries=0),
+        workspace_limiter=limiter,
+    )
+    request = _generation_request().model_copy(
+        update={
+            "workspace_id": workspace_id,
+            "request_hash": "a" * 64,
+        }
+    )
+
+    result = provider.generate_structured(request)
+
+    assert result.parsed_output == SampleOutput(answer="guarded")
+    assert len(captured) == 1
+    assert limiter.calls == [
+        {
+            "workspace_id": workspace_id,
+            "max_parallel": 3,
+            "wait_timeout_seconds": 20,
+            "lease_seconds": 110,
+        }
+    ]
+    assert limiter.active is False
 
 
 def test_responses_api_allows_exactly_one_repair_attempt() -> None:
@@ -280,6 +324,7 @@ def test_audio_transcription_requests_verbose_json_timestamps(
             model="whisper-1",
             request_id="audio-client-request-id",
             input_hash="audio-input-hash",
+            request_hash="b" * 64,
             language="en",
             prompt="Product names only.",
         )
@@ -300,6 +345,8 @@ def test_audio_transcription_requests_verbose_json_timestamps(
     assert result.segments[0].start_ms == 0
     assert result.segments[0].end_ms == 1250
     assert result.segments[0].text == "Evidence aligned."
+    assert result.input_hash == "audio-input-hash"
+    assert result.request_hash == "b" * 64
 
 
 def test_empty_audio_is_rejected_before_provider_request(tmp_path: Path) -> None:
@@ -369,11 +416,15 @@ def test_native_client_configuration_and_router_never_fallback(
     assert fallback_called is False
 
 
-def test_provider_route_is_explicit_and_missing_key_error_is_safe() -> None:
+def test_provider_route_is_explicit_and_missing_key_error_is_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assert provider_route(_settings(ai_mode="fixture")) == "fixture"
     assert provider_route(_settings(ai_mode="mock")) == "mock"
     assert provider_route(_settings(ai_mode="live", ai_provider="openai")) == "openai"
 
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("openai_api_key", raising=False)
     with pytest.raises(AiProviderError) as exc_info:
         OpenAINativeProvider(Settings(_env_file=None))
     assert exc_info.value.code == ProviderErrorCode.NOT_CONFIGURED.value
@@ -408,6 +459,35 @@ def _settings(**overrides: Any) -> Settings:
     return Settings(_env_file=None, **values)
 
 
+class _RecordingLimiter:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.active = False
+
+    @contextmanager
+    def slot(
+        self,
+        workspace_id: UUID,
+        *,
+        max_parallel: int,
+        wait_timeout_seconds: float,
+        lease_seconds: float,
+    ) -> Iterator[None]:
+        self.calls.append(
+            {
+                "workspace_id": workspace_id,
+                "max_parallel": max_parallel,
+                "wait_timeout_seconds": wait_timeout_seconds,
+                "lease_seconds": lease_seconds,
+            }
+        )
+        self.active = True
+        try:
+            yield
+        finally:
+            self.active = False
+
+
 def _generation_request(*, include_image: bool = False) -> StructuredGenerationRequest:
     user_content: list[InputTextPart | InputImagePart] = [
         InputTextPart(text='{"product":"SwiftPress"}')
@@ -433,6 +513,7 @@ def _generation_request(*, include_image: bool = False) -> StructuredGenerationR
         max_output_tokens=321,
         request_id="client-request-id",
         input_hash="input-hash",
+        request_hash="a" * 64,
         idempotency_key="idempotency-key",
     )
 

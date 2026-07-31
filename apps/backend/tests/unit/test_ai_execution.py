@@ -17,6 +17,7 @@ from viraldy.modules.ai_gateway.providers.base import (
     AiProviderError,
     AudioTranscriptionRequest,
     AudioTranscriptionResult,
+    InputImagePart,
     ProviderEndpointFamily,
     ProviderErrorCode,
     ProviderErrorInfo,
@@ -66,9 +67,7 @@ class FakeProvider:
             repair_attempt_count=0,
         )
 
-    def transcribe_audio(
-        self, request: AudioTranscriptionRequest
-    ) -> AudioTranscriptionResult:
+    def transcribe_audio(self, request: AudioTranscriptionRequest) -> AudioTranscriptionResult:
         raise NotImplementedError
 
 
@@ -86,6 +85,7 @@ def _context() -> ViraldyOperationContextV1:
 
 def test_executor_uses_registered_prompt_model_and_stable_context() -> None:
     provider = FakeProvider()
+    context = _context()
     settings = Settings(
         ai_mode="live",
         ai_provider="openai",
@@ -95,7 +95,7 @@ def test_executor_uses_registered_prompt_model_and_stable_context() -> None:
 
     result = execute_structured_operation(
         settings,
-        _context(),
+        context,
         ExampleOutput,
         provider=provider,
     )
@@ -103,12 +103,58 @@ def test_executor_uses_registered_prompt_model_and_stable_context() -> None:
     assert result.parsed_output == ExampleOutput(value="grounded")
     assert provider.request is not None
     assert provider.request.model == "gpt-pattern-test"
-    assert provider.request.system_prompt == get_prompt_package(
-        AiOperationName.PATTERN_KIT_EXTRACT
-    ).system_prompt
+    assert (
+        provider.request.system_prompt
+        == get_prompt_package(AiOperationName.PATTERN_KIT_EXTRACT).system_prompt
+    )
     assert provider.request.user_content[0].type == "input_text"
     assert provider.request.max_repair_attempts == 1
     assert len(provider.request.input_hash) == 64
+    assert len(provider.request.request_hash) == 64
+    assert provider.request.workspace_id == context.workspace_id
+
+
+def test_executor_request_identity_changes_with_source_version_and_image() -> None:
+    settings = Settings(
+        ai_mode="live",
+        ai_provider="openai",
+        openai_api_key="test-openai-key",
+    )
+    original_context = _context()
+    original_context = original_context.model_copy(update={"source_version_ids": [uuid4()]})
+    original_provider = FakeProvider()
+    changed_source_provider = FakeProvider()
+    changed_image_provider = FakeProvider()
+
+    execute_structured_operation(
+        settings,
+        original_context,
+        ExampleOutput,
+        image_parts=[InputImagePart(media_type="image/jpeg", image_base64="ZnJhbWUtMQ==")],
+        provider=original_provider,
+    )
+    execute_structured_operation(
+        settings,
+        original_context.model_copy(update={"source_version_ids": [uuid4()]}),
+        ExampleOutput,
+        image_parts=[InputImagePart(media_type="image/jpeg", image_base64="ZnJhbWUtMQ==")],
+        provider=changed_source_provider,
+    )
+    execute_structured_operation(
+        settings,
+        original_context,
+        ExampleOutput,
+        image_parts=[InputImagePart(media_type="image/jpeg", image_base64="ZnJhbWUtMg==")],
+        provider=changed_image_provider,
+    )
+
+    assert original_provider.request is not None
+    assert changed_source_provider.request is not None
+    assert changed_image_provider.request is not None
+    assert original_provider.request.input_hash != changed_source_provider.request.input_hash
+    assert original_provider.request.request_hash != (changed_source_provider.request.request_hash)
+    assert original_provider.request.input_hash != changed_image_provider.request.input_hash
+    assert original_provider.request.request_hash != changed_image_provider.request.request_hash
 
 
 def test_executor_allows_explicit_compatible_mock_route() -> None:
@@ -159,9 +205,7 @@ def test_executor_injects_selected_examples_separately_with_request_ids() -> Non
     assert runtime_examples_part.type == "input_text"
     runtime_payload = json.loads(runtime_examples_part.text)
     assert runtime_payload["kind"] == "runtime_few_shot_examples"
-    assert 1 <= len(runtime_payload["selected_example_ids"]) <= (
-        MAX_RUNTIME_FEW_SHOT_EXAMPLES
-    )
+    assert 1 <= len(runtime_payload["selected_example_ids"]) <= (MAX_RUNTIME_FEW_SHOT_EXAMPLES)
     assert runtime_payload["selected_example_ids"] == [
         example["example_id"] for example in runtime_payload["examples"]
     ]
@@ -224,6 +268,8 @@ def test_executor_maps_provider_errors_without_raw_payloads() -> None:
     assert exc_info.value.code == "OPENAI_RATE_LIMITED"
     assert exc_info.value.status_code == 429
     assert exc_info.value.details["provider_request_id"] == "req-safe"
+    assert len(str(exc_info.value.details["input_hash"])) == 64
+    assert len(str(exc_info.value.details["request_hash"])) == 64
     assert "key" not in exc_info.value.message.lower()
 
 
@@ -238,8 +284,6 @@ def test_domain_validation_reason_is_bounded_for_repair() -> None:
         )
 
     assert exc_info.value.issue.code == ProviderErrorCode.DOMAIN_VALIDATION_FAILED
-    assert "Evidence IDs must belong to the supplied catalog." in (
-        exc_info.value.issue.summary
-    )
+    assert "Evidence IDs must belong to the supplied catalog." in (exc_info.value.issue.summary)
     assert "\n" not in exc_info.value.issue.summary
     assert len(exc_info.value.issue.summary) == 2000
