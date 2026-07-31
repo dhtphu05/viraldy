@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import subprocess
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -20,6 +23,7 @@ from viraldy.evaluation.qualification.application_scenarios import (
 from viraldy.evaluation.qualification.catalog import FULL_FLOW_OPERATIONS
 from viraldy.modules.ai_gateway.operations import AiOperationName
 from viraldy.platform.config.settings import Settings
+from viraldy.shared.errors.base import AppError
 
 
 class _InMemoryApplicationExecutor(ApplicationQualificationExecutor):
@@ -91,6 +95,77 @@ def test_application_executor_allows_longer_live_provider_jobs() -> None:
     assert _job_timeout_seconds("live") == 300
     assert _job_timeout_seconds("mock") == 90
     assert _job_timeout_seconds("fixture") == 90
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_application_executor_preserves_safe_failure_stage_and_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    returncode: int,
+) -> None:
+    smoke_script = tmp_path / "smoke.py"
+    smoke_script.write_text("# test runner\n", encoding="utf-8")
+    executor = ApplicationQualificationExecutor(
+        settings=Settings(
+            _env_file=None,
+            ai_mode="live",
+            ai_provider="openai",
+            openai_api_key="unit-test-key",
+        ),
+        base_url="http://127.0.0.1:8001/api/v1",
+        smoke_script=smoke_script,
+    )
+
+    def failed_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        result_path = Path(command[command.index("--result-path") + 1])
+        result_path.write_text(
+            json.dumps(
+                {
+                    "status": "error",
+                    "mode": "live",
+                    "golden_case": "home_travel_steamer",
+                    "run_id": "live-test",
+                    "failure_stage": "database_verification",
+                    "model_runs_verified": True,
+                    "safe_error_code": "SMOKE_FLOW_FAILED",
+                    "safe_error_type": "SmokeFailure",
+                    "workspace_deletion_status": "succeeded",
+                    "untrusted_detail": "must not be copied",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(
+            command,
+            returncode=returncode,
+            stdout="provider payload",
+            stderr="credential-shaped diagnostic",
+        )
+
+    monkeypatch.setattr(subprocess, "run", failed_run)
+
+    with pytest.raises(AppError) as caught:
+        executor._run_smoke("home_travel_steamer")
+
+    assert caught.value.code == "APPLICATION_QUALIFICATION_FAILED"
+    assert caught.value.details == {
+        "application_evidence": {
+            "failure_summary": {
+                "failure_stage": "database_verification",
+                "golden_case": "home_travel_steamer",
+                "mode": "live",
+                "model_runs_verified": True,
+                "run_id": "live-test",
+                "safe_error_code": "SMOKE_FLOW_FAILED",
+                "safe_error_type": "SmokeFailure",
+                "status": "error",
+                "workspace_deletion_status": "succeeded",
+            }
+        },
+        "execution_scope": "application_e2e",
+        "model_runs_persisted": True,
+        "workspace_deleted": True,
+    }
 
 
 def test_application_executor_reports_missing_persisted_operation() -> None:

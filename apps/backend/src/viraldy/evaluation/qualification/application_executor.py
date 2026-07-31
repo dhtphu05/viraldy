@@ -44,6 +44,20 @@ _READY_ACTIONS = {
 _PERSISTED_OPERATION_ALIASES: dict[AiOperationName, frozenset[str]] = {
     AiOperationName.MEDIA_OBSERVATION: frozenset({"media_observation", "visual_observations"}),
 }
+_SAFE_FAILURE_FIELDS = (
+    "cleanup_failure_stage",
+    "cleanup_safe_error_code",
+    "cleanup_safe_error_type",
+    "failure_stage",
+    "golden_case",
+    "mode",
+    "model_runs_verified",
+    "run_id",
+    "safe_error_code",
+    "safe_error_type",
+    "status",
+    "workspace_deletion_status",
+)
 _REQUIREMENT_STATUS = Literal[
     "satisfied",
     "partial",
@@ -186,27 +200,76 @@ class ApplicationQualificationExecutor:
                     "APPLICATION_QUALIFICATION_TIMEOUT",
                     "The application qualification flow exceeded its bounded timeout.",
                 ) from exc
-            if completed.returncode != 0 or not result_path.is_file():
+            parsed = _read_smoke_result(result_path)
+            if completed.returncode != 0:
                 raise AppError(
                     "APPLICATION_QUALIFICATION_FAILED",
                     (
                         "The application qualification flow failed. Inspect local API "
                         "and worker logs using the run ID; provider payloads were not copied."
                     ),
+                    details=_application_failure_details(parsed),
                 )
-            parsed = json.loads(result_path.read_text(encoding="utf-8"))
-        if not isinstance(parsed, dict):
+            if parsed is None:
+                raise AppError(
+                    "APPLICATION_QUALIFICATION_REPORT_INVALID",
+                    "The application qualification result was missing or invalid.",
+                    details=_application_failure_details(parsed),
+                )
+        if parsed.get("status") != "ok":
             raise AppError(
-                "APPLICATION_QUALIFICATION_REPORT_INVALID",
-                "The application qualification result was not a JSON object.",
+                (
+                    "APPLICATION_QUALIFICATION_FAILED"
+                    if parsed.get("status") == "error"
+                    else "APPLICATION_QUALIFICATION_REPORT_INVALID"
+                ),
+                (
+                    "The application qualification flow reported a safe failure."
+                    if parsed.get("status") == "error"
+                    else "The application qualification result did not report success."
+                ),
+                details=_application_failure_details(parsed),
             )
-        return cast(dict[str, object], parsed)
+        return parsed
 
 
 def _job_timeout_seconds(mode: QualificationMode) -> int:
     if mode == "live":
         return _LIVE_JOB_TIMEOUT_SECONDS
     return _DEFAULT_JOB_TIMEOUT_SECONDS
+
+
+def _read_smoke_result(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return cast(dict[str, object], payload) if isinstance(payload, dict) else None
+
+
+def _application_failure_details(
+    payload: Mapping[str, object] | None,
+) -> dict[str, object]:
+    safe_summary = {
+        key: payload[key]
+        for key in _SAFE_FAILURE_FIELDS
+        if payload is not None and key in payload
+    }
+    return {
+        "execution_scope": "application_e2e",
+        "model_runs_persisted": (
+            payload is not None and payload.get("model_runs_verified") is True
+        ),
+        "workspace_deleted": (
+            payload is not None
+            and payload.get("workspace_deletion_status") == "succeeded"
+        ),
+        "application_evidence": {
+            "failure_summary": safe_summary,
+        },
+    }
 
 
 def _operation_result(

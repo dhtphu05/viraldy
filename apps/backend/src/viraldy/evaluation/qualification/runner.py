@@ -17,6 +17,7 @@ from viraldy.evaluation.qualification.contracts import (
     OperationExecutionV1,
     QualificationCaseExecutionV1,
     QualificationCaseResultV1,
+    QualificationExecutionScope,
     QualificationMode,
     QualificationReportV1,
     QualificationRequestV1,
@@ -181,17 +182,11 @@ class QualificationRunner:
                 FULL_FLOW_OPERATIONS,
             )
         except Exception as exc:
-            execution = QualificationCaseExecutionV1(
+            execution = _failed_case_execution(
                 scenario_id=scenario_id,
-                semantic_output=_failed_semantic_output(scenario_id),
-                operation_results=[
-                    _failed_operation(
-                        operation=FULL_FLOW_OPERATIONS[0],
-                        settings=self._settings,
-                        mode=self._mode,
-                        exc=exc,
-                    )
-                ],
+                settings=self._settings,
+                mode=self._mode,
+                exc=exc,
             )
         hard_results = case_hard_gates(self._mode, fixture, execution)
         semantic_results = semantic_gates(
@@ -345,6 +340,43 @@ def _failed_operation(
         silent_fixture_fallback=False,
         error_code=error_code,
         error_message=error_message,
+    )
+
+
+def _failed_case_execution(
+    *,
+    scenario_id: str,
+    settings: Settings,
+    mode: QualificationMode,
+    exc: Exception,
+) -> QualificationCaseExecutionV1:
+    details = exc.details if isinstance(exc, AppError) and exc.details else {}
+    raw_scope = details.get("execution_scope")
+    execution_scope = cast(
+        QualificationExecutionScope,
+        raw_scope if raw_scope in {"contract", "application_e2e"} else "contract",
+    )
+    raw_evidence = details.get("application_evidence")
+    application_evidence = (
+        cast(dict[str, object], raw_evidence)
+        if isinstance(raw_evidence, dict)
+        else {}
+    )
+    return QualificationCaseExecutionV1(
+        scenario_id=scenario_id,
+        semantic_output=_failed_semantic_output(scenario_id),
+        operation_results=[
+            _failed_operation(
+                operation=FULL_FLOW_OPERATIONS[0],
+                settings=settings,
+                mode=mode,
+                exc=exc,
+            )
+        ],
+        execution_scope=execution_scope,
+        model_runs_persisted=details.get("model_runs_persisted") is True,
+        workspace_deleted=details.get("workspace_deleted") is True,
+        application_evidence=application_evidence,
     )
 
 

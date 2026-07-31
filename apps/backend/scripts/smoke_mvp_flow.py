@@ -107,34 +107,47 @@ def main() -> None:
     client = ApiClient(args.base_url, args.token, args.timeout_seconds)
     completed_job_ids: list[str] = []
     ctx: SmokeContext | None = None
+    deletion_status = "not_requested"
     workspace_deleted = False
+    model_runs_verified = False
+    failure_stage = "readiness"
     try:
         readiness = client.get("/system/ai-readiness")
         assert_equal(readiness["mode"], args.expect_mode, "AI readiness mode")
+        failure_stage = "identity"
         identity = client.get("/me")
         assert_equal(identity["status"], "active", "Authenticated user status")
 
         with TemporaryDirectory(prefix="viraldy-smoke-") as temp_dir:
+            failure_stage = "media_preparation"
             media_path = prepare_media(args, Path(temp_dir))
             revision_media_path = prepare_revision_media(
                 args,
                 Path(temp_dir),
                 media_path,
             )
+            failure_stage = "context_setup"
             ctx = load_context(client, args, media_path)
+            failure_stage = "quick_score"
             quick_run, quick_job_id = run_quick_scorer(client, ctx, args, completed_job_ids)
+            failure_stage = "reference_analysis"
             dna_ids = [
                 run_reference_dna(client, ctx, reference_id, index, args, completed_job_ids)
                 for index, reference_id in enumerate(ctx.reference_ids, start=1)
             ]
+            failure_stage = "adaptation"
             adaptation = run_adaptation(client, ctx, dna_ids[0], args)
+            failure_stage = "pattern_kit"
             pattern = run_pattern_kit(client, ctx, dna_ids, args)
+            failure_stage = "viral_kit"
             viral = run_viral_kit(client, ctx, pattern, args)
+            failure_stage = "campaign_pack"
             concept_id, pack_id, pack_version_id = select_concept_and_compile_pack(
                 client,
                 ctx,
                 viral,
             )
+            failure_stage = "preflight_draft_1"
             preflight_run = run_preflight(
                 client,
                 ctx,
@@ -143,12 +156,14 @@ def main() -> None:
                 completed_job_ids,
                 run_label="draft-1",
             )
+            failure_stage = "presentation_draft_1"
             presentation = run_presentation(
                 client,
                 ctx,
                 preflight_run,
                 expect_mode=args.expect_mode,
             )
+            failure_stage = "learning_loop"
             recommendation_id = run_learning_loop(
                 client,
                 ctx,
@@ -157,6 +172,7 @@ def main() -> None:
                 preflight_run,
                 pack_id,
             )
+            failure_stage = "revision_upload"
             revision_version_id = upload_revision(
                 client,
                 ctx,
@@ -166,6 +182,7 @@ def main() -> None:
             revision_preflight_run = None
             revision_presentation = None
             if revision_version_id != "not-run":
+                failure_stage = "preflight_draft_2"
                 revision_preflight_run = run_preflight(
                     client,
                     ctx,
@@ -174,17 +191,20 @@ def main() -> None:
                     completed_job_ids,
                     run_label="draft-2",
                 )
+                failure_stage = "presentation_draft_2"
                 revision_presentation = run_presentation(
                     client,
                     ctx,
                     revision_preflight_run,
                     expect_mode=args.expect_mode,
                 )
+                failure_stage = "revision_comparison"
                 verify_revision_comparison(
                     preflight_run,
                     revision_preflight_run,
                     revision_version_id,
                 )
+            failure_stage = "model_run_verification"
             model_runs = verify_learning_events(
                 client,
                 ctx,
@@ -204,8 +224,10 @@ def main() -> None:
                 isolated_lifecycle=args.isolated_lifecycle,
                 expect_mode=args.expect_mode,
             )
+            model_runs_verified = True
 
             if args.verify_db:
+                failure_stage = "database_verification"
                 verify_database(
                     expect_mode=args.expect_mode,
                     workspace_id=ctx.workspace_id,
@@ -213,10 +235,10 @@ def main() -> None:
                     pattern_kit_id=pattern["kit"]["id"],
                     viral_kit_id=viral["kit"]["id"],
                 )
-            deletion_status = "not_requested"
             if args.isolated_lifecycle:
+                failure_stage = "workspace_cleanup"
                 deletion_status = delete_and_verify_workspace(client, ctx.workspace_id)
-                workspace_deleted = True
+                workspace_deleted = deletion_status == "succeeded"
 
             summary = {
                 "status": "ok",
@@ -281,16 +303,70 @@ def main() -> None:
     except Exception as original_error:
         if args.isolated_lifecycle and ctx is not None and not workspace_deleted:
             try:
-                delete_and_verify_workspace(client, ctx.workspace_id)
+                deletion_status = delete_and_verify_workspace(client, ctx.workspace_id)
+                workspace_deleted = deletion_status == "succeeded"
             except Exception as cleanup_error:
+                _write_failure_result(
+                    args,
+                    failure_stage=failure_stage,
+                    original_error=original_error,
+                    cleanup_error=cleanup_error,
+                    model_runs_verified=model_runs_verified,
+                    workspace_deletion_status="failed",
+                )
                 raise SmokeFailure(
                     "Smoke flow failed "
                     f"({type(original_error).__name__}) and isolated workspace cleanup failed "
                     f"({type(cleanup_error).__name__})."
                 ) from original_error
+        _write_failure_result(
+            args,
+            failure_stage=failure_stage,
+            original_error=original_error,
+            model_runs_verified=model_runs_verified,
+            workspace_deletion_status=deletion_status,
+        )
         raise
     finally:
         client.close()
+
+
+def _write_failure_result(
+    args: argparse.Namespace,
+    *,
+    failure_stage: str,
+    original_error: Exception,
+    model_runs_verified: bool,
+    workspace_deletion_status: str,
+    cleanup_error: Exception | None = None,
+) -> None:
+    result_path = getattr(args, "result_path", None)
+    if not isinstance(result_path, Path):
+        return
+    payload = {
+        "status": "error",
+        "mode": args.expect_mode,
+        "golden_case": args.golden_case,
+        "run_id": args.run_id,
+        "failure_stage": failure_stage,
+        "model_runs_verified": model_runs_verified,
+        "safe_error_code": "SMOKE_FLOW_FAILED",
+        "safe_error_type": type(original_error).__name__,
+        "workspace_deletion_status": workspace_deletion_status,
+    }
+    if cleanup_error is not None:
+        payload.update(
+            {
+                "cleanup_failure_stage": "workspace_cleanup",
+                "cleanup_safe_error_code": "WORKSPACE_CLEANUP_FAILED",
+                "cleanup_safe_error_type": type(cleanup_error).__name__,
+            }
+        )
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    result_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def parse_args() -> argparse.Namespace:

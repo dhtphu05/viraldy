@@ -28,6 +28,7 @@ from viraldy.evaluation.qualification import (
 from viraldy.modules.ai_gateway.operations import AiOperationName, build_ai_operation_fixture
 from viraldy.modules.ai_gateway.providers.base import ProviderEndpointFamily
 from viraldy.platform.config.settings import Settings
+from viraldy.shared.errors.base import AppError
 
 
 def _load_qualification_script() -> ModuleType:
@@ -411,6 +412,30 @@ class _ExplodingExecutor:
         raise RuntimeError("boom")
 
 
+class _ApplicationFailureExecutor(_ExplodingExecutor):
+    def execute_case(
+        self,
+        scenario_id: str,
+        operations: Sequence[AiOperationName],
+    ) -> QualificationCaseExecutionV1:
+        raise AppError(
+            "APPLICATION_QUALIFICATION_FAILED",
+            "The application qualification flow failed.",
+            details={
+                "execution_scope": "application_e2e",
+                "model_runs_persisted": False,
+                "workspace_deleted": True,
+                "application_evidence": {
+                    "failure_summary": {
+                        "failure_stage": "adaptation",
+                        "safe_error_code": "SMOKE_FLOW_FAILED",
+                        "workspace_deletion_status": "succeeded",
+                    }
+                },
+            },
+        )
+
+
 def test_execution_failure_does_not_substitute_golden_semantic_output(
     tmp_path: Path,
 ) -> None:
@@ -424,6 +449,31 @@ def test_execution_failure_does_not_substitute_golden_semantic_output(
     semantic_output = outcome.report.case_results[0].semantic_output
     assert semantic_output.product_name == "unavailable"
     assert semantic_output.concepts == []
+
+
+def test_application_failure_report_preserves_scope_and_verified_cleanup(
+    tmp_path: Path,
+) -> None:
+    outcome = _runner(
+        tmp_path,
+        "live",
+        api_key="-".join(("unit", "test", "provider", "credential")),
+        executor=_ApplicationFailureExecutor(),
+    ).run(QualificationRequestV1(full_flow=True, case="tiktok-shop"))
+
+    case = outcome.report.case_results[0]
+    assert outcome.exit_code == 1
+    assert case.execution_scope == "application_e2e"
+    assert case.model_runs_persisted is False
+    assert case.workspace_deleted is True
+    assert case.application_evidence["failure_summary"] == {
+        "failure_stage": "adaptation",
+        "safe_error_code": "SMOKE_FLOW_FAILED",
+        "workspace_deletion_status": "succeeded",
+    }
+    hard_gates = {gate.gate: gate for gate in case.hard_gates}
+    assert hard_gates["application_model_runs_persisted"].passed is False
+    assert hard_gates["application_workspace_deleted"].passed is True
 
 
 class _CapturingSemanticProvider:
