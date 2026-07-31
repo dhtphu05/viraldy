@@ -544,6 +544,7 @@ function CreativeLibraryPage() {
                     open={moveForIds.length > 0}
                     onOpenChange={(v) => !v && setMoveForIds([])}
                     creativeIds={moveForIds}
+                    onCreateBoard={() => setNewBoardOpen(true)}
                 />
             )}
             <Sheet open={boardSheetOpen} onOpenChange={setBoardSheetOpen}>

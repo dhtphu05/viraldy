@@ -7,9 +7,10 @@ import {
     DialogTitle,
 } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useAppStore } from "@/app/store/app-store";
 import { useMemo, useState } from "react";
-import { Folder, Check } from "lucide-react";
+import { Folder, Check, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 
@@ -18,11 +19,13 @@ export function MoveToBoardDialog({
     onOpenChange,
     creativeId,
     creativeIds,
+    onCreateBoard,
 }: {
     open: boolean;
     onOpenChange: (v: boolean) => void;
     creativeId?: string;
     creativeIds?: string[];
+    onCreateBoard?: () => void;
 }) {
     const allBoards = useAppStore((s) => s.boards);
     const boards = useMemo(() => allBoards.filter((b) => !b.system), [allBoards]);
@@ -49,15 +52,34 @@ export function MoveToBoardDialog({
                         {ids.length === 1 ? "this creative" : `${ids.length} creatives`}.
                     </DialogDescription>
                 </DialogHeader>
-                <ul
-                    role="radiogroup"
-                    aria-label="Destination board"
-                    className="max-h-64 overflow-y-auto rounded-md border border-control-border"
-                >
-                    {boards.length === 0 ? (
-                        <li className="p-4 text-sm text-text-tertiary">No custom boards yet.</li>
-                    ) : (
-                        boards.map((b) => {
+                {boards.length === 0 ? (
+                    <EmptyState
+                        compact
+                        icon={FolderPlus}
+                        title="Create a board before moving creatives"
+                        description="Boards group references by product, angle, campaign, or testing theme."
+                        action={
+                            onCreateBoard ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => {
+                                        onOpenChange(false);
+                                        onCreateBoard();
+                                    }}
+                                >
+                                    Create board
+                                </Button>
+                            ) : undefined
+                        }
+                    />
+                ) : (
+                    <ul
+                        role="radiogroup"
+                        aria-label="Destination board"
+                        className="max-h-64 overflow-y-auto rounded-md border border-control-border"
+                    >
+                        {boards.map((b) => {
                             const active = choice === b.id;
                             return (
                                 <li key={b.id}>
@@ -79,16 +101,22 @@ export function MoveToBoardDialog({
                                     </button>
                                 </li>
                             );
-                        })
-                    )}
-                </ul>
+                        })}
+                    </ul>
+                )}
                 <DialogFooter>
                     <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button type="button" disabled={!choice || ids.length === 0} onClick={confirm}>
-                        Move to board
-                    </Button>
+                    {boards.length > 0 && (
+                        <Button
+                            type="button"
+                            disabled={!choice || ids.length === 0}
+                            onClick={confirm}
+                        >
+                            Move to board
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

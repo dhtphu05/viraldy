@@ -35,6 +35,8 @@ import { ExpectedObservedTable } from "@/shared/ui/expected-observed-table";
 import { Input } from "@/shared/ui/input";
 import { ValueReceipt } from "@/shared/ui/value-receipt";
 import { AnalysisThinkingSkeleton } from "@/shared/ui/analysis-thinking-skeleton";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 import type { WorkflowRailStep } from "@/shared/ui/workflow-rail";
 import { JobProgress } from "@/features/mvp-flow/components/job-progress";
 import { PatternKitResult } from "@/features/mvp-flow/components/pattern-kit-result";
@@ -1965,9 +1967,18 @@ function ProductionContextPanel({
                 </div>
             )}
             {loading ? (
-                <div className="grid gap-3 sm:grid-cols-2" aria-label="Loading production context">
+                <div
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                    className="grid gap-3 sm:grid-cols-2"
+                    aria-label="Loading production context"
+                >
                     {Array.from({ length: 6 }).map((_, index) => (
-                        <div key={index} className="h-16 rounded-md bg-surface-muted" />
+                        <div key={index} className="rounded-md bg-surface-soft p-3">
+                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="mt-3 h-4 w-3/4" />
+                        </div>
                     ))}
                 </div>
             ) : (
@@ -2695,7 +2706,12 @@ function DnaInsightPanel({
                         </article>
                     ))
                 ) : (
-                    <p className="text-sm text-text-secondary">No evidence returned.</p>
+                    <EmptyState
+                        compact
+                        className="md:col-span-2"
+                        title="No supporting evidence was returned"
+                        description="The analysis completed without a usable observation for this section. Review the source media or run the analysis again."
+                    />
                 )}
             </div>
         </section>
@@ -3148,8 +3164,24 @@ function VersionHistory({
 }) {
     if (isLoading) {
         return (
-            <div className="rounded-md border border-hairline bg-surface-soft p-3 text-sm text-text-secondary">
-                Loading version history...
+            <div
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                aria-label="Loading Campaign Pack version history"
+                className="rounded-md bg-surface-soft p-3"
+            >
+                <Skeleton className="h-4 w-32" />
+                <div className="mt-3 grid gap-2">
+                    <div className="rounded-md bg-surface p-3">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="mt-2 h-3 w-3/5" />
+                    </div>
+                    <div className="rounded-md bg-surface p-3">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="mt-2 h-3 w-2/5" />
+                    </div>
+                </div>
             </div>
         );
     }
@@ -3179,7 +3211,11 @@ function VersionHistory({
                         </div>
                     ))
                 ) : (
-                    <p className="text-sm text-text-secondary">No saved versions yet.</p>
+                    <EmptyState
+                        compact
+                        title="No saved versions yet"
+                        description="Save the current Campaign Pack to create a reviewable version history."
+                    />
                 )}
             </div>
         </div>
@@ -3279,7 +3315,12 @@ function SignalBlock({ dimensions }: { dimensions: Record<string, DimensionResul
                         </div>
                     ))
                 ) : (
-                    <p className="text-sm text-text-secondary">No signals returned.</p>
+                    <EmptyState
+                        compact
+                        className="md:col-span-2"
+                        title="No measurable signals were returned"
+                        description="The analysis needs clearer media evidence before it can score this dimension."
+                    />
                 )}
             </div>
         </div>

@@ -67,6 +67,7 @@ import {
     ExternalLink,
     ArrowUp,
     ArrowDown,
+    Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
@@ -296,9 +297,21 @@ function CampaignDetail() {
                     <TabsContent value="activity" className="mt-6">
                         <SurfaceCard padding="none" className="divide-y divide-hairline/70">
                             {activity.length === 0 ? (
-                                <div className="p-6 text-sm text-text-tertiary">
-                                    No activity yet.
-                                </div>
+                                <EmptyState
+                                    compact
+                                    icon={Activity}
+                                    title="No campaign activity yet"
+                                    description="Edits, readiness changes, creator handoffs, and review decisions will appear here."
+                                    action={
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => setTab("pack")}
+                                        >
+                                            Open Campaign Pack
+                                        </Button>
+                                    }
+                                />
                             ) : (
                                 activity.map((e) => (
                                     <div

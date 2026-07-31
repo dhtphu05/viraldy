@@ -196,6 +196,7 @@ function UgcInbox() {
             });
         }
     };
+    const hasFilters = Boolean(query.trim() || filter !== "all" || campaignId);
 
     return (
         <AppShell>
@@ -349,12 +350,32 @@ function UgcInbox() {
                         <div className="p-10">
                             <EmptyState
                                 icon={Video}
-                                title="Review creator content before you spend"
-                                description="Upload a creator draft and attach its Campaign Pack. Viraldy will compare the video against the brief, identify blockers, and generate actionable revision notes."
+                                title={
+                                    hasFilters
+                                        ? "No creator videos match these filters"
+                                        : "Review creator content before you spend"
+                                }
+                                description={
+                                    hasFilters
+                                        ? "Clear the active search, decision, or campaign filter to return to the full review inbox."
+                                        : "Upload a creator draft and attach its Campaign Pack. Viraldy will compare the video against the brief, identify blockers, and generate actionable revision notes."
+                                }
                                 action={
-                                    <Button size="sm" onClick={() => setUploadOpen(true)}>
-                                        Upload UGC
-                                    </Button>
+                                    <>
+                                        {hasFilters && (
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={clearFilters}
+                                            >
+                                                Clear filters
+                                            </Button>
+                                        )}
+                                        <Button size="sm" onClick={() => setUploadOpen(true)}>
+                                            <Upload className="h-4 w-4" />
+                                            Upload UGC
+                                        </Button>
+                                    </>
                                 }
                             />
                         </div>

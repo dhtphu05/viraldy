@@ -117,6 +117,15 @@ function CampaignsIndex() {
             );
         return list;
     }, [campaigns, packs, q, status, productId, objective, sort]);
+    const hasFilters =
+        Boolean(q.trim()) || status !== "All" || productId !== "all" || objective !== "all";
+
+    function clearFilters() {
+        setQ("");
+        setStatus("All");
+        setProductId("all");
+        setObjective("all");
+    }
 
     return (
         <AppShell>
@@ -235,20 +244,34 @@ function CampaignsIndex() {
                     <div className="border-y border-divider bg-surface p-7">
                         <EmptyState
                             title={
-                                q
-                                    ? "No campaigns match your search"
+                                hasFilters
+                                    ? "No campaigns match these filters"
                                     : "Create your first creator campaign"
                             }
                             description={
-                                q
-                                    ? "Try clearing filters or searching a different product."
+                                hasFilters
+                                    ? "Clear the active filters or search a different product, objective, or campaign."
                                     : "Turn a product and selected creative references into a structured brief, hooks, script, and storyboard."
                             }
                             action={
-                                <Button onClick={() => navigate({ to: "/campaigns/new" })}>
-                                    <Plus className="h-4 w-4" />
-                                    Create campaign
-                                </Button>
+                                <>
+                                    {hasFilters && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={clearFilters}
+                                        >
+                                            Clear filters
+                                        </Button>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        onClick={() => navigate({ to: "/campaigns/new" })}
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                        Create campaign
+                                    </Button>
+                                </>
                             }
                         />
                     </div>
