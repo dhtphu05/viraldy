@@ -194,6 +194,11 @@ function PerformancePage() {
         filters.dateRange !== "30d" ? `Range: ${filters.dateRange}` : null,
     ].filter((label): label is string => Boolean(label));
 
+    const clearPerformanceFilters = () => {
+        setFilters({ search: "", dateRange: "30d" });
+        setGroupFilter("All");
+    };
+
     const onCreateVariants = (rec: PerfRecommendation) => {
         const pattern =
             seedPatterns.find((p) => p.campaignId === rec.campaignId) ?? seedPatterns[0];
@@ -390,10 +395,10 @@ function PerformancePage() {
                 </div>
 
                 <div
-                    className="flex flex-wrap items-center gap-2"
+                    className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
                     aria-label="Recommendation filters"
                 >
-                    <div className="relative min-w-0 flex-[1_1_280px]">
+                    <div className="relative col-span-2 min-w-0 sm:flex-[1_1_280px]">
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
                         <Input
                             placeholder="Search recommendations, campaigns, creators, assets"
@@ -410,7 +415,7 @@ function PerformancePage() {
                         }
                     >
                         <SelectTrigger
-                            className="h-9 min-w-0 flex-1 sm:w-[140px] sm:flex-none"
+                            className="h-9 w-full min-w-0 sm:w-[140px]"
                             aria-label="Performance date range"
                         >
                             <SelectValue />
@@ -422,7 +427,7 @@ function PerformancePage() {
                             <SelectItem value="90d">Last 90 days</SelectItem>
                         </SelectContent>
                     </Select>
-                    <div className="min-w-0 flex-1 sm:hidden">
+                    <div className="min-w-0 sm:hidden">
                         <Select
                             value={groupFilter}
                             onValueChange={(v) => setGroupFilter(v as DecisionGroup | "All")}
@@ -444,10 +449,8 @@ function PerformancePage() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                                setFilters({ search: "", dateRange: "30d" });
-                                setGroupFilter("All");
-                            }}
+                            className="col-span-2 w-fit sm:col-auto"
+                            onClick={clearPerformanceFilters}
                         >
                             Clear all
                         </Button>
@@ -473,9 +476,38 @@ function PerformancePage() {
                             {visibleRecs.length === 0 ? (
                                 <div>
                                     <EmptyState
-                                        title="No urgent performance action detected"
-                                        description="Current campaign signals are mixed or incomplete. Continue collecting data or review individual assets."
+                                        title={
+                                            activeFilterLabels.length
+                                                ? "No recommendations match these filters"
+                                                : "No urgent performance action detected"
+                                        }
+                                        description={
+                                            activeFilterLabels.length
+                                                ? "Clear the active search, decision, or date filter to review all available recommendations."
+                                                : "Current campaign signals are mixed or incomplete. Import fresh data or continue collecting results."
+                                        }
                                         icon={BarChart3}
+                                        tone={activeFilterLabels.length ? "neutral" : "success"}
+                                        action={
+                                            <>
+                                                {activeFilterLabels.length > 0 && (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={clearPerformanceFilters}
+                                                    >
+                                                        Clear filters
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => setOpenImport(true)}
+                                                >
+                                                    <Upload className="h-4 w-4" />
+                                                    Import performance data
+                                                </Button>
+                                            </>
+                                        }
                                     />
                                 </div>
                             ) : (

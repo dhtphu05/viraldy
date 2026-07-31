@@ -3,6 +3,9 @@ import { CampaignReadinessHero } from "@/features/campaigns/components/campaign-
 import type { CampaignReadiness } from "@/features/campaigns/lib/campaignReadiness";
 import type { CampaignPack, StepId } from "@/features/campaigns/types/campaign";
 import { formatUtcDateTime, formatUtcTime } from "@/shared/lib/date-format";
+import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Activity } from "lucide-react";
 
 export function CampaignOverview({
     pack,
@@ -95,9 +98,24 @@ export function CampaignOverview({
                         Recent activity
                     </h2>
                     {activity.length === 0 ? (
-                        <p className="mt-3 border-y border-divider py-4 text-sm text-text-tertiary">
-                            No activity yet.
-                        </p>
+                        <EmptyState
+                            compact
+                            icon={Activity}
+                            className="mt-3 bg-surface"
+                            title="No campaign activity yet"
+                            description="Campaign Pack edits, creator handoffs, and review decisions will appear here."
+                            action={
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                        onContinue(readiness.nextAction.step ?? "review")
+                                    }
+                                >
+                                    Continue Campaign Pack
+                                </Button>
+                            }
+                        />
                     ) : (
                         <ul className="mt-3 divide-y divide-divider border-y border-divider bg-surface">
                             {activity.slice(0, 5).map((event) => (

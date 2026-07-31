@@ -151,8 +151,28 @@ export function AdaptToProductDialog({
                     className="min-h-0 flex-1 overflow-y-auto rounded-md border border-control-border"
                 >
                     {products.length === 0 ? (
-                        <div className="p-8 text-center text-sm text-text-tertiary">
-                            No products match. Try clearing the filter.
+                        <div className="flex flex-col items-center px-6 py-8 text-center">
+                            <span className="grid h-10 w-10 place-items-center rounded-full bg-surface-muted text-text-secondary">
+                                <Package className="h-5 w-5" />
+                            </span>
+                            <p className="mt-3 text-sm font-semibold text-text-primary">
+                                No products match these filters
+                            </p>
+                            <p className="mt-1 max-w-sm text-xs leading-5 text-text-secondary">
+                                Search the full catalog or choose another category.
+                            </p>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="mt-3"
+                                onClick={() => {
+                                    setQuery("");
+                                    setCategory("All");
+                                }}
+                            >
+                                Clear filters
+                            </Button>
                         </div>
                     ) : (
                         <ul className="divide-y divide-hairline/60">

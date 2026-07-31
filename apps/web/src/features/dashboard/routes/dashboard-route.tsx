@@ -10,6 +10,7 @@ import { ProcessingStepper, type Step } from "@/shared/ui/processing-stepper";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { RelativeTime } from "@/shared/ui/relative-time";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { AnalyzeCreativeDialog } from "@/features/dashboard/components/analyze-creative-dialog";
 import { overviewMetrics, decisionQueue } from "@/features/dashboard/mocks/dashboard";
 import { recommendations as seedRecs } from "@/features/dashboard/mocks/recommendations";
@@ -161,26 +162,38 @@ function DashboardPage() {
                     aria-label="Attention summary"
                     className="flex flex-col gap-4 px-1 sm:flex-row sm:items-center"
                 >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-active">
+                    <span
+                        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+                            decisionQueue.length
+                                ? "bg-primary-soft text-primary-active"
+                                : "bg-ok-soft text-ok"
+                        }`}
+                    >
                         <ClipboardCheck className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-text-primary">
-                            {decisionQueue.length} decisions need your attention
+                            {decisionQueue.length
+                                ? `${decisionQueue.length} decisions need your attention`
+                                : "No blocking decisions"}
                         </p>
                         <p className="mt-0.5 text-sm text-text-secondary">
-                            Resolve the highest-impact creative and campaign blockers first.
+                            {decisionQueue.length
+                                ? "Resolve the highest-impact creative and campaign blockers first."
+                                : "Your current campaigns are clear. Review new signals as they arrive."}
                         </p>
                     </div>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        className="shrink-0 self-start sm:self-auto"
-                        onClick={() => setActiveDecision(decisionQueue[0])}
-                    >
-                        Start with the most urgent
-                        <ArrowRight className="h-4 w-4" />
-                    </Button>
+                    {decisionQueue[0] && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="shrink-0 self-start sm:self-auto"
+                            onClick={() => setActiveDecision(decisionQueue[0])}
+                        >
+                            Start with the most urgent
+                            <ArrowRight className="h-4 w-4" />
+                        </Button>
+                    )}
                 </section>
 
                 <section className="min-w-0">
@@ -194,13 +207,33 @@ function DashboardPage() {
                         padding="none"
                         className="divide-y divide-divider"
                     >
-                        {decisionQueue.map((item) => (
-                            <DashboardDecisionRow
-                                key={item.id}
-                                item={item}
-                                onOpen={() => setActiveDecision(item)}
+                        {decisionQueue.length ? (
+                            decisionQueue.map((item) => (
+                                <DashboardDecisionRow
+                                    key={item.id}
+                                    item={item}
+                                    onOpen={() => setActiveDecision(item)}
+                                />
+                            ))
+                        ) : (
+                            <EmptyState
+                                compact
+                                tone="success"
+                                icon={ShieldCheck}
+                                title="Everything requiring review is resolved"
+                                description="Analyze a new creative or wait for campaign and performance signals to create the next decision."
+                                action={
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => setAnalyzeOpen(true)}
+                                    >
+                                        <Sparkles className="h-4 w-4" />
+                                        Analyze creative
+                                    </Button>
+                                }
                             />
-                        ))}
+                        )}
                     </SurfaceCard>
                 </section>
 
@@ -266,26 +299,43 @@ function DashboardPage() {
                         </Button>
                     </div>
                     <SurfaceCard padding="none" className="divide-y divide-hairline/50">
-                        <div className="hidden grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_100px_100px_minmax(0,1.4fr)_auto] gap-3 px-4 py-2 text-[10px] font-semibold uppercase text-text-tertiary sm:grid">
-                            <span>Campaign</span>
-                            <span>Status</span>
-                            <span>UGC</span>
-                            <span>GMV</span>
-                            <span>Next action</span>
-                            <span />
-                        </div>
-                        {campaigns.slice(0, 5).map((c) => (
-                            <CampaignRow
-                                key={c.id}
-                                campaign={c}
-                                onClick={() =>
-                                    navigate({
-                                        to: "/campaigns/$campaignId",
-                                        params: { campaignId: c.id },
-                                    })
+                        {campaigns.length ? (
+                            <>
+                                <div className="hidden grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_100px_100px_minmax(0,1.4fr)_auto] gap-3 px-4 py-2 text-[10px] font-semibold uppercase text-text-tertiary sm:grid">
+                                    <span>Campaign</span>
+                                    <span>Status</span>
+                                    <span>UGC</span>
+                                    <span>GMV</span>
+                                    <span>Next action</span>
+                                    <span />
+                                </div>
+                                {campaigns.slice(0, 5).map((c) => (
+                                    <CampaignRow
+                                        key={c.id}
+                                        campaign={c}
+                                        onClick={() =>
+                                            navigate({
+                                                to: "/campaigns/$campaignId",
+                                                params: { campaignId: c.id },
+                                            })
+                                        }
+                                    />
+                                ))}
+                            </>
+                        ) : (
+                            <EmptyState
+                                compact
+                                icon={FolderKanban}
+                                title="No active campaigns yet"
+                                description="Start a production run to connect a product, creative reference, and creator-ready Campaign Pack."
+                                action={
+                                    <Button size="sm" onClick={() => navigate({ to: "/mvp" })}>
+                                        <Workflow className="h-4 w-4" />
+                                        Start production run
+                                    </Button>
                                 }
                             />
-                        ))}
+                        )}
                     </SurfaceCard>
                 </section>
 
@@ -298,30 +348,41 @@ function DashboardPage() {
                         <span className="h-px flex-1 bg-hairline/60" />
                     </div>
                     <ul className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
-                        {activities.map((a) => {
-                            const Icon = activityIcon[a.kind];
-                            return (
-                                <li
-                                    key={a.id}
-                                    className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2"
-                                >
-                                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-soft text-text-secondary">
-                                        <Icon className="h-3 w-3" />
-                                    </span>
-                                    <div className="min-w-0">
-                                        <p className="truncate text-xs text-text-primary">
-                                            {a.title}
-                                        </p>
-                                        <p className="truncate text-[11px] text-text-tertiary">
-                                            {a.subject}
-                                        </p>
-                                    </div>
-                                    <span className="shrink-0 text-[11px] tabular text-text-tertiary">
-                                        <RelativeTime value={a.at} />
-                                    </span>
-                                </li>
-                            );
-                        })}
+                        {activities.length ? (
+                            activities.map((a) => {
+                                const Icon = activityIcon[a.kind];
+                                return (
+                                    <li
+                                        key={a.id}
+                                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2"
+                                    >
+                                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-soft text-text-secondary">
+                                            <Icon className="h-3 w-3" />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <p className="truncate text-xs text-text-primary">
+                                                {a.title}
+                                            </p>
+                                            <p className="truncate text-[11px] text-text-tertiary">
+                                                {a.subject}
+                                            </p>
+                                        </div>
+                                        <span className="shrink-0 text-[11px] tabular text-text-tertiary">
+                                            <RelativeTime value={a.at} />
+                                        </span>
+                                    </li>
+                                );
+                            })
+                        ) : (
+                            <li className="sm:col-span-2">
+                                <EmptyState
+                                    compact
+                                    icon={Sparkles}
+                                    title="No workspace activity yet"
+                                    description="Analysis, campaign, and review events will appear here as your team works."
+                                />
+                            </li>
+                        )}
                     </ul>
                 </section>
             </div>

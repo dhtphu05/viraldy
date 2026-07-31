@@ -18,6 +18,7 @@ import {
     BarChart2,
     VideoIcon,
     Sparkles,
+    SearchX,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
@@ -145,7 +146,17 @@ export function SearchCommand({
                 placeholder="Search products, campaigns, assets…"
             />
             <CommandList>
-                <CommandEmpty>No results.</CommandEmpty>
+                <CommandEmpty>
+                    <div className="flex flex-col items-center px-6 py-3 text-center">
+                        <span className="grid h-10 w-10 place-items-center rounded-full bg-surface-muted text-text-secondary">
+                            <SearchX className="h-5 w-5" />
+                        </span>
+                        <p className="mt-3 font-medium text-text-primary">No matching result</p>
+                        <p className="mt-1 max-w-xs text-xs leading-5 text-text-secondary">
+                            Try a product, campaign, creator, asset, or action such as “upload UGC”.
+                        </p>
+                    </div>
+                </CommandEmpty>
                 {quickActionResults.length > 0 && (
                     <CommandGroup heading="Quick actions">
                         {quickActionResults.map((action) => {
