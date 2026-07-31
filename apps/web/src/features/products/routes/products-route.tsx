@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
@@ -10,14 +11,26 @@ import { StatusChip } from "@/shared/ui/status-chip";
 import { RightDrawer } from "@/shared/ui/right-drawer";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
+import { MetricStrip } from "@/shared/ui/metric-strip";
+import { hasConfiguredApiBaseUrl } from "@/shared/api/client";
+import { queryKeys } from "@/shared/api/query-keys";
+import {
+    listProducts,
+    listProductWorkspaces,
+    type Product,
+} from "@/shared/api/products";
 import { seedProducts } from "@/features/products/data/products";
+import { ImportProductDialog } from "@/features/products/components/import-product-dialog";
+import {
+    mergeCatalogProducts,
+    productionRunSearchForProduct,
+    type CatalogProduct,
+    type CatalogReadiness,
+    type CatalogRisk,
+} from "@/features/products/lib/product-catalog";
 import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
 import { seedCreators } from "@/features/ugc-review/mocks/creators";
-import type {
-    CreativeReference,
-    ProductCategory,
-    SeedProduct,
-} from "@/features/creative-library/types/creative";
+import type { CreativeReference } from "@/features/creative-library/types/creative";
 import type { UgcAsset } from "@/features/ugc-review/types/ugc";
 import {
     ArrowRight,
@@ -38,16 +51,8 @@ export const Route = createFileRoute("/products")({
     component: ProductsPage,
 });
 
-const READINESS = ["All", "Ready", "Setup needed", "Out of stock"] as const;
-const RISKS = ["All", "Low", "Medium", "High"] as const;
-const CATEGORIES: ("All" | ProductCategory)[] = [
-    "All",
-    "Home & Kitchen",
-    "Pet",
-    "Beauty",
-    "POD Gifts",
-    "Home Organization",
-];
+const READINESS = ["All", "Ready", "Setup needed", "Out of stock", "Unknown"] as const;
+const RISKS = ["All", "Low", "Medium", "High", "Unknown"] as const;
 
 function ProductsPage() {
     const search = Route.useSearch();
@@ -55,24 +60,47 @@ function ProductsPage() {
     const campaigns = useAllCampaigns();
     const creatives = useAppStore((s) => s.creatives);
     const ugcAssets = useAppStore((s) => s.ugcAssets);
-    const setDraft = useAppStore((s) => s.setDraft);
+    const workspaces = useQuery({
+        queryKey: queryKeys.workspaces.list,
+        queryFn: listProductWorkspaces,
+        enabled: hasConfiguredApiBaseUrl,
+    });
+    const workspaceId = workspaces.data?.[0]?.id;
+    const products = useQuery({
+        queryKey: queryKeys.products.list(workspaceId),
+        queryFn: () => listProducts(workspaceId!),
+        enabled: Boolean(workspaceId),
+    });
+    const catalog = useMemo(
+        () => mergeCatalogProducts(seedProducts, products.data ?? []),
+        [products.data],
+    );
+    const categories = useMemo(
+        () => ["All", ...new Set(catalog.map((product) => product.category))],
+        [catalog],
+    );
 
     const [query, setQuery] = useState("");
-    const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All");
+    const [category, setCategory] = useState("All");
     const [readiness, setReadiness] = useState<(typeof READINESS)[number]>("All");
     const [risk, setRisk] = useState<(typeof RISKS)[number]>("All");
     const [selectedId, setSelectedId] = useState<string | null>(search.productId ?? null);
 
     useEffect(() => {
-        if (search.productId && seedProducts.some((product) => product.id === search.productId)) {
+        if (search.productId) {
             setSelectedId(search.productId);
         }
     }, [search.productId]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return seedProducts.filter((product) => {
-            if (q && !`${product.name} ${product.category}`.toLowerCase().includes(q)) {
+        return catalog.filter((product) => {
+            if (
+                q &&
+                !`${product.name} ${product.brand ?? ""} ${product.category}`
+                    .toLowerCase()
+                    .includes(q)
+            ) {
                 return false;
             }
             if (category !== "All" && product.category !== category) return false;
@@ -80,14 +108,14 @@ function ProductsPage() {
             if (risk !== "All" && product.fulfillmentRisk !== risk) return false;
             return true;
         });
-    }, [category, query, readiness, risk]);
+    }, [catalog, category, query, readiness, risk]);
 
-    const selected = seedProducts.find((product) => product.id === selectedId) ?? null;
+    const selected = catalog.find((product) => product.id === selectedId) ?? null;
     const hasFilters = query || category !== "All" || readiness !== "All" || risk !== "All";
     const totalCampaigns = campaigns.filter((campaign) =>
-        seedProducts.some((product) => product.name === campaign.product),
+        catalog.some((product) => product.name === campaign.product),
     ).length;
-    const readyCount = seedProducts.filter((product) => product.readiness === "Ready").length;
+    const readyCount = catalog.filter((product) => product.readiness === "Ready").length;
     const linkedCreativeCount = creatives.filter((creative) => creative.linkedProductId).length;
 
     const openProduct = (id: string) => {
@@ -97,12 +125,18 @@ function ProductsPage() {
 
     const closeProduct = () => {
         setSelectedId(null);
-        void navigate({ to: "/products", replace: true, search: {} });
+        void navigate({
+            to: "/products",
+            replace: true,
+            search: { productId: undefined },
+        });
     };
 
-    const startCampaign = (product: SeedProduct) => {
-        setDraft({ productId: product.id });
-        void navigate({ to: "/campaigns/new" });
+    const startProductionRun = (product: CatalogProduct) => {
+        void navigate({
+            to: "/mvp",
+            search: productionRunSearchForProduct(product),
+        });
     };
 
     return (
@@ -112,29 +146,53 @@ function ProductsPage() {
                     title="Products"
                     description="Catalog context for campaign planning, creative reuse, and sample risk."
                     actions={
-                        <Button
-                            onClick={() => {
-                                const firstReady =
-                                    seedProducts.find((product) => product.readiness === "Ready") ??
-                                    seedProducts[0];
-                                startCampaign(firstReady);
-                            }}
-                        >
-                            <Sparkles className="h-4 w-4" />
-                            Start campaign
-                        </Button>
+                        <>
+                            <ImportProductDialog
+                                workspaceId={workspaceId}
+                                onImported={(product: Product) => openProduct(product.id)}
+                            />
+                            <Button
+                                onClick={() => {
+                                    const firstReady =
+                                        catalog.find(
+                                            (product) => product.readiness === "Ready",
+                                        ) ?? catalog[0];
+                                    if (firstReady) startProductionRun(firstReady);
+                                }}
+                                disabled={catalog.length === 0}
+                            >
+                                <Sparkles className="h-4 w-4" />
+                                Start production run
+                            </Button>
+                        </>
                     }
                 />
 
-                <section className="grid gap-3 sm:grid-cols-3">
-                    <Metric label="Products" value={seedProducts.length} hint="Demo catalog" />
-                    <Metric label="Ready to brief" value={readyCount} hint="Low-friction starts" />
-                    <Metric
-                        label="Linked signals"
-                        value={linkedCreativeCount + totalCampaigns}
-                        hint="Creatives + campaigns"
-                    />
-                </section>
+                <MetricStrip
+                    ariaLabel="Product catalog summary"
+                    metrics={[
+                        {
+                            id: "products",
+                            label: "Products",
+                            value: catalog.length,
+                            hint: "Demo + workspace catalog",
+                        },
+                        {
+                            id: "ready",
+                            label: "Ready to brief",
+                            value: readyCount,
+                            hint: "Low-friction starts",
+                            tone: "ok",
+                        },
+                        {
+                            id: "signals",
+                            label: "Linked signals",
+                            value: linkedCreativeCount + totalCampaigns,
+                            hint: "Creatives + campaigns",
+                            tone: "info",
+                        },
+                    ]}
+                />
 
                 <SurfaceCard padding="sm" className="flex flex-wrap items-center gap-2">
                     <div className="relative min-w-[220px] flex-1">
@@ -155,7 +213,7 @@ function ProductsPage() {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            {CATEGORIES.map((item) => (
+                            {categories.map((item) => (
                                 <SelectItem key={item} value={item}>
                                     {item === "All" ? "All categories" : item}
                                 </SelectItem>
@@ -238,7 +296,8 @@ function ProductsPage() {
                             );
                             const linkedCreatives = creatives.filter(
                                 (creative) =>
-                                    creative.linkedProductId === product.id && !creative.archived,
+                                    creative.linkedProductId === catalogLinkId(product) &&
+                                    !creative.archived,
                             );
                             return (
                                 <button
@@ -263,7 +322,7 @@ function ProductsPage() {
                                                     {product.name}
                                                 </p>
                                                 <p className="mt-0.5 text-xs text-text-secondary">
-                                                    {product.category} · ${product.price.toFixed(2)}
+                                                    {product.category} · {productPrice(product)}
                                                 </p>
                                             </div>
                                             <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-text-tertiary" />
@@ -302,7 +361,10 @@ function ProductsPage() {
                 product={selected}
                 campaigns={campaigns.filter((campaign) => selected?.name === campaign.product)}
                 creatives={creatives.filter(
-                    (creative) => selected?.id === creative.linkedProductId && !creative.archived,
+                    (creative) =>
+                        selected &&
+                        catalogLinkId(selected) === creative.linkedProductId &&
+                        !creative.archived,
                 )}
                 ugcAssets={ugcAssets.filter((asset) => {
                     const campaign = campaigns.find((item) => item.id === asset.campaignId);
@@ -312,19 +374,9 @@ function ProductsPage() {
                 onOpenChange={(open) => {
                     if (!open) closeProduct();
                 }}
-                onStartCampaign={() => selected && startCampaign(selected)}
+                onStartProduction={() => selected && startProductionRun(selected)}
             />
         </AppShell>
-    );
-}
-
-function Metric({ label, value, hint }: { label: string; value: number; hint: string }) {
-    return (
-        <SurfaceCard padding="md" className="min-h-[104px]">
-            <p className="text-xs font-medium uppercase text-text-tertiary">{label}</p>
-            <p className="mt-2 tabular text-3xl font-semibold text-text-primary">{value}</p>
-            <p className="mt-1 text-xs text-text-secondary">{hint}</p>
-        </SurfaceCard>
     );
 }
 
@@ -335,15 +387,15 @@ function ProductDrawer({
     ugcAssets,
     open,
     onOpenChange,
-    onStartCampaign,
+    onStartProduction,
 }: {
-    product: SeedProduct | null;
+    product: CatalogProduct | null;
     campaigns: ReturnType<typeof useAllCampaigns>;
     creatives: CreativeReference[];
     ugcAssets: UgcAsset[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onStartCampaign: () => void;
+    onStartProduction: () => void;
 }) {
     if (!product) return null;
     const nextAction =
@@ -351,8 +403,10 @@ function ProductDrawer({
             ? "Resolve inventory before briefing creators."
             : product.fulfillmentRisk === "High"
               ? "Validate fulfillment timing before sample allocation."
+              : product.readiness === "Unknown"
+                ? "Review the imported product context before briefing creators."
               : creatives.length > 0
-                ? "Start a campaign from linked creative references."
+                ? "Start a Production Run from linked creative references."
                 : "Import or link reference creatives before launch.";
 
     return (
@@ -360,15 +414,15 @@ function ProductDrawer({
             open={open}
             onOpenChange={onOpenChange}
             title={product.name}
-            description={`${product.category} · $${product.price.toFixed(2)}`}
+            description={`${product.category} · ${productPrice(product)}`}
             footer={
                 <div className="flex items-center justify-between gap-2">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>
                         Close
                     </Button>
-                    <Button onClick={onStartCampaign}>
+                    <Button onClick={onStartProduction}>
                         <Sparkles className="h-4 w-4" />
-                        Start campaign
+                        Start production run
                     </Button>
                 </div>
             }
@@ -392,6 +446,31 @@ function ProductDrawer({
                         {product.fulfillmentRisk} fulfillment risk
                     </StatusChip>
                 </div>
+                {product.description || product.brand || product.sourceUrl ? (
+                    <SurfaceCard padding="sm" className="space-y-2 bg-surface-soft">
+                        {product.brand ? (
+                            <p className="text-sm text-text-primary">
+                                <span className="text-text-tertiary">Brand:</span>{" "}
+                                {product.brand}
+                            </p>
+                        ) : null}
+                        {product.description ? (
+                            <p className="whitespace-pre-wrap text-sm text-text-secondary">
+                                {product.description}
+                            </p>
+                        ) : null}
+                        {product.sourceUrl ? (
+                            <a
+                                href={product.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block truncate text-xs text-primary hover:underline"
+                            >
+                                {product.sourceUrl}
+                            </a>
+                        ) : null}
+                    </SurfaceCard>
+                ) : null}
                 <SurfaceCard padding="sm" className="bg-surface-soft">
                     <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Suggested next action
@@ -517,14 +596,30 @@ function Section({
     );
 }
 
-function readinessTone(readiness: SeedProduct["readiness"]) {
+function readinessTone(readiness: CatalogReadiness) {
     if (readiness === "Ready") return "ok";
     if (readiness === "Setup needed") return "warn";
+    if (readiness === "Unknown") return "neutral";
     return "destructive";
 }
 
-function riskTone(risk: SeedProduct["fulfillmentRisk"]) {
+function riskTone(risk: CatalogRisk) {
     if (risk === "Low") return "ok";
     if (risk === "Medium") return "warn";
+    if (risk === "Unknown") return "neutral";
     return "destructive";
+}
+
+function catalogLinkId(product: CatalogProduct) {
+    return product.localProductId ?? product.id;
+}
+
+function productPrice(product: CatalogProduct) {
+    if (product.price === null) return "Price unknown";
+    const value = new Intl.NumberFormat(undefined, {
+        style: product.currency ? "currency" : "decimal",
+        currency: product.currency,
+        maximumFractionDigits: product.currency === "VND" ? 0 : 2,
+    }).format(product.price);
+    return product.currency ? value : `${value} (currency unknown)`;
 }
