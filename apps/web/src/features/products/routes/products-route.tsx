@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusChip } from "@/shared/ui/status-chip";
 import { RightDrawer } from "@/shared/ui/right-drawer";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 import { MetricStrip } from "@/shared/ui/metric-strip";
 import { hasConfiguredApiBaseUrl } from "@/shared/api/client";
@@ -107,7 +108,12 @@ function ProductsPage() {
     }, [catalog, category, query, readiness, risk]);
 
     const selected = catalog.find((product) => product.id === selectedId) ?? null;
-    const hasFilters = query || category !== "All" || readiness !== "All" || risk !== "All";
+    const hasFilters = Boolean(
+        query.trim() || category !== "All" || readiness !== "All" || risk !== "All",
+    );
+    const catalogLoading =
+        hasConfiguredApiBaseUrl &&
+        (workspaces.isLoading || (Boolean(workspaceId) && products.isLoading));
     const totalCampaigns = campaigns.filter((campaign) =>
         catalog.some((product) => product.name === campaign.product),
     ).length;
@@ -190,86 +196,88 @@ function ProductsPage() {
                 />
 
                 <SurfaceCard padding="sm" className="flex flex-wrap items-center gap-2">
-                    <div className="relative min-w-[220px] flex-1">
-                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
-                        <Input
-                            className="pl-8"
-                            aria-label="Search products"
-                            placeholder="Search products, categories..."
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                        />
-                    </div>
-                    <Select
-                        value={category}
-                        onValueChange={(value) => setCategory(value as typeof category)}
-                    >
-                        <SelectTrigger className="w-[170px]" aria-label="Filter by category">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {categories.map((item) => (
-                                <SelectItem key={item} value={item}>
-                                    {item === "All" ? "All categories" : item}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={readiness}
-                        onValueChange={(value) => setReadiness(value as typeof readiness)}
-                    >
-                        <SelectTrigger className="w-[160px]" aria-label="Filter by readiness">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {READINESS.map((item) => (
-                                <SelectItem key={item} value={item}>
-                                    {item === "All" ? "All readiness" : item}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select value={risk} onValueChange={(value) => setRisk(value as typeof risk)}>
-                        <SelectTrigger
-                            className="w-[140px]"
-                            aria-label="Filter by fulfillment risk"
+                    {catalogLoading ? (
+                        <div
+                            role="status"
+                            aria-live="polite"
+                            aria-busy="true"
+                            aria-label="Loading product catalog filters"
+                            className="grid w-full gap-2 sm:grid-cols-[minmax(220px,1fr)_170px_160px_140px]"
                         >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {RISKS.map((item) => (
-                                <SelectItem key={item} value={item}>
-                                    {item === "All" ? "All risks" : `${item} risk`}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    {hasFilters && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                                setQuery("");
-                                setCategory("All");
-                                setReadiness("All");
-                                setRisk("All");
-                            }}
-                        >
-                            Clear filters
-                        </Button>
-                    )}
-                </SurfaceCard>
-
-                {filtered.length === 0 ? (
-                    <SurfaceCard padding="lg">
-                        <EmptyState
-                            icon={Package}
-                            title="No products match these filters"
-                            description="Clear filters or search a broader category to continue campaign planning."
-                            action={
+                            <Skeleton className="h-10" />
+                            <Skeleton className="h-10" />
+                            <Skeleton className="h-10" />
+                            <Skeleton className="h-10" />
+                        </div>
+                    ) : (
+                        <>
+                            <div className="relative min-w-[220px] flex-1">
+                                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+                                <Input
+                                    className="pl-8"
+                                    aria-label="Search products"
+                                    placeholder="Search products, categories..."
+                                    value={query}
+                                    onChange={(event) => setQuery(event.target.value)}
+                                />
+                            </div>
+                            <Select
+                                value={category}
+                                onValueChange={(value) => setCategory(value as typeof category)}
+                            >
+                                <SelectTrigger
+                                    className="w-[170px]"
+                                    aria-label="Filter by category"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {categories.map((item) => (
+                                        <SelectItem key={item} value={item}>
+                                            {item === "All" ? "All categories" : item}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                value={readiness}
+                                onValueChange={(value) => setReadiness(value as typeof readiness)}
+                            >
+                                <SelectTrigger
+                                    className="w-[160px]"
+                                    aria-label="Filter by readiness"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {READINESS.map((item) => (
+                                        <SelectItem key={item} value={item}>
+                                            {item === "All" ? "All readiness" : item}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                value={risk}
+                                onValueChange={(value) => setRisk(value as typeof risk)}
+                            >
+                                <SelectTrigger
+                                    className="w-[140px]"
+                                    aria-label="Filter by fulfillment risk"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {RISKS.map((item) => (
+                                        <SelectItem key={item} value={item}>
+                                            {item === "All" ? "All risks" : `${item} risk`}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {hasFilters && (
                                 <Button
-                                    variant="secondary"
+                                    variant="ghost"
                                     size="sm"
                                     onClick={() => {
                                         setQuery("");
@@ -280,6 +288,47 @@ function ProductsPage() {
                                 >
                                     Clear filters
                                 </Button>
+                            )}
+                        </>
+                    )}
+                </SurfaceCard>
+
+                {catalogLoading ? (
+                    <ProductCatalogSkeleton />
+                ) : filtered.length === 0 ? (
+                    <SurfaceCard padding="lg">
+                        <EmptyState
+                            icon={Package}
+                            title={
+                                catalog.length
+                                    ? "No products match these filters"
+                                    : "Build your product catalog"
+                            }
+                            description={
+                                catalog.length
+                                    ? "Clear filters or search a broader category to continue campaign planning."
+                                    : "Import a public product page to create the context needed for creative adaptation and campaign planning."
+                            }
+                            action={
+                                catalog.length ? (
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => {
+                                            setQuery("");
+                                            setCategory("All");
+                                            setReadiness("All");
+                                            setRisk("All");
+                                        }}
+                                    >
+                                        Clear filters
+                                    </Button>
+                                ) : (
+                                    <ImportProductDialog
+                                        workspaceId={workspaceId}
+                                        onImported={(product: Product) => openProduct(product.id)}
+                                    />
+                                )
                             }
                         />
                     </SurfaceCard>
@@ -372,6 +421,41 @@ function ProductsPage() {
                 onStartProduction={() => selected && startProductionRun(selected)}
             />
         </AppShell>
+    );
+}
+
+function ProductCatalogSkeleton() {
+    return (
+        <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            aria-label="Syncing workspace product catalog"
+            className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+        >
+            {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="surface-card overflow-hidden">
+                    <Skeleton className="aspect-[16/7] rounded-none" />
+                    <div className="grid gap-4 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                                <Skeleton className="h-4 w-3/5" />
+                                <Skeleton className="mt-2 h-3 w-2/5" />
+                            </div>
+                            <Skeleton className="h-4 w-4 rounded-full" />
+                        </div>
+                        <div className="flex gap-2">
+                            <Skeleton className="h-6 w-20 rounded-full" />
+                            <Skeleton className="h-6 w-16 rounded-full" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Skeleton className="h-9" />
+                            <Skeleton className="h-9" />
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }
 
@@ -610,10 +694,20 @@ function catalogLinkId(product: CatalogProduct) {
 
 function productPrice(product: CatalogProduct) {
     if (product.price === null) return "Price unknown";
+    const currency = product.currency?.trim().toUpperCase();
+    if (currency && /^[A-Z]{3}$/.test(currency)) {
+        try {
+            return new Intl.NumberFormat(undefined, {
+                style: "currency",
+                currency,
+                maximumFractionDigits: currency === "VND" ? 0 : 2,
+            }).format(product.price);
+        } catch {
+            // Fall through to a currency-neutral value for unknown ISO codes.
+        }
+    }
     const value = new Intl.NumberFormat(undefined, {
-        style: product.currency ? "currency" : "decimal",
-        currency: product.currency,
-        maximumFractionDigits: product.currency === "VND" ? 0 : 2,
+        maximumFractionDigits: 2,
     }).format(product.price);
-    return product.currency ? value : `${value} (currency unknown)`;
+    return `${value} (currency unknown)`;
 }
