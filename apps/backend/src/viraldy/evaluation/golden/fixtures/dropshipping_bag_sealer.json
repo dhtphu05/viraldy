@@ -1,0 +1,100 @@
+{
+  "schema_version": "golden_fixture_v1",
+  "scenario_id": "dropshipping_bag_sealer",
+  "domain": "dropshipping",
+  "product_name": "Rechargeable Mini Bag Sealer",
+  "objective": "Demonstrate the supported sealing mechanism without universal compatibility or airtight claims.",
+  "pattern_name": "Mess Interruption \u2192 One-Handed Demo \u2192 Leak/Seal Proof \u2192 Trust Cue",
+  "concepts": [
+    {
+      "concept_id": "dorm_snack_fix",
+      "name": "Dorm Snack Fix",
+      "strategic_axis": "student_portability",
+      "buyer_persona": "College student carrying opened snacks",
+      "creator_persona": "Dorm lifestyle creator",
+      "spoken_hook": "I was tired of chips spilling inside my backpack.",
+      "overlay_hook": "Dorm snack fix",
+      "diversity_axes": [
+        "buyer_persona",
+        "hook_mechanism",
+        "proof_setup"
+      ]
+    },
+    {
+      "concept_id": "family_pantry_routine",
+      "name": "Family Pantry Routine",
+      "strategic_axis": "household_organization",
+      "buyer_persona": "Parent organizing opened snack bags",
+      "creator_persona": "Family organization creator",
+      "spoken_hook": "My pantry had more clips than snacks.",
+      "overlay_hook": "One pantry routine",
+      "diversity_axes": [
+        "buyer_persona",
+        "creator_persona",
+        "demo_mechanism"
+      ]
+    },
+    {
+      "concept_id": "travel_packing",
+      "name": "Travel Packing",
+      "strategic_axis": "carry_on_utility",
+      "buyer_persona": "Traveler packing supported snack bags",
+      "creator_persona": "Travel packing creator",
+      "spoken_hook": "This is how I keep bag clips out of my carry-on.",
+      "overlay_hook": "Compact packing utility",
+      "diversity_axes": [
+        "buyer_persona",
+        "hook_mechanism",
+        "creator_persona"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "ugc_prohibited_claim",
+      "asset_role": "ugc_draft",
+      "has_audio": true,
+      "duration_ms": 16400,
+      "observations": {
+        "spoken_claim": "This makes every bag completely airtight.",
+        "claim_start_ms": 8900,
+        "product_first_appearance_ms": 1100,
+        "seal_line_visible": true
+      }
+    }
+  ],
+  "preflight_expectations": [
+    {
+      "asset_id": "ugc_prohibited_claim",
+      "action": "revise",
+      "product_required_before_ms": null,
+      "product_first_appearance_ms": 1100,
+      "disclosure_status": "not_applicable",
+      "proof_status": "satisfied",
+      "product_tag_status": "satisfied",
+      "hard_blocker_codes": [
+        "PROHIBITED_UNIVERSAL_AIRTIGHT_CLAIM"
+      ],
+      "high_priority_fix_codes": [
+        "REPLACE_UNSUPPORTED_CLAIM"
+      ],
+      "personalization_expected": null,
+      "personalization_observed": null,
+      "prohibited_claims_observed": [
+        "This makes every bag completely airtight."
+      ],
+      "strengths_to_preserve": [
+        "Clear one-handed demo",
+        "Product appears at 1.1 seconds",
+        "Seal line is visible"
+      ]
+    }
+  ],
+  "required_disclosures": [],
+  "prohibited_claims": [
+    "completely airtight",
+    "keeps food fresh forever",
+    "works with every plastic",
+    "immediate delivery"
+  ]
+}

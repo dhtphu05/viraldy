@@ -1,0 +1,177 @@
+{
+  "schema_version": "golden_fixture_v1",
+  "scenario_id": "home_travel_steamer",
+  "domain": "tiktok_shop_us",
+  "product_name": "SwiftPress Mini Garment Steamer",
+  "objective": "Create structurally ready TikTok Shop UGC that demonstrates observable same-shirt proof.",
+  "pattern_name": "Deadline Pressure \u2192 Fast Product Reveal \u2192 Same-Fabric Proof",
+  "concepts": [
+    {
+      "concept_id": "late_for_class",
+      "name": "Late for Class Rescue",
+      "strategic_axis": "time_pressure_for_college_student",
+      "buyer_persona": "College student in a dorm",
+      "creator_persona": "US college lifestyle creator",
+      "spoken_hook": "I had ten minutes before class and this shirt looked like it came straight out of my backpack.",
+      "overlay_hook": null,
+      "diversity_axes": [
+        "buyer_persona",
+        "hook_mechanism",
+        "creator_persona",
+        "narrative_structure"
+      ]
+    },
+    {
+      "concept_id": "carry_on_rescue",
+      "name": "Carry-On Clothing Rescue",
+      "strategic_axis": "travel_convenience",
+      "buyer_persona": "Frequent traveler using carry-on luggage",
+      "creator_persona": "US travel creator",
+      "spoken_hook": "This is why I stopped trusting hotel irons.",
+      "overlay_hook": "Carry-on clothing rescue",
+      "diversity_axes": [
+        "buyer_persona",
+        "hook_mechanism",
+        "creator_persona",
+        "demo_mechanism",
+        "narrative_structure"
+      ]
+    },
+    {
+      "concept_id": "small_space_alternative",
+      "name": "Small-Space Iron Alternative",
+      "strategic_axis": "comparison_and_space_saving",
+      "buyer_persona": "Apartment renter with limited storage",
+      "creator_persona": "Small-apartment lifestyle creator",
+      "spoken_hook": "I do not have space for an ironing board, so this lives in my desk drawer.",
+      "overlay_hook": "No ironing board setup",
+      "diversity_axes": [
+        "hook_mechanism",
+        "narrative_structure",
+        "demo_mechanism",
+        "proof_mechanism",
+        "offer_framing"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "reference_good_structure",
+      "asset_role": "reference",
+      "has_audio": true,
+      "duration_ms": 22400,
+      "observations": {
+        "product_match": "unknown",
+        "performance_evidence_attached": false,
+        "spoken_cta": "Tap the product tag to see it.",
+        "overlay_cta": null
+      }
+    },
+    {
+      "asset_id": "ugc_missing_product_timing",
+      "asset_role": "ugc_draft",
+      "has_audio": true,
+      "duration_ms": 22700,
+      "observations": {
+        "product_first_appearance_ms": 4200,
+        "required_before_ms": 2000
+      }
+    },
+    {
+      "asset_id": "ugc_missing_proof",
+      "asset_role": "ugc_draft",
+      "has_audio": true,
+      "duration_ms": 22700,
+      "observations": {
+        "proof_type": "steam_visibility_only"
+      }
+    },
+    {
+      "asset_id": "ugc_missing_disclosure",
+      "asset_role": "ugc_draft",
+      "has_audio": true,
+      "duration_ms": 22700,
+      "observations": {
+        "eligible_text_sources": 9,
+        "required_text": "Results vary by fabric type.",
+        "matched": false
+      }
+    },
+    {
+      "asset_id": "ugc_revision_resolves_all",
+      "asset_role": "ugc_revision",
+      "has_audio": true,
+      "duration_ms": 22100,
+      "observations": {
+        "product_first_appearance_ms": 1400,
+        "proof_type": "same_item_before_after",
+        "proof_duration_ms": 2600,
+        "disclosure_text": "Results vary by fabric type.",
+        "disclosure_start_ms": 15200,
+        "disclosure_end_ms": 18000
+      }
+    },
+    {
+      "asset_id": "no_audio_video",
+      "asset_role": "edge_case",
+      "has_audio": false,
+      "duration_ms": 12000,
+      "observations": {
+        "transcript_segments": 0
+      }
+    }
+  ],
+  "preflight_expectations": [
+    {
+      "asset_id": "ugc_missing_product_timing",
+      "action": "revise",
+      "product_required_before_ms": 2000,
+      "product_first_appearance_ms": 4200,
+      "disclosure_status": "missing",
+      "proof_status": "missing",
+      "product_tag_status": "satisfied",
+      "hard_blocker_codes": [
+        "PRODUCT_REVEAL_LATE",
+        "REQUIRED_DISCLOSURE_MISSING"
+      ],
+      "high_priority_fix_codes": [
+        "SAME_ITEM_PROOF_MISSING"
+      ],
+      "personalization_expected": null,
+      "personalization_observed": null,
+      "prohibited_claims_observed": [],
+      "strengths_to_preserve": [
+        "Natural student-creator delivery",
+        "Clear product-tag CTA",
+        "Platform-native pacing"
+      ]
+    },
+    {
+      "asset_id": "ugc_revision_resolves_all",
+      "action": "small_paid_test",
+      "product_required_before_ms": 2000,
+      "product_first_appearance_ms": 1400,
+      "disclosure_status": "satisfied",
+      "proof_status": "satisfied",
+      "product_tag_status": "satisfied",
+      "hard_blocker_codes": [],
+      "high_priority_fix_codes": [],
+      "personalization_expected": null,
+      "personalization_observed": null,
+      "prohibited_claims_observed": [],
+      "strengths_to_preserve": [
+        "Creator delivery remains natural",
+        "Product-tag CTA is clear",
+        "Platform-native pacing"
+      ]
+    }
+  ],
+  "required_disclosures": [
+    "Results vary by fabric type."
+  ],
+  "prohibited_claims": [
+    "removes every wrinkle instantly",
+    "safe for every fabric",
+    "professional dry-cleaning result"
+  ]
+}
