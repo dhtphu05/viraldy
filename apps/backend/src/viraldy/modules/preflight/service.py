@@ -343,6 +343,8 @@ def _alignment_blockers(
     for requirement, evaluation in zip(requirements, evaluations, strict=True):
         if evaluation.status not in {"missing", "violated", "unknown"}:
             continue
+        if requirement.severity not in {"hard", "high"}:
+            continue
         if evaluation.status == "unknown" and requirement.severity != "hard":
             continue
         code = (

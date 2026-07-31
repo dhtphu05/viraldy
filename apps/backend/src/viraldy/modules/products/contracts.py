@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from viraldy.modules.creative_domain.schema_versions import PRODUCT_CONTEXT_SCHEMA_VERSION
 
@@ -93,6 +93,34 @@ class CreativeContextV1(ProductContractBase):
     preferred_delivery_styles: list[str] = Field(default_factory=list)
     brand_voice: list[str] = Field(default_factory=list)
     prohibited_visuals: list[str] = Field(default_factory=list)
+    required_product_reveal_before_ms: int | None = Field(default=None, ge=0)
+    required_proof_mechanisms: list[str] = Field(default_factory=list)
+
+
+class PersonalizationFieldV1(ProductContractBase):
+    key: str = Field(min_length=1, max_length=120)
+    label: str = Field(min_length=1, max_length=160)
+    expected_value: str = Field(min_length=1, max_length=500)
+    case_sensitive: bool = False
+    visual_verification_required: bool = True
+
+
+class ProductPersonalizationV1(ProductContractBase):
+    required: bool = False
+    fields: list[PersonalizationFieldV1] = Field(default_factory=list)
+    physical_sample_required: bool = False
+    ordering_instructions: list[str] = Field(default_factory=list)
+    production_constraints: list[str] = Field(default_factory=list)
+    delivery_constraints: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_required_fields(self) -> ProductPersonalizationV1:
+        keys = [field.key for field in self.fields]
+        if len(set(keys)) != len(keys):
+            raise ValueError("personalization field keys must be unique")
+        if self.required and not self.fields:
+            raise ValueError("required personalization needs at least one field")
+        return self
 
 
 class ClaimRuleV1(ProductContractBase):
@@ -118,6 +146,7 @@ class ProductContextV1(ProductContractBase):
     features: list[ProductFeatureV1] = Field(default_factory=list)
     commercial: CommercialContextV1 = Field(default_factory=CommercialContextV1)
     creative: CreativeContextV1 = Field(default_factory=CreativeContextV1)
+    personalization: ProductPersonalizationV1 = Field(default_factory=ProductPersonalizationV1)
     governance: ProductGovernanceV1 = Field(default_factory=ProductGovernanceV1)
 
 

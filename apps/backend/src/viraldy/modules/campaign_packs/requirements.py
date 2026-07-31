@@ -105,7 +105,13 @@ def _compile_must_show(
         source_path = str(parsed["source_path"])
         base_id = str(parsed["id"])
         expected_before_ms = parsed.get("expected_before_ms")
-        matcher_type = _matcher_for_requirement(requirement_type, description, expected_before_ms)
+        matcher_type = _matcher_for_requirement(
+            requirement_type,
+            description,
+            expected_before_ms,
+            requirement_id=base_id,
+            source_path=source_path,
+        )
         semantics = _semantics_for_matcher(matcher_type)
         config: dict[str, object] = {"text": description}
         if isinstance(expected_before_ms, int):
@@ -172,11 +178,11 @@ def _compile_script_beats(
         if not instruction:
             continue
         beat_type = _clean_text(beat.get("beat_type"))
-        matcher = "demo_mechanism_match" if "demo" in beat_type.lower() else "spoken_text_presence"
+        matcher = _script_beat_matcher(brief_json, beat_type, instruction)
         requirements.append(
             _requirement(
                 id=_clean_text(beat.get("id")) or f"script_beat_{index}",
-                requirement_type="demo" if matcher == "demo_mechanism_match" else "script",
+                requirement_type=_requirement_type_for_matcher(matcher),
                 source_path=f"script_beats[{index - 1}]",
                 description=instruction,
                 severity="high",
@@ -594,6 +600,76 @@ def _compile_product_snapshot(
             expected_semantics="presence",
         )
     )
+    creative = product_snapshot.get("creative")
+    if isinstance(creative, dict):
+        reveal_before_ms = creative.get("required_product_reveal_before_ms")
+        if isinstance(reveal_before_ms, int):
+            requirements.append(
+                _requirement(
+                    id="product_required_reveal_timing",
+                    requirement_type="product",
+                    source_path=("product_snapshot.creative.required_product_reveal_before_ms"),
+                    description=(f"Product must first appear by {reveal_before_ms}ms."),
+                    severity="hard",
+                    matcher_type="product_visibility_timing",
+                    matcher_config={
+                        "before_ms": reveal_before_ms,
+                        "expected_before_ms": reveal_before_ms,
+                    },
+                    expected_semantics="timing",
+                )
+            )
+        for index, proof in enumerate(
+            _list_of_text(creative.get("required_proof_mechanisms")),
+            start=1,
+        ):
+            matcher_type = _proof_matcher(proof)
+            requirements.append(
+                _requirement(
+                    id=f"product_required_proof_{index}",
+                    requirement_type="proof",
+                    source_path=(
+                        "product_snapshot.creative.required_proof_mechanisms" f"[{index - 1}]"
+                    ),
+                    description=f"Required proof must be observed: {proof}",
+                    severity="high",
+                    matcher_type=matcher_type,
+                    matcher_config={"text": proof},
+                    expected_semantics=_semantics_for_matcher(matcher_type),
+                )
+            )
+    personalization = product_snapshot.get("personalization")
+    if isinstance(personalization, dict) and bool(personalization.get("required")):
+        for index, field in enumerate(
+            _as_list(personalization.get("fields")),
+            start=1,
+        ):
+            if not isinstance(field, dict):
+                continue
+            key = _stable_slug(_clean_text(field.get("key")) or f"field_{index}")
+            label = _clean_text(field.get("label"))
+            expected_value = _clean_text(field.get("expected_value"))
+            if not label or not expected_value:
+                continue
+            requirements.append(
+                _requirement(
+                    id=f"personalization_{key}",
+                    requirement_type="product",
+                    source_path=(f"product_snapshot.personalization.fields[{index - 1}]"),
+                    description=(
+                        f"Personalization field {label} must exactly show " f"{expected_value}."
+                    ),
+                    severity="hard",
+                    matcher_type="personalization_exact_match",
+                    matcher_config={
+                        "field_key": key,
+                        "label": label,
+                        "expected_value": expected_value,
+                        "case_sensitive": bool(field.get("case_sensitive")),
+                    },
+                    expected_semantics="type_match",
+                )
+            )
 
 
 def _compile_angle(
@@ -649,19 +725,27 @@ def _must_show_item(item: object, index: int) -> dict[str, object] | None:
 
 
 def _matcher_for_requirement(
-    requirement_type: object, description: str, expected_before_ms: object
+    requirement_type: object,
+    description: str,
+    expected_before_ms: object,
+    *,
+    requirement_id: str,
+    source_path: str,
 ) -> str:
     type_text = _clean_text(requirement_type)
     if type_text == "product" and isinstance(expected_before_ms, int):
         return "product_visibility_timing"
+    disclosure_requirement = any(
+        "disclosure" in value.casefold() for value in (description, requirement_id, source_path)
+    )
     return {
         "cta": "cta_presence",
         "demo": "demo_mechanism_match",
         "proof": _proof_matcher(description),
         "product": "product_visibility",
-        "claim": "required_disclosure_presence"
-        if "disclosure" in description.lower()
-        else "prohibited_claim_absence",
+        "claim": (
+            "required_disclosure_presence" if disclosure_requirement else "prohibited_claim_absence"
+        ),
         "overlay": "overlay_text_presence",
         "creator": "creator_style_match",
         "offer": "offer_text_match",
@@ -674,10 +758,10 @@ def _matcher_for_text(text: str) -> str:
         return "cta_presence"
     if "overlay" in lowered or "caption" in lowered or "text" in lowered:
         return "overlay_text_presence"
-    if "demo" in lowered or "use" in lowered or "using" in lowered:
-        return "demo_mechanism_match"
     if "before" in lowered or "after" in lowered or "result" in lowered or "proof" in lowered:
         return _proof_matcher(text)
+    if "demo" in lowered or "use" in lowered or "using" in lowered:
+        return "demo_mechanism_match"
     if "offer" in lowered or "discount" in lowered or "price" in lowered:
         return "offer_text_match"
     if "creator" in lowered or "face" in lowered or "voice" in lowered:
@@ -685,6 +769,59 @@ def _matcher_for_text(text: str) -> str:
     if "product" in lowered or "close-up" in lowered or "close up" in lowered:
         return "product_visibility"
     return "hook_semantic_match"
+
+
+def _script_beat_matcher(
+    brief_json: dict[str, object],
+    beat_type: str,
+    instruction: str,
+) -> str:
+    normalized_type = beat_type.casefold()
+    if any(
+        marker in normalized_type
+        for marker in ("spoken", "voiceover", "voice_over", "dialogue", "narration")
+    ):
+        return "spoken_text_presence"
+    if _is_required_disclosure(brief_json, instruction):
+        return "required_disclosure_presence"
+    if "demo" in normalized_type:
+        return "demo_mechanism_match"
+    return _matcher_for_text(instruction)
+
+
+def _is_required_disclosure(
+    brief_json: dict[str, object],
+    instruction: str,
+) -> bool:
+    expected = _normalized_requirement_text(instruction)
+    return expected in {
+        _normalized_requirement_text(text)
+        for text in _required_disclosure_texts(brief_json)
+    }
+
+
+def _required_disclosure_texts(brief_json: dict[str, object]) -> list[str]:
+    disclosures: list[str] = []
+    claim_guardrails = brief_json.get("claim_guardrails")
+    if isinstance(claim_guardrails, dict):
+        disclosures.extend(_list_of_text(claim_guardrails.get("required_disclosures")))
+    product_snapshot = brief_json.get("product_snapshot")
+    governance = product_snapshot.get("governance") if isinstance(product_snapshot, dict) else None
+    if not isinstance(governance, dict):
+        return disclosures
+    disclosures.extend(_list_of_text(governance.get("required_disclosures")))
+    for rule in _as_list(governance.get("claims")):
+        if (
+            isinstance(rule, dict)
+            and _clean_text(rule.get("rule_type")) == "required_disclosure"
+            and (text := _clean_text(rule.get("text")))
+        ):
+            disclosures.append(text)
+    return disclosures
+
+
+def _normalized_requirement_text(value: str) -> str:
+    return " ".join(_stable_slug(value).split("_"))
 
 
 def _proof_matcher(text: str) -> str:
@@ -697,7 +834,12 @@ def _proof_matcher(text: str) -> str:
         "comparison",
         "review",
     }
-    return "proof_type_match" if any(item in lowered for item in proof_types) else "proof_presence"
+    typed_before_after = ("before" in lowered and "after" in lowered) or "same item" in lowered
+    return (
+        "proof_type_match"
+        if typed_before_after or any(item in lowered for item in proof_types)
+        else "proof_presence"
+    )
 
 
 def _semantics_for_matcher(matcher_type: str) -> ExpectedSemantics:
@@ -763,9 +905,8 @@ def _legacy_requirement(item: dict[str, object]) -> CompiledRequirementV2:
     matcher_config = raw_config if isinstance(raw_config, dict) else {}
     return CompiledRequirementV2(
         id=_clean_text(item.get("id")) or "legacy_requirement",
-        requirement_type=_clean_text(item.get("requirement_type")) or _requirement_type_for_matcher(
-            matcher_type
-        ),
+        requirement_type=_clean_text(item.get("requirement_type"))
+        or _requirement_type_for_matcher(matcher_type),
         source_path=_clean_text(item.get("source_path")) or "legacy",
         description=_clean_text(item.get("description")) or "Legacy requirement",
         severity=_severity(item.get("severity"), "high"),

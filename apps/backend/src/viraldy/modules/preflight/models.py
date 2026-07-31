@@ -50,6 +50,18 @@ class PreflightRunModel(Base):
     blockers_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     fixes_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     revision_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    seller_summary_json: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    creator_revision_json: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    presentation_model_run_ids_json: Mapped[list[object]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    presentation_source_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     evidence_ids_json: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     schema_version: Mapped[str] = mapped_column(
         String(100), nullable=False, default="ugc_preflight_legacy_v1"
