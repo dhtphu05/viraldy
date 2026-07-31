@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from fastapi.routing import APIRoute
+from pydantic import TypeAdapter
+
 from viraldy.api.main import app
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
@@ -13,6 +16,7 @@ PUBLIC_PATHS = {
     "/health/ready",
     "/health/dependencies",
     "/health/worker",
+    "/outputs/renders/{filename}",
     "/api/v1/version",
     "/api/v1/ready",
     "/api/v1/system/ai-readiness",
@@ -61,6 +65,16 @@ def _referenced_request_schemas(schema: dict[str, Any]) -> set[str]:
     return visited
 
 
+def _effective_api_routes() -> Iterator[Any]:
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            yield route
+            continue
+        route_contexts = getattr(route, "effective_route_contexts", None)
+        if route_contexts is not None:
+            yield from route_contexts()
+
+
 def test_openapi_generation_contains_foundation_routes() -> None:
     schema = app.openapi()
     paths = schema["paths"]
@@ -70,6 +84,7 @@ def test_openapi_generation_contains_foundation_routes() -> None:
     assert "/api/v1/workspaces/{workspace_id}/jobs/{job_id}" in paths
     assert "/api/v1/workspaces/{workspace_id}/model-runs" in paths
     assert "/api/v1/workspaces/{workspace_id}/model-runs/{model_run_id}" in paths
+    assert "/api/v1/workspaces/{workspace_id}/products/crawl-preview" in paths
     assert "/api/v1/workspaces/{workspace_id}/generation/storyboards" in paths
     assert "/api/v1/workspaces/{workspace_id}/generation/concept-video-previews" in paths
     assert "/api/v1/workspaces/{workspace_id}/generation/runs/{generation_run_id}" in paths
@@ -212,6 +227,39 @@ def test_json_request_bodies_have_copy_ready_examples() -> None:
         assert frontend_example["value"]
 
     assert request_body_count >= 30
+
+
+def test_json_request_examples_pass_their_pydantic_contracts() -> None:
+    schema = app.openapi()
+    checked = 0
+
+    for route in _effective_api_routes():
+        body_field = getattr(route, "body_field", None)
+        if body_field is None:
+            continue
+        method = next(
+            (
+                candidate.lower()
+                for candidate in route.methods
+                if candidate.lower() in {"post", "put", "patch", "delete"}
+            ),
+            None,
+        )
+        if method is None or route.path_format not in schema["paths"]:
+            continue
+        json_content = (
+            schema["paths"][route.path_format][method]
+            .get("requestBody", {})
+            .get("content", {})
+            .get("application/json")
+        )
+        if json_content is None:
+            continue
+        checked += 1
+        example = json_content["examples"]["frontendExample"]["value"]
+        TypeAdapter(body_field.field_info.annotation).validate_python(example)
+
+    assert checked >= 30
 
 
 def test_request_schema_fields_have_descriptions_and_examples() -> None:
