@@ -13,11 +13,14 @@ from viraldy.modules.ai_gateway.prompts import (
     CAMPAIGN_PACK_PROMPT_VERSION,
     CONCEPT_VIDEO_PREVIEW_PROMPT_VERSION,
     CREATIVE_DNA_PROMPT_VERSION,
+    DECISION_SUMMARY_OUTPUT_SCHEMA_VERSION,
+    DECISION_SUMMARY_PROMPT_VERSION,
     MEDIA_OBSERVATION_PROMPT_VERSION,
     PATTERN_KIT_PROMPT_VERSION,
     REVISION_MESSAGE_PROMPT_VERSION,
     STORYBOARD_IMAGE_PROMPT_VERSION,
     VIRAL_KIT_PROMPT_VERSION,
+    get_prompt_package,
 )
 from viraldy.modules.creative_domain.schema_versions import (
     ADAPTATION_SCHEMA_VERSION,
@@ -30,6 +33,11 @@ from viraldy.modules.creative_domain.schema_versions import (
     VIDEO_PREVIEW_SCHEMA_VERSION,
     VIRAL_KIT_SCHEMA_VERSION,
 )
+from viraldy.modules.presentations.contracts import (
+    CreatorRevisionMessageV2,
+    PresentationFixV1,
+    SellerDecisionSummaryV1,
+)
 
 
 class AiOperationName(StrEnum):
@@ -39,6 +47,7 @@ class AiOperationName(StrEnum):
     VIRAL_KIT_COMPOSE = "viral_kit_compose"
     ADAPTATION_GENERATE = "adaptation_generate"
     CAMPAIGN_PACK_GENERATE = "campaign_pack_generate"
+    SELLER_DECISION_SUMMARY = "seller_decision_summary"
     REVISION_MESSAGE_GENERATE = "revision_message_generate"
     STORYBOARD_IMAGE_GENERATE = "storyboard_image_generate"
     CONCEPT_VIDEO_PREVIEW_GENERATE = "concept_video_preview_generate"
@@ -116,11 +125,26 @@ class RevisionMessageGenerateInputV1(OperationContractBase):
     workspace_id: UUID
     preflight_run_id: UUID
     blocker_codes: list[str] = Field(min_length=1)
+    product_name: str = "the product"
+    strengths_to_preserve: list[str] = Field(
+        default_factory=lambda: ["Preserve the creator's current tone and delivery."]
+    )
+    resubmission_request: str = (
+        "Please upload the revised version for review."
+    )
 
 
 class RevisionMessageGenerateOutputV1(OperationContractBase):
     revision_message: str = Field(min_length=1)
     referenced_blocker_codes: list[str] = Field(min_length=1)
+
+
+class SellerDecisionSummaryInputV1(OperationContractBase):
+    workspace_id: UUID
+    preflight_run_id: UUID
+    product_name: str = Field(min_length=1)
+    objective: str | None = None
+    locale: Literal["en-US", "vi-VN"] = "en-US"
 
 
 class GenerationOperationInputV1(OperationContractBase):
@@ -141,6 +165,7 @@ class AiOperationDefinition:
     operation: AiOperationName
     input_contract: type[BaseModel]
     output_contract: type[BaseModel]
+    prompt_name: str
     prompt_version: str
     schema_version: str
     timeout_seconds: int
@@ -160,10 +185,12 @@ def _definition(
     max_retries: int = 2,
     model_family: Literal["text", "vision", "image", "video"] = "text",
 ) -> AiOperationDefinition:
+    prompt_package = get_prompt_package(operation)
     return AiOperationDefinition(
         operation=operation,
         input_contract=input_contract,
         output_contract=output_contract,
+        prompt_name=prompt_package.prompt_name,
         prompt_version=prompt_version,
         schema_version=schema_version,
         timeout_seconds=timeout_seconds,
@@ -216,10 +243,17 @@ AI_OPERATION_DEFINITIONS: dict[str, AiOperationDefinition] = {
         CAMPAIGN_PACK_PROMPT_VERSION,
         CAMPAIGN_PACK_SCHEMA_VERSION,
     ),
+    AiOperationName.SELLER_DECISION_SUMMARY.value: _definition(
+        AiOperationName.SELLER_DECISION_SUMMARY,
+        SellerDecisionSummaryInputV1,
+        SellerDecisionSummaryV1,
+        DECISION_SUMMARY_PROMPT_VERSION,
+        DECISION_SUMMARY_OUTPUT_SCHEMA_VERSION,
+    ),
     AiOperationName.REVISION_MESSAGE_GENERATE.value: _definition(
         AiOperationName.REVISION_MESSAGE_GENERATE,
         RevisionMessageGenerateInputV1,
-        RevisionMessageGenerateOutputV1,
+        CreatorRevisionMessageV2,
         REVISION_MESSAGE_PROMPT_VERSION,
         REVISION_MESSAGE_SCHEMA_VERSION,
     ),
@@ -293,11 +327,47 @@ def build_ai_operation_fixture(
             campaign_pack_id=fixture_id("campaign-pack"),
             campaign_pack_version_id=fixture_id("campaign-pack-version"),
         )
+    if operation_name is AiOperationName.SELLER_DECISION_SUMMARY:
+        summary_input = SellerDecisionSummaryInputV1.model_validate(validated_input)
+        return SellerDecisionSummaryV1(
+            headline=f"Revise: {summary_input.product_name}",
+            one_sentence_decision=(
+                f"{summary_input.product_name} needs revision before paid use."
+            ),
+            why_this_matters=(
+                f"The persisted Preflight result for {summary_input.product_name} "
+                "contains unresolved requirements."
+            ),
+            strengths_to_keep=[],
+            blockers_to_fix=["Resolve the persisted hard requirements."],
+            next_actions=["Apply the required fixes and rerun Preflight."],
+            confidence_explanation=(
+                "Confidence must be read from the persisted structured result."
+            ),
+            commercial_guardrail=(
+                "Structural readiness does not guarantee virality, GMV, ROAS, "
+                "conversion, policy approval, or sales."
+            ),
+            locale=summary_input.locale,
+        )
     if operation_name is AiOperationName.REVISION_MESSAGE_GENERATE:
         revision_input = RevisionMessageGenerateInputV1.model_validate(validated_input)
-        return RevisionMessageGenerateOutputV1(
-            revision_message="Revise the draft to resolve the referenced preflight blockers.",
+        changes = [
+            PresentationFixV1(
+                code=code,
+                instruction=f"Resolve the required change identified as {code}.",
+            )
+            for code in revision_input.blocker_codes
+        ]
+        return CreatorRevisionMessageV2(
+            message=(
+                "Keep the current strengths. Please apply the listed changes, "
+                "then upload the revised version for review."
+            ),
+            strengths_to_preserve=revision_input.strengths_to_preserve,
+            required_changes=changes,
             referenced_blocker_codes=revision_input.blocker_codes,
+            resubmission_request=revision_input.resubmission_request,
         )
     return GenerationArtifactOutputV1(
         generation_run_id=fixture_id("generation-run"),

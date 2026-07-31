@@ -35,10 +35,15 @@ class AiModelRunModel(Base):
         ),
         CheckConstraint("attempt >= 1", name="ck_ai_model_runs_attempt"),
         CheckConstraint("attempt_count >= 1", name="ck_ai_model_runs_attempt_count"),
+        CheckConstraint(
+            "repair_attempt_count >= 0",
+            name="ck_ai_model_runs_repair_attempt_count",
+        ),
         Index("ix_ai_model_runs_workspace_created", "workspace_id", "created_at"),
         Index("ix_ai_model_runs_job_capability", "processing_job_id", "capability"),
         Index("ix_ai_model_runs_job_operation", "processing_job_id", "operation"),
         Index("ix_ai_model_runs_operation_created", "workspace_id", "operation", "created_at"),
+        Index("ix_ai_model_runs_request_id", "request_id"),
         Index("ix_ai_model_runs_subject", "workspace_id", "subject_type", "subject_id"),
     )
 
@@ -55,13 +60,21 @@ class AiModelRunModel(Base):
     operation: Mapped[str] = mapped_column(String(100), nullable=False)
     analysis_mode: Mapped[str] = mapped_column(String(50), nullable=False)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    endpoint_family: Mapped[str | None] = mapped_column(String(50), nullable=True)
     model: Mapped[str] = mapped_column(String(200), nullable=False)
+    prompt_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     response_schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    repair_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    request_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default=lambda: str(uuid4()),
+    )
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     input_summary_json: Mapped[dict[str, object]] = mapped_column(

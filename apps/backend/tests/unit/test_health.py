@@ -45,6 +45,7 @@ async def test_dependency_health_reports_required_components_without_error_detai
     assert report.checks["object_storage"].status == "ok"
     assert report.checks["worker"].status == "ok"
     assert report.checks["ai_provider_configuration"].status == "ok"
+    assert report.checks["ai_provider_configuration"].safe_state == "configured"
     assert "secret" not in report.model_dump_json()
     assert "internal" not in report.model_dump_json()
 

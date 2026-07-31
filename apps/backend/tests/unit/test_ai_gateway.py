@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 import viraldy.modules.adaptations.provider as adaptation_provider_module
 import viraldy.modules.ai_gateway.http_client as http_client_module
+from viraldy.modules.ai_gateway.context import ViraldyOperationContextV1
 from viraldy.modules.ai_gateway.http_client import OpenAICompatibleClient, extract_message_json
 from viraldy.modules.ai_gateway.operations import (
     AI_OPERATION_DEFINITIONS,
@@ -24,6 +25,7 @@ from viraldy.modules.ai_gateway.operations import (
 from viraldy.modules.ai_gateway.readiness import ai_readiness
 from viraldy.modules.ai_gateway.repository import _run
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
+from viraldy.modules.products.contracts import build_minimal_product_context
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
@@ -67,11 +69,30 @@ def test_live_provider_configuration_is_key_ready() -> None:
     )
 
     assert ready.configured is True
+    assert ready.state == "configured"
     assert ready.missing == []
     assert ready.capabilities.text_chat is True
     assert ready.capabilities.vision_chat is True
     assert missing_key.configured is False
+    assert missing_key.state == "not_configured"
     assert missing_key.missing == ["AI_API_KEY"]
+
+
+def test_native_openai_readiness_requires_qualification_after_configuration() -> None:
+    settings = Settings(
+        ai_mode="live",
+        ai_provider="openai",
+        openai_api_key="test-openai-key",
+    )
+
+    configured = ai_readiness(settings)
+    qualified = ai_readiness(settings, live_qualified=True)
+
+    assert configured.configured is True
+    assert configured.state == "not_yet_qualified"
+    assert configured.capabilities.json_schema is True
+    assert configured.capabilities.audio_transcription is True
+    assert qualified.state == "qualified"
 
 
 def test_mock_provider_supports_chat_failure_switches(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -117,6 +138,72 @@ def test_mock_provider_adaptation_payload_matches_current_contract() -> None:
     assert len(output.concepts) == 3
     assert all(concept.buyer_persona_label for concept in output.concepts)
     assert all(concept.creator_persona for concept in output.concepts)
+
+
+def test_mock_vision_preserves_supplied_frame_provenance() -> None:
+    prompt = (
+        "Duration_ms: 4000\n"
+        "Frame timestamp_ms=0, storage_key=workspace/frame_000.jpg\n"
+        "Frame timestamp_ms=1000, storage_key=workspace/frame_001.jpg\n"
+    )
+
+    payload = mock_openai_provider._vision_payload(prompt)
+    referenced = {
+        key
+        for section in (
+            payload["hooks"],
+            payload["product_appearances"],
+            payload["demo"]["steps"],
+            payload["proof_moments"],
+            payload["ctas"],
+            payload["offers"],
+        )
+        for item in section
+        for key in item["frame_storage_keys"]
+    }
+
+    assert referenced
+    assert referenced <= {
+        "workspace/frame_000.jpg",
+        "workspace/frame_001.jpg",
+    }
+
+
+def test_mock_vision_distinguishes_golden_pod_draft_and_revision() -> None:
+    product_context = json.dumps(
+        {"identity": {"category": "pod_personalized_apparel"}},
+        separators=(",", ":"),
+    )
+    draft = mock_openai_provider._vision_payload(
+        f'{{"source_filename":"smoke-ugc-draft.mp4","product_context":{product_context}}}'
+    )
+    revision = mock_openai_provider._vision_payload(
+        f'{{"source_filename":"smoke-revision.mp4","product_context":{product_context}}}'
+    )
+
+    assert "Pet name: Miles" in draft["on_screen_text"][0]["text"]
+    assert "Pet name: Milo" in revision["on_screen_text"][0]["text"]
+    assert draft["ctas"][0]["cta_type"] == "product_tag"
+    assert revision["ctas"][0]["product_tag_visible"] is True
+
+
+def test_mock_provider_routes_canonical_operation_context() -> None:
+    context = ViraldyOperationContextV1(
+        operation=AiOperationName.PATTERN_KIT_EXTRACT,
+        request_id=str(uuid4()),
+        workspace_id=uuid4(),
+        actor_user_id=uuid4(),
+        operation_payload={"request": {}, "sources": []},
+        schema_version="pattern_kit_v1",
+        prompt_version="pattern_kit_extraction_v2",
+    )
+
+    operation, parsed_context = mock_openai_provider._operation_context(
+        f"Developer instructions\n\n{context.stable_json()}"
+    )
+
+    assert operation == AiOperationName.PATTERN_KIT_EXTRACT.value
+    assert parsed_context["operation_payload"] == context.operation_payload
 
 
 def test_gateway_maps_rate_limit_server_error_invalid_json_and_timeout(
@@ -198,6 +285,8 @@ def test_model_run_populates_private_beta_trace_fields() -> None:
     assert run.input_hash == request_hash
     assert run.attempt == 1
     assert run.attempt_count == 2
+    assert run.repair_attempt_count == 0
+    assert run.request_id == str(run.id)
     assert run.usage_json == {}
 
 
@@ -206,6 +295,7 @@ def test_private_beta_ai_operation_registry_is_complete_and_typed() -> None:
 
     for operation in AiOperationName:
         definition = get_ai_operation_definition(operation)
+        assert definition.prompt_name
         assert definition.prompt_version
         assert definition.schema_version
         assert definition.timeout_seconds > 0
@@ -263,6 +353,12 @@ def test_every_ai_operation_has_a_deterministic_contract_valid_fixture() -> None
             "viral_kit_version_id": version_id,
             "concept_id": "concept-1",
         },
+        AiOperationName.SELLER_DECISION_SUMMARY: {
+            "workspace_id": workspace_id,
+            "preflight_run_id": uuid4(),
+            "product_name": "SwiftPress Mini Garment Steamer",
+            "objective": "Test the Late for Class concept",
+        },
         AiOperationName.REVISION_MESSAGE_GENERATE: {
             "workspace_id": workspace_id,
             "preflight_run_id": uuid4(),
@@ -313,9 +409,25 @@ def _chat_payload() -> dict[str, Any]:
 
 
 def _adaptation_payload() -> dict[str, Any]:
+    context = ViraldyOperationContextV1(
+        operation=AiOperationName.ADAPTATION_GENERATE,
+        request_id=str(uuid4()),
+        workspace_id=uuid4(),
+        product_context=build_minimal_product_context(
+            name="Portable Steamer",
+            description="Observable garment refresh",
+            market="US",
+            metadata_json={"category": "home_travel_appliance"},
+        ),
+        product_context_version=1,
+        objective="Create grounded UGC concepts.",
+        target_market="US",
+        schema_version="adaptation_v2",
+        prompt_version="adaptation_generation_v2_few_shot_v1",
+    )
     return {
         "model": "mock",
-        "messages": [{"role": "user", "content": "Adapt this Creative DNA to the product"}],
+        "messages": [{"role": "user", "content": context.stable_json()}],
     }
 
 

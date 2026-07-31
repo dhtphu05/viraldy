@@ -61,6 +61,9 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
                 column["name"] for column in inspector.get_columns("ai_model_runs")
             }
             product_columns = {column["name"] for column in inspector.get_columns("products")}
+            preflight_columns = {
+                column["name"] for column in inspector.get_columns("preflight_runs")
+            }
             job_constraints = {
                 constraint["name"]: constraint.get("sqltext", "")
                 for constraint in inspector.get_check_constraints("processing_jobs")
@@ -92,19 +95,29 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
         "viral_kit_campaign_pack_links",
         "generation_runs",
         "generation_artifacts",
-            "deletion_audit_records",
-            "storage_deletion_batches",
+        "deletion_audit_records",
+        "storage_deletion_batches",
     }.issubset(tables)
     assert {
         "operation",
         "schema_version",
         "input_hash",
         "attempt_count",
+        "endpoint_family",
+        "prompt_name",
+        "repair_attempt_count",
+        "request_id",
         "usage_json",
         "estimated_cost",
         "safe_error_message",
     }.issubset(ai_model_run_columns)
     assert "product_context_version" in product_columns
+    assert {
+        "seller_summary_json",
+        "creator_revision_json",
+        "presentation_model_run_ids_json",
+        "presentation_source_json",
+    }.issubset(preflight_columns)
     assert "succeeded" in job_constraints["ck_processing_jobs_status"]
     assert "completed" not in job_constraints["ck_processing_jobs_status"]
 
@@ -265,7 +278,14 @@ async def _assert_workspace_deletion_cleans_storage(async_url: str) -> None:
                         == 1
                     )
 
-            storage = _RecordingStorage(assert_database_committed_before_storage)
+            untracked_artifact = (
+                f"workspaces/{workspace.id}/assets/{asset.id}"
+                f"/versions/{version.id}/artifacts/orphaned-frame.jpg"
+            )
+            storage = _RecordingStorage(
+                assert_database_committed_before_storage,
+                objects=[StoredObject(untracked_artifact, datetime.now(UTC), 64)],
+            )
             result = await DeletionService(
                 session,
                 cast(StoragePort, storage),
@@ -277,25 +297,36 @@ async def _assert_workspace_deletion_cleans_storage(async_url: str) -> None:
             )
 
             assert result.status == "succeeded"
-            assert result.deleted_object_count == 5
+            assert result.deleted_object_count == 6
             assert storage.deleted_keys == sorted(
-                {storage_key, frame_one, frame_two, frame_three, thumbnail}
+                {
+                    storage_key,
+                    frame_one,
+                    frame_two,
+                    frame_three,
+                    thumbnail,
+                    untracked_artifact,
+                }
             )
-            assert await session.scalar(
-                select(func.count()).select_from(WorkspaceModel).where(
-                    WorkspaceModel.id == workspace.id
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(WorkspaceModel)
+                    .where(WorkspaceModel.id == workspace.id)
                 )
-            ) == 0
-            assert await session.scalar(
-                select(func.count()).select_from(AssetModel).where(
-                    AssetModel.id == asset.id
+                == 0
+            )
+            assert (
+                await session.scalar(
+                    select(func.count()).select_from(AssetModel).where(AssetModel.id == asset.id)
                 )
-            ) == 0
+                == 0
+            )
             audit = await session.get(DeletionAuditRecordModel, result.audit_id)
             assert audit is not None
             assert audit.status == "succeeded"
             assert audit.workspace_id == workspace.id
-            assert audit.deleted_object_count == 5
+            assert audit.deleted_object_count == 6
     finally:
         await engine.dispose()
         sync_engine.dispose()
@@ -551,9 +582,7 @@ def _assert_retention_cleanup_removes_expired_pending_upload(sync_url: str) -> N
             )
             session.add(active_asset)
             session.flush()
-            active_storage_key = (
-                f"workspaces/{workspace.id}/assets/{active_asset.id}/active.mp4"
-            )
+            active_storage_key = f"workspaces/{workspace.id}/assets/{active_asset.id}/active.mp4"
             active_version = AssetVersionModel(
                 asset_id=active_asset.id,
                 version_number=1,
