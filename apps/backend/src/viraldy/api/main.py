@@ -11,6 +11,13 @@ from viraldy.api.middleware.errors import (
 )
 from viraldy.api.middleware.request_id import RequestIdMiddleware
 from viraldy.api.middleware.security_headers import SecurityHeadersMiddleware
+from viraldy.api.openapi import (
+    API_DESCRIPTION,
+    API_SUMMARY,
+    OPENAPI_TAGS,
+    SWAGGER_UI_PARAMETERS,
+    configure_openapi,
+)
 from viraldy.api.responses.envelope import Envelope, success
 from viraldy.api.routers.health import router as health_router
 from viraldy.api.routers.system import router as system_router
@@ -28,6 +35,7 @@ from viraldy.modules.media_analysis.router import router as media_analysis_route
 from viraldy.modules.pattern_kits.router import router as pattern_kits_router
 from viraldy.modules.preflight.router import router as preflight_router
 from viraldy.modules.product_events.router import router as product_events_router
+from viraldy.modules.product_import.media_router import router as product_import_media_router
 from viraldy.modules.products.router import router as products_router
 from viraldy.modules.recommendations.router import router as recommendations_router
 from viraldy.modules.reference_boards.router import router as reference_boards_router
@@ -46,7 +54,19 @@ def create_app() -> FastAPI:
     configure_logging(settings)
     configure_sentry(settings)
 
-    app = FastAPI(title=settings.app_name, version=settings.public_version)
+    app = FastAPI(
+        title=f"{settings.app_name} API",
+        summary=API_SUMMARY,
+        description=API_DESCRIPTION,
+        version=settings.public_version,
+        openapi_tags=OPENAPI_TAGS,
+        servers=[
+            {"url": "/", "description": "Môi trường hiện tại đang phục vụ Swagger UI"},
+            {"url": "http://localhost:8000", "description": "Backend local development"},
+        ],
+        swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
+        license_info={"name": "MIT", "identifier": "MIT"},
+    )
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
     app.add_middleware(
@@ -62,6 +82,7 @@ def create_app() -> FastAPI:
 
     api_v1 = "/api/v1"
     app.include_router(health_router)
+    app.include_router(product_import_media_router)
     app.include_router(system_router, prefix=api_v1)
     app.include_router(identity_router, prefix=api_v1)
     app.include_router(workspaces_router, prefix=api_v1)
@@ -102,6 +123,7 @@ def create_app() -> FastAPI:
                 str(getattr(request.state, "request_id", "unknown")),
             )
 
+    configure_openapi(app)
     return app
 
 
