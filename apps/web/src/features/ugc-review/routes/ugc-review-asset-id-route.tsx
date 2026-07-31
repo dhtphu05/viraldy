@@ -21,6 +21,16 @@ import {
 import { ExpectedObservedTable } from "@/shared/ui/expected-observed-table";
 import { ValueReceipt } from "@/shared/ui/value-receipt";
 import { ConfidenceBadge } from "@/shared/ui/confidence-badge";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/shared/ui/alert-dialog";
 import { cn } from "@/shared/lib/utils";
 import { scrollElementIntoView } from "@/shared/lib/scroll";
 import { useAppStore, useAllCampaigns } from "@/app/store/app-store";
@@ -64,7 +74,12 @@ export const Route = createFileRoute("/ugc-review/$assetId")({
                 description="The asset you're looking for may have been deleted."
                 action={
                     <Button asChild size="sm">
-                        <Link to="/ugc-review">Back to UGC Review</Link>
+                        <Link
+                            to="/ugc-review"
+                            search={{ campaignId: undefined, upload: undefined }}
+                        >
+                            Back to UGC Review
+                        </Link>
                     </Button>
                 }
             />
@@ -207,7 +222,10 @@ function UgcDetail() {
     const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
     const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
     const [evidenceTime, setEvidenceTime] = useState<number | null>(null);
-    const [receipt, setReceipt] = useState<"revision" | "organic" | "spark" | null>(null);
+    const [receipt, setReceipt] = useState<"revision" | "reshoot" | "organic" | "spark" | null>(
+        null,
+    );
+    const [reshootConfirmOpen, setReshootConfirmOpen] = useState(false);
     const revisionSectionRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -316,6 +334,14 @@ function UgcDetail() {
         toast.success("Revision marked as requested");
     };
 
+    const confirmReshootRequest = () => {
+        setRevisionMessage(assetId, revisionMessage);
+        rejectUgc(assetId);
+        setReceipt("reshoot");
+        setReshootConfirmOpen(false);
+        toast.success("Reshoot request recorded");
+    };
+
     const evidenceMarkers: EvidenceTimelineMarker[] =
         analysis?.markers.map((marker) => {
             const issue = issues.find((candidate) => candidate.id === marker.issueId);
@@ -369,6 +395,7 @@ function UgcDetail() {
                 <div>
                     <Link
                         to="/ugc-review"
+                        search={{ campaignId: undefined, upload: undefined }}
                         className="inline-flex items-center gap-1 text-xs text-text-tertiary hover:text-text-primary"
                     >
                         <ArrowLeft className="h-3 w-3" /> UGC Review
@@ -397,13 +424,7 @@ function UgcDetail() {
                         asset.decision !== "reject" &&
                         asset.decision !== "processing" &&
                         asset.decision !== "awaiting-analysis" ? (
-                            <Button
-                                variant="ghost"
-                                onClick={() => {
-                                    rejectUgc(assetId);
-                                    setReceipt(null);
-                                }}
-                            >
+                            <Button variant="ghost" onClick={() => setReshootConfirmOpen(true)}>
                                 Request reshoot
                             </Button>
                         ) : undefined
@@ -424,10 +445,20 @@ function UgcDetail() {
                         items={["Rights checked", "Spark status saved"]}
                     />
                 )}
+                {receipt === "reshoot" && (
+                    <ValueReceipt
+                        title="Reshoot request recorded"
+                        description="This draft is held from launch and the creator message is saved with the asset."
+                        items={[
+                            `${selectedIssues.length} findings included`,
+                            "Creator response pending",
+                        ]}
+                    />
+                )}
 
-                <div className="grid gap-6 lg:grid-cols-12">
+                <div className="grid gap-6 xl:grid-cols-12">
                     {/* Left: video + evidence */}
-                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
+                    <div className="flex min-w-0 flex-col gap-4 xl:col-span-8">
                         <div
                             className={`relative overflow-hidden rounded-md bg-black shadow-lg ${verticalMedia ? "mx-auto w-full max-w-[420px]" : ""}`}
                         >
@@ -546,24 +577,22 @@ function UgcDetail() {
                         )}
 
                         {evidenceMarkers.length > 0 && (
-                            <div className="max-w-full overflow-x-auto pb-1">
-                                <EvidenceTimeline
-                                    duration={asset.durationSec}
-                                    currentTime={currentTime}
-                                    markers={evidenceMarkers}
-                                    activeId={activeMarkerId}
-                                    onSeek={(time, marker) => {
-                                        const sourceMarker = analysis?.markers.find(
-                                            (candidate) => candidate.id === marker.id,
-                                        );
-                                        jumpTo(time, {
-                                            markerId: marker.id,
-                                            issueId: sourceMarker?.issueId ?? null,
-                                        });
-                                    }}
-                                    className="min-w-[560px] rounded-md"
-                                />
-                            </div>
+                            <EvidenceTimeline
+                                duration={asset.durationSec}
+                                currentTime={currentTime}
+                                markers={evidenceMarkers}
+                                activeId={activeMarkerId}
+                                onSeek={(time, marker) => {
+                                    const sourceMarker = analysis?.markers.find(
+                                        (candidate) => candidate.id === marker.id,
+                                    );
+                                    jumpTo(time, {
+                                        markerId: marker.id,
+                                        issueId: sourceMarker?.issueId ?? null,
+                                    });
+                                }}
+                                className="rounded-md"
+                            />
                         )}
 
                         {analysis && analysis.transcript.length > 0 && (
@@ -693,7 +722,7 @@ function UgcDetail() {
                         )}
                     </div>
 
-                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-4">
+                    <div className="flex min-w-0 flex-col gap-4 xl:col-span-4">
                         {analysis && analysis.dimensions.length > 0 && (
                             <SurfaceCard padding="md">
                                 <p className="mb-3 text-sm font-semibold">Score breakdown</p>
@@ -853,8 +882,17 @@ function UgcDetail() {
                                             <Save aria-hidden />
                                             Save
                                         </Button>
-                                        <Button size="sm" onClick={sendRevisionRequest}>
-                                            Mark revision requested
+                                        <Button
+                                            size="sm"
+                                            onClick={
+                                                asset.decision === "reject"
+                                                    ? () => setReshootConfirmOpen(true)
+                                                    : sendRevisionRequest
+                                            }
+                                        >
+                                            {asset.decision === "reject"
+                                                ? "Review reshoot request"
+                                                : "Mark revision requested"}
                                         </Button>
                                     </div>
                                     {receipt === "revision" && (
@@ -984,6 +1022,26 @@ function UgcDetail() {
                     rightsTriggerRef.current?.focus();
                 }}
             />
+            <AlertDialog open={reshootConfirmOpen} onOpenChange={setReshootConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Request a full reshoot?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This keeps the current draft out of launch and records the edited
+                            creator message. The media and analysis remain available for evidence.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="max-h-48 overflow-y-auto rounded-md bg-surface-soft p-3 text-sm text-text-secondary">
+                        {revisionMessage}
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Keep reviewing</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmReshootRequest}>
+                            Confirm reshoot request
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </AppShell>
     );
 }
@@ -1025,7 +1083,7 @@ function IssueGroup({
                         )}
                     >
                         <div className="flex flex-wrap items-start gap-2">
-                            <div className="min-w-0 flex-1">
+                            <div className="min-w-32 flex-1">
                                 <p className="font-medium text-text-primary">{i.title}</p>
                             </div>
                             {i.reviewed && <StatusChip tone="ok">Reviewed</StatusChip>}
