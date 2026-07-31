@@ -183,6 +183,38 @@ def test_app_store_crawl_uses_store_identifier_without_inventing_commercial_data
     assert context.commercial.price is None
 
 
+def test_generic_website_uses_observed_markdown_heading() -> None:
+    preview = build_product_import_preview(
+        "https://shop.example.com/products/observed",
+        {
+            "title": "Generic Web Page",
+            "sourceType": "website",
+            "markdown": "# Observed Website Product\n\nObserved page copy.",
+        },
+    )
+
+    assert preview.product_draft.name == "Observed Website Product"
+    assert preview.product_draft.external_source == "website"
+
+
+def test_deal_source_and_target_asin_are_preserved() -> None:
+    preview = build_product_import_preview(
+        "https://www.koupon.ai/product/fixture",
+        {
+            "title": "Fixture Deal",
+            "sourceType": "amazon",
+            "targetUrl": "https://www.amazon.com/dp/B0TEST1234",
+            "isCoupon": True,
+            "couponCode": "SAVE20",
+            "markdown": "# Coupon Product: Fixture Deal",
+        },
+    )
+
+    assert preview.product_draft.external_source == "koupon"
+    assert preview.product_draft.external_id == "B0TEST1234"
+    assert preview.product_draft.metadata_json["coupon_code"] == "SAVE20"
+
+
 @pytest.mark.asyncio
 async def test_crawl_preview_endpoint_returns_create_product_compatible_draft(
     monkeypatch: pytest.MonkeyPatch,

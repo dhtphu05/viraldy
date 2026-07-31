@@ -179,7 +179,11 @@ async def _scrape_url(req: CrawlRequest):
         request_url = route.request.url
         parsed_request = urlsplit(request_url)
         if parsed_request.scheme not in {"http", "https"}:
-            await route.continue_()
+            if parsed_request.scheme in {"about", "blob", "data"}:
+                await route.continue_()
+            else:
+                print(f"[Network Guard] Blocked non-HTTP request: {request_url[:120]}")
+                await route.abort("blockedbyclient")
             return
         hostname = (parsed_request.hostname or "").lower()
         if hostname not in safe_hosts:

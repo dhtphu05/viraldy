@@ -30,6 +30,8 @@ def build_product_import_preview(
 ) -> ProductImportPreview:
     markdown = _text(crawl.get("markdown"))
     name = _observed_text(crawl.get("title"))
+    if name.lower() == "generic web page":
+        name = _markdown_heading(markdown)
     if not name:
         raise AppError(
             "PRODUCT_CRAWL_DATA_INCOMPLETE",
@@ -60,7 +62,7 @@ def build_product_import_preview(
         else None
     )
 
-    source_type = _observed_text(crawl.get("sourceType")) or "website"
+    source_type = _source_type(source_url, crawl)
     external_id = _external_id(source_url, crawl, markdown, source_type)
     screenshots = _string_list(crawl.get("screenshots"))
     videos = _string_list(crawl.get("videos"))
@@ -133,7 +135,7 @@ def _metadata_from_crawl(
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "source_url": source_url,
-        "source_type": _observed_text(crawl.get("sourceType")) or "website",
+        "source_type": _source_type(source_url, crawl),
         "brand": brand,
         "category": category,
         "inventory": inventory,
@@ -145,6 +147,8 @@ def _metadata_from_crawl(
             crawl.get("reviews_count") or crawl.get("reviewsCount")
         ),
         "reviews": _json_list(crawl.get("reviews")),
+        "review_cards": _json_list(crawl.get("review_cards")),
+        "customer_say": _observed_text(crawl.get("customer_say")),
         "buyer_images": _string_list(
             crawl.get("buyer_images") or crawl.get("review_images")
         ),
@@ -160,6 +164,9 @@ def _metadata_from_crawl(
         "discount_text": _observed_text(
             crawl.get("discountText") or crawl.get("discount")
         ),
+        "promo_headline": _observed_text(crawl.get("promoHeadline")),
+        "promo_bullets": _string_list(crawl.get("promoBullets")),
+        "cta_text": _observed_text(crawl.get("ctaText")),
         "is_coupon": bool(crawl.get("isCoupon")),
     }
     return metadata
@@ -179,6 +186,10 @@ def _external_id(
         if not match:
             match = re.search(r"(?:/dp/|/gp/product/|/d/)([A-Z0-9]{10})", source_url)
         return match.group(1).upper() if match else None
+    if source_type in {"koupon", "dealseek", "affitfy"}:
+        target_url = _observed_text(crawl.get("targetUrl"))
+        match = re.search(r"(?:/dp/|/gp/product/|/d/)([A-Z0-9]{10})", target_url)
+        return match.group(1).upper() if match else None
     if "apps.apple.com" in source_url:
         match = re.search(r"/id(\d+)", source_url)
         return match.group(1) if match else None
@@ -194,6 +205,19 @@ def _markdown_value(markdown: str, label: str) -> str:
         re.IGNORECASE | re.MULTILINE,
     )
     return _observed_text(match.group(1).strip("` ")) if match else ""
+
+
+def _markdown_heading(markdown: str) -> str:
+    match = re.search(r"^\s*#\s+(.+?)\s*$", markdown, re.MULTILINE)
+    return _observed_text(match.group(1)) if match else ""
+
+
+def _source_type(source_url: str, crawl: dict[str, object]) -> str:
+    hostname = (urlsplit(source_url).hostname or "").lower()
+    for source in ("koupon", "dealseek", "affitfy"):
+        if source in hostname:
+            return source
+    return _observed_text(crawl.get("sourceType")) or "website"
 
 
 def _markdown_price(markdown: str, label: str) -> str:
