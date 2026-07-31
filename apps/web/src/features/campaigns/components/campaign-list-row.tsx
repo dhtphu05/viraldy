@@ -2,7 +2,11 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
 import { StatusChip } from "@/shared/ui/status-chip";
 import type { SeedCampaign } from "@/features/campaigns/mocks/campaigns";
-import type { CampaignPackStatus } from "@/features/campaigns/types/campaign";
+import {
+    campaignLifecycleLabel,
+    type CampaignLifecycle,
+    type CampaignReadiness,
+} from "@/features/campaigns/lib/campaignReadiness";
 import type { MetricTone } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
 import { RelativeTime } from "@/shared/ui/relative-time";
@@ -14,18 +18,19 @@ import {
     DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 
-const packStatusTone: Record<CampaignPackStatus, MetricTone> = {
-    Draft: "neutral",
-    "Ready for creator": "info",
-    "Creator production": "info",
-    "Awaiting UGC": "warn",
-    Active: "ok",
-    Completed: "ok",
-    Archived: "neutral",
+const lifecycleTone: Record<CampaignLifecycle, MetricTone> = {
+    draft: "neutral",
+    ready_for_review: "info",
+    creator_ready: "ok",
+    sent: "info",
+    creator_production: "info",
+    ugc_received: "warn",
+    live: "ok",
 };
 
 export function CampaignListRow({
     campaign,
+    readiness,
     onDuplicate,
     onRename,
     onArchive,
@@ -34,6 +39,7 @@ export function CampaignListRow({
     className,
 }: {
     campaign: SeedCampaign;
+    readiness?: CampaignReadiness;
     onDuplicate?: () => void;
     onRename?: () => void;
     onArchive?: () => void;
@@ -41,7 +47,7 @@ export function CampaignListRow({
     onChangeStatus?: () => void;
     className?: string;
 }) {
-    const status = (campaign.packStatus ?? "Draft") as CampaignPackStatus;
+    const lifecycle = readiness?.lifecycle ?? "draft";
     return (
         <div
             className={cn(
@@ -61,8 +67,8 @@ export function CampaignListRow({
                 </p>
             </Link>
             <div className="col-start-1 row-start-2 mt-2 min-w-0 md:col-start-auto md:row-start-auto md:mt-0">
-                <StatusChip tone={packStatusTone[status]} dot>
-                    {status}
+                <StatusChip tone={lifecycleTone[lifecycle]} dot>
+                    {campaignLifecycleLabel(lifecycle)}
                 </StatusChip>
                 {campaign.objective && (
                     <p className="mt-0.5 truncate text-xs text-text-tertiary">
@@ -88,7 +94,9 @@ export function CampaignListRow({
                 className="col-start-1 row-start-3 mt-2 min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:col-start-auto md:row-start-auto md:mt-0"
             >
                 <p className="flex items-center gap-1 text-sm font-semibold text-primary-active">
-                    <span className="truncate">{campaign.nextAction}</span>
+                    <span className="truncate">
+                        {readiness?.nextAction.label ?? campaign.nextAction}
+                    </span>
                     <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 </p>
                 <p className="text-[10px] uppercase text-text-tertiary">
@@ -109,7 +117,11 @@ export function CampaignListRow({
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={onRename}>Rename</DropdownMenuItem>
                         <DropdownMenuItem onClick={onDuplicate}>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem onClick={onChangeStatus}>Change status</DropdownMenuItem>
+                        {onChangeStatus && (
+                            <DropdownMenuItem onClick={onChangeStatus}>
+                                Change status
+                            </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={onArchive}>Archive</DropdownMenuItem>
                         {onDelete && (

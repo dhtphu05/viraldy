@@ -11,6 +11,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
 import { seedProducts } from "@/features/products/data/products";
 import type {
@@ -27,7 +28,16 @@ import { CampaignOverview } from "@/features/campaigns/components/campaign-overv
 import { CampaignPackWorkspace } from "@/features/campaigns/components/campaign-pack-workspace";
 import { CampaignActionTray } from "@/features/campaigns/components/campaign-action-tray";
 import { CreatorPreviewDialog } from "@/features/campaigns/components/creator-preview-dialog";
-import { STEPS, readinessState, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
+import {
+    CAMPAIGN_PHASES,
+    STEPS,
+    phaseIsComplete,
+    stepIsComplete,
+} from "@/features/campaigns/lib/campaignSteps";
+import {
+    markCampaignReady,
+    selectCampaignReadiness,
+} from "@/features/campaigns/lib/campaignReadiness";
 import type { StepId } from "@/features/campaigns/types/campaign";
 import {
     generateAngles,
@@ -55,6 +65,8 @@ import {
     Check,
     ChevronDown,
     ExternalLink,
+    ArrowUp,
+    ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
@@ -126,7 +138,10 @@ function CampaignDetail() {
     const [step, setStep] = useState<StepId>("product");
     const [previewOpen, setPreviewOpen] = useState(false);
     const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+    const [hydrated, setHydrated] = useState(false);
     const saveTimer = useRef<number | null>(null);
+
+    useEffect(() => setHydrated(true), []);
 
     useEffect(() => {
         if (saveState === "saving") {
@@ -135,10 +150,11 @@ function CampaignDetail() {
         }
     }, [saveState]);
 
+    if (!hydrated) return <CampaignDetailSkeleton />;
     if (!summary || !pack) throw notFound();
 
     const product = seedProducts.find((p) => p.id === pack.productId);
-    const readiness = readinessState(pack);
+    const readiness = selectCampaignReadiness(pack);
     const activity = activityAll.filter((e) => e.campaignId === campaignId).slice(0, 30);
     const nextIncomplete = STEPS.find((item) => !stepIsComplete(pack, item.id));
     const hasCampaignAssets = ugcAssets.some(
@@ -162,12 +178,12 @@ function CampaignDetail() {
               : "Saved in this browser";
 
     function openNextAction() {
-        if (readiness.state === "Creator-ready") {
+        if (readiness.lifecycle === "creator_ready") {
             setPreviewOpen(true);
             return;
         }
         setTab("pack");
-        setStep(nextIncomplete?.id ?? "review");
+        setStep(readiness.nextAction.step ?? nextIncomplete?.id ?? "review");
     }
 
     return (
@@ -186,12 +202,13 @@ function CampaignDetail() {
             <div className="flex flex-col gap-6">
                 <CampaignDetailHeader
                     pack={pack}
+                    readiness={readiness}
                     productName={product?.name ?? "Product"}
                     saveLabel={saveLabel}
                     primaryActionLabel={
-                        readiness.state === "Creator-ready"
+                        readiness.lifecycle === "creator_ready"
                             ? "Preview for creator"
-                            : `Continue: ${nextIncomplete?.label ?? "Review"}`
+                            : readiness.nextAction.label
                     }
                     onPrimaryAction={openNextAction}
                     onDuplicate={() => {
@@ -225,8 +242,7 @@ function CampaignDetail() {
                     <TabsContent value="overview" className="mt-6">
                         <CampaignOverview
                             pack={pack}
-                            readinessState={readiness.state}
-                            reasons={readiness.reasons}
+                            readiness={readiness}
                             activity={activity}
                             onContinue={(nextStep) => {
                                 setTab("pack");
@@ -312,6 +328,29 @@ function CampaignDetail() {
                 open={previewOpen}
                 onOpenChange={setPreviewOpen}
             />
+        </AppShell>
+    );
+}
+
+function CampaignDetailSkeleton() {
+    return (
+        <AppShell>
+            <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading campaign">
+                <div className="flex flex-col gap-3">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-9 w-full max-w-lg" />
+                    <Skeleton className="h-4 w-full max-w-2xl" />
+                </div>
+                <div className="flex gap-3">
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-32" />
+                    <Skeleton className="h-9 w-24" />
+                </div>
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+                    <Skeleton className="h-80 w-full" />
+                    <Skeleton className="h-64 w-full" />
+                </div>
+            </div>
         </AppShell>
     );
 }
@@ -1026,7 +1065,7 @@ function AnglesStep({
                     />
                 </SurfaceCard>
             ) : (
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 min-[1500px]:grid-cols-2">
                     {pack.angleOptions
                         .filter((a) => !a.archived)
                         .map((a) => {
@@ -1060,6 +1099,7 @@ function AnglesStep({
                                             size="sm"
                                             variant="ghost"
                                             onClick={() => archiveAngle(a)}
+                                            aria-label={`Archive ${a.name}`}
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -1497,6 +1537,15 @@ function StoryboardStep({
     campaignId: string;
 }) {
     const [busy, setBusy] = useState(false);
+    const [storyboardMode, setStoryboardMode] = useState<"visual" | "detail">("visual");
+    const [selectedSceneId, setSelectedSceneId] = useState<string | undefined>(
+        pack.storyboard[0]?.id,
+    );
+    const selectedScene =
+        pack.storyboard.find((scene) => scene.id === selectedSceneId) ?? pack.storyboard[0];
+    const selectedSceneIndex = selectedScene
+        ? pack.storyboard.findIndex((scene) => scene.id === selectedScene.id)
+        : -1;
     async function generate() {
         setBusy(true);
         const next = await generateStoryboard(pack.productId, pack.id);
@@ -1556,7 +1605,7 @@ function StoryboardStep({
                     </Button>
                     <Button size="sm" onClick={generate} disabled={busy}>
                         <Sparkles className="h-4 w-4" />{" "}
-                        {pack.storyboard.length ? "Regenerate all" : "Generate"}
+                        {pack.storyboard.length ? "Regenerate storyboard" : "Generate storyboard"}
                     </Button>
                 </div>
             }
@@ -1575,145 +1624,243 @@ function StoryboardStep({
                     />
                 </SurfaceCard>
             ) : (
-                <div className="flex flex-col gap-3">
-                    {pack.storyboard.map((s, i) => (
-                        <SurfaceCard key={s.id} padding="md">
-                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="grid h-6 w-6 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary-active">
-                                        {i + 1}
-                                    </span>
-                                    <Input
-                                        className="h-7 w-[180px]"
-                                        value={s.label}
-                                        onChange={(e) => update(s.id, { label: e.target.value })}
-                                    />
-                                    {s.mustShow && <StatusChip tone="ok">Must show</StatusChip>}
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => move(s.id, -1)}
-                                        disabled={i === 0}
+                <Tabs
+                    value={storyboardMode}
+                    onValueChange={(value) => setStoryboardMode(value as "visual" | "detail")}
+                >
+                    <TabsList aria-label="Storyboard view">
+                        <TabsTrigger value="visual">Visual strip</TabsTrigger>
+                        <TabsTrigger value="detail">Detail editor</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="visual" className="mt-4">
+                        <div
+                            className="overflow-x-auto pb-2"
+                            aria-label="Storyboard scenes, horizontally scrollable"
+                        >
+                            <div className="grid min-w-max grid-flow-col auto-cols-[220px] gap-3">
+                                {pack.storyboard.map((scene, index) => (
+                                    <button
+                                        key={scene.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedSceneId(scene.id);
+                                            setStoryboardMode("detail");
+                                        }}
+                                        className="group min-w-0 rounded-md bg-surface p-3 text-left transition-[background-color,box-shadow,transform] duration-[180ms] hover:-translate-y-px hover:bg-surface-soft hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none"
                                     >
-                                        ↑
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => move(s.id, 1)}
-                                        disabled={i === pack.storyboard.length - 1}
-                                    >
-                                        ↓
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => update(s.id, { mustShow: !s.mustShow })}
-                                    >
-                                        <Check className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => regenerateOne(s)}
-                                        disabled={busy}
-                                    >
-                                        <RefreshCw className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => remove(s.id)}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                <div>
-                                    <Label className="text-[11px] uppercase text-text-tertiary">
-                                        Duration
-                                    </Label>
-                                    <Input
-                                        value={s.durationRange}
-                                        onChange={(e) =>
-                                            update(s.id, { durationRange: e.target.value })
-                                        }
-                                    />
-                                </div>
-                                <div>
-                                    <Label className="text-[11px] uppercase text-text-tertiary">
-                                        Framing
-                                    </Label>
-                                    <Input
-                                        value={s.framing}
-                                        onChange={(e) => update(s.id, { framing: e.target.value })}
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <Label className="text-[11px] uppercase text-text-tertiary">
-                                        Visual direction
-                                    </Label>
-                                    <Textarea
-                                        rows={2}
-                                        value={s.visualDirection}
-                                        onChange={(e) =>
-                                            update(s.id, { visualDirection: e.target.value })
-                                        }
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <Label className="text-[11px] uppercase text-text-tertiary">
-                                        Spoken line
-                                    </Label>
-                                    <Textarea
-                                        rows={2}
-                                        value={s.spokenLine}
-                                        onChange={(e) =>
-                                            update(s.id, { spokenLine: e.target.value })
-                                        }
-                                    />
-                                </div>
-                                <div>
-                                    <Label className="text-[11px] uppercase text-text-tertiary">
-                                        On-screen text
-                                    </Label>
-                                    <Input
-                                        value={s.onScreenText ?? ""}
-                                        onChange={(e) =>
-                                            update(s.id, { onScreenText: e.target.value })
-                                        }
-                                    />
-                                </div>
-                                <div>
-                                    <Label className="text-[11px] uppercase text-text-tertiary">
-                                        Product visibility
-                                    </Label>
-                                    <Select
-                                        value={s.productVisibility}
-                                        onValueChange={(v) =>
-                                            update(s.id, {
-                                                productVisibility:
-                                                    v as StoryboardScene["productVisibility"],
-                                            })
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {(["Prominent", "Contextual", "Absent"] as const).map(
-                                                (v) => (
-                                                    <SelectItem key={v} value={v}>
-                                                        {v}
-                                                    </SelectItem>
-                                                ),
+                                        <DemoMediaTile
+                                            seed={`${pack.id}-${scene.id}`}
+                                            label={scene.visualDirection}
+                                            badges={[`Scene ${index + 1}`, scene.durationRange]}
+                                            aspect="16 / 9"
+                                            showPlay={false}
+                                            className="rounded-md"
+                                        />
+                                        <div className="mt-3 flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-text-primary">
+                                                    {scene.label}
+                                                </p>
+                                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary">
+                                                    {scene.visualDirection}
+                                                </p>
+                                            </div>
+                                            {scene.mustShow && (
+                                                <StatusChip tone="ok">Required</StatusChip>
                                             )}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                        </div>
+                                        <p className="mt-2 text-[11px] text-text-tertiary">
+                                            Product: {scene.productVisibility}
+                                        </p>
+                                    </button>
+                                ))}
                             </div>
-                        </SurfaceCard>
-                    ))}
-                </div>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="detail" className="mt-4">
+                        {selectedScene && (
+                            <SurfaceCard padding="md">
+                                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary-active">
+                                            {pack.storyboard.findIndex(
+                                                (scene) => scene.id === selectedScene.id,
+                                            ) + 1}
+                                        </span>
+                                        <Input
+                                            className="h-8 min-w-0 max-w-[240px]"
+                                            aria-label="Scene title"
+                                            value={selectedScene.label}
+                                            onChange={(event) =>
+                                                update(selectedScene.id, {
+                                                    label: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            aria-label="Move scene earlier"
+                                            onClick={() => move(selectedScene.id, -1)}
+                                            disabled={selectedSceneIndex <= 0}
+                                        >
+                                            <ArrowUp className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            aria-label="Move scene later"
+                                            onClick={() => move(selectedScene.id, 1)}
+                                            disabled={
+                                                selectedSceneIndex === pack.storyboard.length - 1
+                                            }
+                                        >
+                                            <ArrowDown className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            aria-label={
+                                                selectedScene.mustShow
+                                                    ? "Remove required scene"
+                                                    : "Mark scene required"
+                                            }
+                                            onClick={() =>
+                                                update(selectedScene.id, {
+                                                    mustShow: !selectedScene.mustShow,
+                                                })
+                                            }
+                                        >
+                                            <Check className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            aria-label="Regenerate selected scene"
+                                            onClick={() => regenerateOne(selectedScene)}
+                                            disabled={busy}
+                                        >
+                                            <RefreshCw className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            aria-label="Delete selected scene"
+                                            onClick={() => remove(selectedScene.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <Label htmlFor={`scene-duration-${selectedScene.id}`}>
+                                            Duration
+                                        </Label>
+                                        <Input
+                                            id={`scene-duration-${selectedScene.id}`}
+                                            value={selectedScene.durationRange}
+                                            onChange={(event) =>
+                                                update(selectedScene.id, {
+                                                    durationRange: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor={`scene-framing-${selectedScene.id}`}>
+                                            Framing
+                                        </Label>
+                                        <Input
+                                            id={`scene-framing-${selectedScene.id}`}
+                                            value={selectedScene.framing}
+                                            onChange={(event) =>
+                                                update(selectedScene.id, {
+                                                    framing: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <Label htmlFor={`scene-visual-${selectedScene.id}`}>
+                                            Visual direction
+                                        </Label>
+                                        <Textarea
+                                            id={`scene-visual-${selectedScene.id}`}
+                                            rows={3}
+                                            value={selectedScene.visualDirection}
+                                            onChange={(event) =>
+                                                update(selectedScene.id, {
+                                                    visualDirection: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <Label htmlFor={`scene-spoken-${selectedScene.id}`}>
+                                            Spoken line
+                                        </Label>
+                                        <Textarea
+                                            id={`scene-spoken-${selectedScene.id}`}
+                                            rows={3}
+                                            value={selectedScene.spokenLine}
+                                            onChange={(event) =>
+                                                update(selectedScene.id, {
+                                                    spokenLine: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor={`scene-overlay-${selectedScene.id}`}>
+                                            On-screen text
+                                        </Label>
+                                        <Input
+                                            id={`scene-overlay-${selectedScene.id}`}
+                                            value={selectedScene.onScreenText ?? ""}
+                                            onChange={(event) =>
+                                                update(selectedScene.id, {
+                                                    onScreenText: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor={`scene-visibility-${selectedScene.id}`}>
+                                            Product visibility
+                                        </Label>
+                                        <Select
+                                            value={selectedScene.productVisibility}
+                                            onValueChange={(value) =>
+                                                update(selectedScene.id, {
+                                                    productVisibility:
+                                                        value as StoryboardScene["productVisibility"],
+                                                })
+                                            }
+                                        >
+                                            <SelectTrigger
+                                                id={`scene-visibility-${selectedScene.id}`}
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {(
+                                                    ["Prominent", "Contextual", "Absent"] as const
+                                                ).map((value) => (
+                                                    <SelectItem key={value} value={value}>
+                                                        {value}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </SurfaceCard>
+                        )}
+                    </TabsContent>
+                </Tabs>
             )}
         </SectionShell>
     );
@@ -2068,18 +2215,19 @@ function DeliverablesStep({
 
 // Review
 function ReviewStep({ pack, campaignId }: { pack: CampaignPack; campaignId: string }) {
-    const readiness = readinessState(pack);
+    const readiness = selectCampaignReadiness(pack);
     const [previewOpen, setPreviewOpen] = useState(false);
     const setPackStatus = useAppStore((s) => s.setPackStatus);
     const addActivity = useAppStore((s) => s.addActivity);
-    const readinessTone =
-        readiness.state === "Creator-ready"
-            ? "ok"
-            : readiness.state === "Needs review"
-              ? "warn"
-              : readiness.state === "Blocked"
-                ? "destructive"
-                : "neutral";
+    const creatorReady = readiness.lifecycle === "creator_ready";
+    const readyForReview = readiness.lifecycle === "ready_for_review";
+    const readinessTone = creatorReady
+        ? "ok"
+        : readyForReview
+          ? "info"
+          : readiness.hardBlockers.length > 0
+            ? "warn"
+            : "neutral";
     return (
         <SectionShell
             title="Review"
@@ -2087,52 +2235,71 @@ function ReviewStep({ pack, campaignId }: { pack: CampaignPack; campaignId: stri
         >
             <SurfaceCard
                 padding="md"
-                className={`border-l-4 ${readinessTone === "ok" ? "border-l-ok" : readinessTone === "warn" ? "border-l-warn" : readinessTone === "destructive" ? "border-l-destructive" : "border-l-hairline"}`}
+                className={`border-l-4 ${readinessTone === "ok" ? "border-l-ok" : readinessTone === "warn" ? "border-l-warn" : readinessTone === "info" ? "border-l-info" : "border-l-hairline"}`}
             >
                 <StatusChip tone={readinessTone} dot>
-                    {readiness.state.toUpperCase()}
+                    {creatorReady
+                        ? "CREATOR-READY"
+                        : readyForReview
+                          ? "READY TO REVIEW"
+                          : "ACTION REQUIRED"}
                 </StatusChip>
                 <p className="mt-2 text-base font-semibold text-text-primary">
-                    {readiness.state === "Creator-ready"
-                        ? "This campaign is ready to send to a creator."
-                        : "Fix the items below to reach creator-ready."}
+                    {creatorReady
+                        ? "The approved Campaign Pack is ready to share."
+                        : readyForReview
+                          ? "Review the creator-facing brief before marking this campaign ready."
+                          : "Resolve the items below before creator review."}
                 </p>
-                {readiness.reasons.length > 0 && (
+                {readiness.hardBlockers.length > 0 && (
                     <ul className="mt-2 space-y-0.5 text-sm text-text-secondary">
-                        {readiness.reasons.map((r, i) => (
-                            <li key={i}>• {r}</li>
+                        {readiness.hardBlockers.map((blocker) => (
+                            <li key={blocker.id}>• {blocker.label}</li>
                         ))}
                     </ul>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                    <Button onClick={() => setPreviewOpen(true)}>
-                        <Eye className="h-4 w-4" /> Preview creator brief
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        disabled={readiness.state !== "Creator-ready"}
-                        onClick={() => {
-                            setPackStatus(pack.id, "Ready for creator");
-                            addActivity({
-                                campaignId,
-                                kind: "marked-ready",
-                                detail: "Marked ready for creator",
-                            });
-                            toast.success("Marked ready for creator");
-                        }}
-                    >
-                        <Check className="h-4 w-4" /> Mark ready for creator
-                    </Button>
+                    {readyForReview ? (
+                        <>
+                            <Button
+                                onClick={() => {
+                                    const readyPack = markCampaignReady(pack);
+                                    if (readyPack === pack) return;
+                                    setPackStatus(pack.id, readyPack.status);
+                                    addActivity({
+                                        campaignId,
+                                        kind: "marked-ready",
+                                        detail: "Marked ready for creator",
+                                    });
+                                    toast.success("Campaign is creator-ready");
+                                }}
+                            >
+                                <Check className="h-4 w-4" /> Mark ready for creator
+                            </Button>
+                            <Button variant="secondary" onClick={() => setPreviewOpen(true)}>
+                                <Eye className="h-4 w-4" /> Preview creator brief
+                            </Button>
+                        </>
+                    ) : (
+                        <Button
+                            onClick={() => setPreviewOpen(true)}
+                            disabled={!creatorReady && readiness.hardBlockers.length > 0}
+                        >
+                            <Eye className="h-4 w-4" /> Preview creator brief
+                        </Button>
+                    )}
                 </div>
             </SurfaceCard>
 
             <div className="grid gap-4 md:grid-cols-2">
-                {STEPS.map((s) => {
-                    const done = stepIsComplete(pack, s.id);
+                {CAMPAIGN_PHASES.map((phase) => {
+                    const done = phaseIsComplete(pack, phase);
                     return (
-                        <SurfaceCard key={s.id} padding="sm">
+                        <SurfaceCard key={phase.id} padding="sm">
                             <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium text-text-primary">{s.label}</p>
+                                <p className="text-sm font-medium text-text-primary">
+                                    {phase.label}
+                                </p>
                                 <StatusChip tone={done ? "ok" : "warn"}>
                                     {done ? "Complete" : "Incomplete"}
                                 </StatusChip>

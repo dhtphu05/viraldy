@@ -16,7 +16,7 @@ export function CampaignPackWorkspace({
 }) {
     return (
         <div className="flex flex-col gap-4">
-            <div className="grid gap-4 xl:grid-cols-[180px_minmax(0,1fr)_280px] xl:gap-5 2xl:grid-cols-[190px_minmax(0,1fr)_320px] 2xl:gap-6">
+            <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)] xl:gap-5">
                 <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
                     <div className="min-w-0 max-w-full xl:hidden">
                         <StepNav pack={pack} current={step} onSelect={onStep} compact />
@@ -30,12 +30,8 @@ export function CampaignPackWorkspace({
                     {children}
                 </section>
 
-                <aside className="hidden xl:sticky xl:top-4 xl:block xl:self-start">
-                    <EvidencePanel pack={pack} />
-                </aside>
-
-                <aside className="min-w-0 xl:hidden">
-                    <EvidencePanel pack={pack} />
+                <aside className="min-w-0 xl:col-start-2">
+                    <EvidencePanel pack={pack} layout="summary" />
                 </aside>
             </div>
         </div>

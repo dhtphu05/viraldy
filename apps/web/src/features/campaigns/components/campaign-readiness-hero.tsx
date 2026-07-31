@@ -1,65 +1,55 @@
 import { Button } from "@/shared/ui/button";
 import { DecisionHero } from "@/shared/ui/decision-hero";
-import {
-    STEPS,
-    completionPercent,
-    stepIsComplete,
-    type ReadinessState,
-} from "@/features/campaigns/lib/campaignSteps";
-import type { CampaignPack, StepId } from "@/features/campaigns/types/campaign";
+import type { CampaignReadiness } from "@/features/campaigns/lib/campaignReadiness";
+import type { StepId } from "@/features/campaigns/types/campaign";
 
 export function CampaignReadinessHero({
-    pack,
-    state,
-    reasons,
+    readiness,
     onContinue,
     onPreview,
 }: {
-    pack: CampaignPack;
-    state: ReadinessState;
-    reasons: string[];
+    readiness: CampaignReadiness;
     onContinue: (step: StepId) => void;
     onPreview: () => void;
 }) {
-    const nextIncomplete = STEPS.find((step) => !stepIsComplete(pack, step.id));
-    const creatorReady = state === "Creator-ready";
-    const missingAngle = !pack.primaryAngleId;
-    const missingHooks = pack.selectedHookIds.length === 0;
+    const creatorReady = readiness.lifecycle === "creator_ready";
+    const readyForReview = readiness.lifecycle === "ready_for_review";
+    const blocker = readiness.hardBlockers[0];
     const reason = creatorReady
-        ? "All required Campaign Pack sections are complete."
-        : nextIncomplete?.id === "angles" && missingAngle && missingHooks
-          ? "Select a primary angle and at least one hook before creator preview."
-          : nextIncomplete?.id === "angles" && missingAngle
-            ? "Select the primary creative angle before continuing."
-            : nextIncomplete?.id === "hooks" && missingHooks
-              ? "Select at least one hook before continuing."
-              : reasons[0]
-                ? `${reasons[0].replace(/^Missing:\s*/, "Complete ")} before creator preview.`
-                : "Continue editing to complete the creator brief.";
-    const statusTone =
-        state === "Creator-ready"
-            ? "ok"
-            : state === "Needs review"
-              ? "warn"
-              : state === "Blocked"
-                ? "destructive"
-                : "neutral";
+        ? "The approved Campaign Pack is ready to share with a creator."
+        : readyForReview
+          ? "Required content and coherence checks passed. Review the creator-facing version before approval."
+          : (blocker?.label ??
+            "Complete the required Campaign Pack sections before creator review.");
+    const statusTone = creatorReady
+        ? "ok"
+        : readyForReview
+          ? "info"
+          : readiness.hardBlockers.length > 0
+            ? "warn"
+            : "neutral";
 
     return (
         <DecisionHero
             eyebrow="Campaign readiness"
-            actionLabel={creatorReady ? "READY FOR CREATOR" : "CONTINUE CAMPAIGN PACK"}
+            actionLabel={
+                creatorReady
+                    ? "CREATOR-READY"
+                    : readyForReview
+                      ? "READY TO REVIEW"
+                      : "ACTION REQUIRED"
+            }
             reason={reason}
-            score={`${completionPercent(pack)}% complete`}
+            score={`${readiness.completionPercent}% complete`}
             scoreLabel="Campaign Pack"
-            blockerCount={creatorReady ? 0 : reasons.length}
+            blockerCount={readiness.hardBlockers.length}
             statusTone={statusTone}
             primaryAction={
                 creatorReady ? (
                     <Button onClick={onPreview}>Preview for creator</Button>
-                ) : nextIncomplete ? (
-                    <Button onClick={() => onContinue(nextIncomplete.id)}>
-                        Continue: {nextIncomplete.label}
+                ) : readiness.nextAction.step ? (
+                    <Button onClick={() => onContinue(readiness.nextAction.step!)}>
+                        {readiness.nextAction.label}
                     </Button>
                 ) : undefined
             }
