@@ -60,6 +60,7 @@ async def get_or_create_current_user(
             external_auth_id=verified.external_auth_id,
             email=normalized_email,
             display_name=verified.display_name,
+            phone_number=verified.phone_number,
             status="active",
         )
         session.add(user)
@@ -78,6 +79,7 @@ async def get_or_create_current_user(
 
     user.email = normalized_email
     user.display_name = verified.display_name
+    user.phone_number = verified.phone_number
     user.last_login_at = utc_now()
     if created:
         await ProductEventPublisher(session).record(
@@ -97,6 +99,7 @@ async def get_or_create_current_user(
         email=user.email,
         display_name=user.display_name,
         status=user.status,
+        phone_number=user.phone_number,
     )
 
 

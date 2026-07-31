@@ -52,7 +52,10 @@ def signed_token(
         "aud": "viraldy-api",
         "sub": "provider-user-123",
         "email": "Seller@Example.com",
+        "email_verified": True,
         "name": "Seller",
+        "phone_number": "+84901234567",
+        "phone_number_verified": True,
         "iat": now,
         "nbf": now - timedelta(seconds=1),
         "exp": now + timedelta(minutes=5),
@@ -69,6 +72,7 @@ async def test_oidc_verifier_accepts_valid_token(key_pair: rsa.RSAPrivateKey) ->
     assert verified.external_auth_id == "provider-user-123"
     assert verified.email == "Seller@Example.com"
     assert verified.display_name == "Seller"
+    assert verified.phone_number == "+84901234567"
 
 
 @pytest.mark.asyncio
@@ -81,6 +85,21 @@ async def test_oidc_verifier_accepts_valid_token(key_pair: rsa.RSAPrivateKey) ->
         {"nbf": datetime.now(UTC) + timedelta(minutes=5)},
         {"sub": None},
         {"email": None},
+        {"email": "   "},
+        {"email_verified": None},
+        {"email_verified": False},
+        {"email_verified": "true"},
+        {"name": None},
+        {"name": "   "},
+        {"phone_number": None},
+        {"phone_number": ""},
+        {"phone_number": "0901234567"},
+        {"phone_number": " +84901234567"},
+        {"phone_number": "+0123456789"},
+        {"phone_number": "+8490123456789012"},
+        {"phone_number_verified": None},
+        {"phone_number_verified": False},
+        {"phone_number_verified": "true"},
     ],
 )
 async def test_oidc_verifier_rejects_invalid_claims(

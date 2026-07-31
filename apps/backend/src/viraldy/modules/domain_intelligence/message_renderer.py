@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from viraldy.modules.domain_intelligence.schemas import UGCRecommendation
+
+
+def render_creator_message(
+    strengths: Sequence[str],
+    fix_first: Sequence[UGCRecommendation],
+    improvements: Sequence[UGCRecommendation],
+) -> str:
+    preserved = strengths[0] if strengths else "the useful creator delivery and unaffected footage"
+    opening = f"Please keep {preserved[0].lower() + preserved[1:] if preserved else preserved}"
+    actions: list[str] = []
+    for recommendation in [*fix_first, *improvements[:1]]:
+        if recommendation.fix_type == "reshoot_scene":
+            prefix = "Reshoot only the affected scene:"
+        elif recommendation.fix_type in {"replace_copy", "add_overlay", "edit_existing_footage"}:
+            prefix = "In the edit:"
+        else:
+            continue
+        instruction = (
+            recommendation.instructions[0] if recommendation.instructions else recommendation.title
+        )
+        actions.append(f"{prefix} {instruction}")
+    if not actions:
+        actions.append(
+            "No reshoot is requested from the current evidence; preserve the approved scope."
+        )
+    return " ".join([f"{opening}.", *actions])

@@ -44,6 +44,13 @@ class AssetVersionResponse(BaseModel):
     created_at: datetime
 
 
+class AssetVersionPlaybackResponse(BaseModel):
+    asset_id: UUID
+    asset_version_id: UUID
+    video_url: str
+    expires_at: datetime
+
+
 class AssetResponse(BaseModel):
     id: UUID
     workspace_id: UUID

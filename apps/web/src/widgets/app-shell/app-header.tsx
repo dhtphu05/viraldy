@@ -11,13 +11,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouteContext } from "@tanstack/react-router";
 import { Menu, Search } from "lucide-react";
 import { useState } from "react";
+import { profileInitials } from "@/features/auth/lib/auth-contract";
 
 export function AppHeader() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const { auth } = useRouteContext({ from: "__root__" });
+    const user = auth.user;
 
     return (
         <header className="relative z-10 flex h-16 shrink-0 items-center gap-2 border-b border-divider bg-surface px-3 sm:px-4">
@@ -72,27 +75,35 @@ export function AppHeader() {
                             aria-label="Account"
                             className="ml-1 grid h-8 w-8 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary-active ring-1 ring-inset ring-primary/10 transition-colors hover:bg-primary-softer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         >
-                            MK
+                            {user ? profileInitials(user) : "U"}
                         </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuLabel>
                             <div className="flex flex-col">
                                 <span className="text-sm font-medium text-text-primary">
-                                    Mika Kwan
+                                    {user?.display_name ?? "Viraldy user"}
                                 </span>
                                 <span className="text-xs text-text-tertiary">
-                                    mika@viraldy.demo
+                                    {user?.email ?? "Signed in"}
                                 </span>
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem asChild>
-                            <Link to="/settings">Account settings</Link>
+                            <Link to="/account">Account settings</Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
                             <Link to="/settings">Workspace preferences</Link>
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <form action="/api/auth/logout" method="post">
+                            <DropdownMenuItem asChild>
+                                <button type="submit" className="w-full">
+                                    Sign out
+                                </button>
+                            </DropdownMenuItem>
+                        </form>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

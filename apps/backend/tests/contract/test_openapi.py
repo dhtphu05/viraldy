@@ -96,6 +96,34 @@ def test_response_envelope_schema_is_registered() -> None:
     assert "Envelope" in schema["components"]["schemas"]
 
 
+def test_identity_response_payloads_are_typed_in_openapi() -> None:
+    schema = app.openapi()
+    components = schema["components"]["schemas"]
+
+    assert set(components["AuthConfigResponse"]["properties"]) == {
+        "auth_mode",
+        "enabled",
+        "authorization_url",
+        "token_url",
+        "client_id",
+        "scopes",
+        "registration_url",
+        "end_session_url",
+    }
+    assert "phone_number" in components["MeResponse"]["required"]
+    for path, envelope_name, payload_name in (
+        ("/api/v1/auth/config", "AuthConfigEnvelope", "AuthConfigResponse"),
+        ("/api/v1/me", "MeEnvelope", "MeResponse"),
+    ):
+        response_schema = schema["paths"][path]["get"]["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+        assert response_schema["$ref"] == f"#/components/schemas/{envelope_name}"
+        assert components[envelope_name]["properties"]["data"]["$ref"] == (
+            f"#/components/schemas/{payload_name}"
+        )
+
+
 def test_openapi_contains_asset_revision_routes() -> None:
     paths = app.openapi()["paths"]
 
@@ -105,6 +133,51 @@ def test_openapi_contains_asset_revision_routes() -> None:
         "{asset_version_id}/complete-upload" in paths
     )
     assert "/api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions" in paths
+
+
+def test_openapi_contains_canonical_tiktok_scorer_contract() -> None:
+    schema = app.openapi()
+    paths = schema["paths"]
+    base = "/api/v1/workspaces/{workspace_id}/tiktok-scores"
+    expected_methods = {
+        base: {"get", "post"},
+        f"{base}/events": {"post"},
+        f"{base}/{{score_run_id}}": {"get"},
+        f"{base}/{{score_run_id}}/fixes": {"get"},
+        f"{base}/{{score_run_id}}/fixes/{{fix_action_id}}/actions": {"post"},
+        f"{base}/{{score_run_id}}/revisions": {"post"},
+        f"{base}/{{score_run_id}}/comparisons/{{comparison_id}}": {"get"},
+        f"{base}/{{score_run_id}}/events": {"post"},
+        "/api/v1/workspaces/{workspace_id}/tiktok-score-profiles": {"get"},
+    }
+
+    for path, methods in expected_methods.items():
+        assert path in paths
+        assert set(paths[path]) & HTTP_METHODS == methods
+
+    path_order = list(paths)
+    assert path_order.index(f"{base}/events") < path_order.index(f"{base}/{{score_run_id}}")
+
+    create_schema = schema["components"]["schemas"]["CreateTikTokScoreRequest"]
+    assert set(create_schema["properties"]) == {
+        "asset_version_id",
+        "asset_id",
+        "product_id",
+        "score_mode",
+        "score_profile",
+        "intended_use",
+        "creative_direction_context_id",
+        "idempotency_key",
+        "profile_selection_mode",
+        "profile_selection_confidence",
+        "alternative_profiles",
+        "profile_evidence_ids",
+        "target_query",
+        "target_buyer_question",
+        "selected_search_topic",
+        "content_gap_topic",
+        "objective",
+    }
 
 
 def test_openapi_contains_private_beta_health_routes() -> None:

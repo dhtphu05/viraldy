@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from viraldy.modules.assets.models import AssetModel, AssetVersionModel
 from viraldy.modules.assets.repository import AssetRepository
 from viraldy.modules.assets.schemas import (
     AssetResponse,
+    AssetVersionPlaybackResponse,
     AssetVersionResponse,
     CreateAssetRevisionUploadSessionRequest,
     CreateUploadSessionRequest,
@@ -17,6 +19,7 @@ from viraldy.modules.assets.validators import validate_upload_declaration
 from viraldy.modules.jobs.public import JobResponse, request_process_asset
 from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.products.public import ProductLookupPort
+from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import Settings
 from viraldy.platform.storage.keys import asset_source_key
 from viraldy.platform.storage.ports import StoragePort
@@ -242,6 +245,31 @@ class AssetService:
             raise NotFoundError("ASSET_NOT_FOUND", "Asset was not found.")
         versions = await self._repository.list_versions(workspace_id, asset_id)
         return [_version_response(version, is_current) for version, is_current in versions]
+
+    async def get_version_playback(
+        self,
+        workspace_id: UUID,
+        asset_id: UUID,
+        asset_version_id: UUID,
+    ) -> AssetVersionPlaybackResponse:
+        version = await self._repository.get_version_in_workspace(
+            workspace_id,
+            asset_id,
+            asset_version_id,
+        )
+        if version is None:
+            raise NotFoundError("ASSET_VERSION_NOT_FOUND", "Asset version was not found.")
+        if version.validation_status not in {"uploaded", "valid"}:
+            raise AppError(
+                "ASSET_VERSION_NOT_READY",
+                "Asset version must finish uploading before playback.",
+            )
+        return AssetVersionPlaybackResponse(
+            asset_id=asset_id,
+            asset_version_id=asset_version_id,
+            video_url=self._storage.create_presigned_download(version.storage_key),
+            expires_at=utc_now() + timedelta(seconds=self._settings.s3_presigned_expiry_seconds),
+        )
 
     async def list_assets(self, workspace_id: UUID) -> list[AssetResponse]:
         assets = await self._repository.list_assets(workspace_id)

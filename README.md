@@ -64,4 +64,6 @@ The seed command creates the matching local user and workspace. Production fails
 - Redis: queue, coordination, cache.
 - MinIO/S3-compatible storage: binary media.
 
-Frontend is intentionally deferred. See [apps/web/README.md](apps/web/README.md).
+The TanStack frontend lives in `apps/web`; run `make web-install` and
+`make web-dev` after the API is available. See
+[apps/web/README.md](apps/web/README.md).

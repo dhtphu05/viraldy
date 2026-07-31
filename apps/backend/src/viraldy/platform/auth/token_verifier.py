@@ -8,7 +8,8 @@ from typing import Protocol
 class VerifiedToken:
     external_auth_id: str
     email: str
-    display_name: str | None = None
+    display_name: str
+    phone_number: str
 
 
 class TokenVerifier(Protocol):

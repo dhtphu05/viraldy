@@ -49,3 +49,26 @@ def test_campaign_pack_requirement_compiler_is_publicly_exposed() -> None:
     public_imports = set(imports_for(SRC / "modules" / "campaign_packs" / "public.py"))
 
     assert "viraldy.modules.campaign_packs.requirements" in public_imports
+
+
+def test_tiktok_scorer_uses_only_public_cross_module_contracts() -> None:
+    protected_modules = {
+        "assets",
+        "campaign_packs",
+        "creative_dna",
+        "media_analysis",
+        "products",
+        "viral_kits",
+    }
+    offenders: list[str] = []
+    for path in (SRC / "modules" / "tiktok_scorer").glob("*.py"):
+        for imported in imports_for(path):
+            parts = imported.split(".")
+            if len(parts) < 4 or parts[:2] != ["viraldy", "modules"]:
+                continue
+            module_name = parts[2]
+            if module_name not in protected_modules:
+                continue
+            if imported != f"viraldy.modules.{module_name}.public":
+                offenders.append(f"{path}: {imported}")
+    assert offenders == []

@@ -10,7 +10,6 @@ import { createCreativeLibrarySlice } from "./slices/creative-library-slice";
 import { createDashboardSlice } from "./slices/dashboard-slice";
 import { createPerformanceSlice } from "./slices/performance-slice";
 import { createShellSlice } from "./slices/shell-slice";
-import { createUgcReviewSlice } from "./slices/ugc-review-slice";
 import type { AppState } from "./store-types";
 import { restoreInterruptedAnalysisStates } from "@/features/creative-library/lib/analysis-job-feedback";
 
@@ -20,8 +19,32 @@ function mergeSeededList<T extends { id: string }>(seeded: T[], persisted?: T[])
     return [...persisted, ...seeded.filter((item) => !ids.has(item.id))];
 }
 
-function mergePersistedState(persisted: unknown, current: AppState): AppState {
-    const state = (persisted ?? {}) as Partial<AppState>;
+type LegacyPersistedUgcState = {
+    ugcAssets?: unknown;
+    ugcAnalyses?: unknown;
+    ugcIssues?: unknown;
+    ugcRights?: unknown;
+    ugcActivity?: unknown;
+    ugcJobs?: unknown;
+};
+
+export function mergePersistedState(persisted: unknown, current: AppState): AppState {
+    const state = (persisted ?? {}) as Partial<AppState> & LegacyPersistedUgcState;
+    const {
+        ugcAssets: _legacyUgcAssets,
+        ugcAnalyses: _legacyUgcAnalyses,
+        ugcIssues: _legacyUgcIssues,
+        ugcRights: _legacyUgcRights,
+        ugcActivity: _legacyUgcActivity,
+        ugcJobs: _legacyUgcJobs,
+        ...safeState
+    } = state;
+    void _legacyUgcAssets;
+    void _legacyUgcAnalyses;
+    void _legacyUgcIssues;
+    void _legacyUgcRights;
+    void _legacyUgcActivity;
+    void _legacyUgcJobs;
     const analysisJobs = state.analysisJobs ?? current.analysisJobs;
     const creatives = restoreInterruptedAnalysisStates(
         mergeSeededList(current.creatives, state.creatives),
@@ -29,16 +52,13 @@ function mergePersistedState(persisted: unknown, current: AppState): AppState {
     );
     return {
         ...current,
-        ...state,
+        ...safeState,
         analysisJobs,
         boards: mergeSeededList(current.boards, state.boards),
         creatives,
         analyses: { ...current.analyses, ...(state.analyses ?? {}) },
         packs: { ...current.packs, ...(state.packs ?? {}) },
-        ugcAssets: mergeSeededList(current.ugcAssets, state.ugcAssets),
-        ugcAnalyses: { ...current.ugcAnalyses, ...(state.ugcAnalyses ?? {}) },
-        ugcIssues: { ...current.ugcIssues, ...(state.ugcIssues ?? {}) },
-        ugcRights: { ...current.ugcRights, ...(state.ugcRights ?? {}) },
+        ugcAssets: current.ugcAssets,
         perfRecommendations: mergeSeededList(
             current.perfRecommendations,
             state.perfRecommendations,
@@ -55,7 +75,6 @@ export const useAppStore = create<AppState>()(
                 ...createDashboardSlice(set),
                 ...createCreativeLibrarySlice(set, get),
                 ...createCampaignsSlice(set, get),
-                ...createUgcReviewSlice(set, get),
                 ...createPerformanceSlice(set),
                 reset: () => set({ ...initialAppState }),
             }) as AppState,

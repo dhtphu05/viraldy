@@ -27,6 +27,7 @@ from viraldy.modules.assets.router import router as assets_router
 from viraldy.modules.campaign_packs.router import router as campaign_packs_router
 from viraldy.modules.creative_dna.router import router as creative_dna_router
 from viraldy.modules.deletion.router import router as deletion_router
+from viraldy.modules.domain_intelligence.router import router as domain_intelligence_router
 from viraldy.modules.feedback.router import router as feedback_router
 from viraldy.modules.generation.router import router as generation_router
 from viraldy.modules.identity.router import router as identity_router
@@ -41,6 +42,8 @@ from viraldy.modules.recommendations.router import router as recommendations_rou
 from viraldy.modules.reference_boards.router import router as reference_boards_router
 from viraldy.modules.references.router import router as references_router
 from viraldy.modules.tiktok_scorer.router import router as tiktok_scorer_router
+from viraldy.modules.ugc_review.router import router as ugc_review_router
+from viraldy.modules.ugc_review.video_ingestion import S3UGCVideoIngestion
 from viraldy.modules.viral_kits.router import router as viral_kits_router
 from viraldy.modules.workspaces.router import router as workspaces_router
 from viraldy.platform.config.settings import get_settings
@@ -67,6 +70,7 @@ def create_app() -> FastAPI:
         swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
         license_info={"name": "MIT", "identifier": "MIT"},
     )
+    app.state.ugc_review_video_ingestion = S3UGCVideoIngestion(settings)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
     app.add_middleware(
@@ -96,6 +100,8 @@ def create_app() -> FastAPI:
     app.include_router(deletion_router, prefix=api_v1)
     app.include_router(generation_router, prefix=api_v1)
     app.include_router(media_analysis_router, prefix=api_v1)
+    app.include_router(domain_intelligence_router, prefix=api_v1)
+    app.include_router(ugc_review_router, prefix=api_v1)
     app.include_router(reference_boards_router, prefix=api_v1)
     app.include_router(references_router, prefix=api_v1)
     app.include_router(creative_dna_router, prefix=api_v1)

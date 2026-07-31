@@ -61,6 +61,7 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
                 column["name"] for column in inspector.get_columns("ai_model_runs")
             }
             product_columns = {column["name"] for column in inspector.get_columns("products")}
+            user_columns = {column["name"] for column in inspector.get_columns("users")}
             preflight_columns = {
                 column["name"] for column in inspector.get_columns("preflight_runs")
             }
@@ -112,6 +113,7 @@ def test_initial_migration_runs_on_clean_postgres(monkeypatch) -> None:  # type:
         "safe_error_message",
     }.issubset(ai_model_run_columns)
     assert "product_context_version" in product_columns
+    assert "phone_number" in user_columns
     assert {
         "seller_summary_json",
         "creator_revision_json",

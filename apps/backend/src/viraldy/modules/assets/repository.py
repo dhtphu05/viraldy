@@ -158,6 +158,25 @@ class AssetRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_version_by_id_in_workspace(
+        self,
+        workspace_id: UUID,
+        version_id: UUID,
+    ) -> tuple[AssetModel, AssetVersionModel] | None:
+        result = await self._session.execute(
+            select(AssetModel, AssetVersionModel)
+            .join(AssetVersionModel, AssetVersionModel.asset_id == AssetModel.id)
+            .where(
+                AssetModel.workspace_id == workspace_id,
+                AssetModel.deleted_at.is_(None),
+                AssetVersionModel.id == version_id,
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return row[0], row[1]
+
     async def get_current_version(self, asset_id: UUID) -> AssetVersionModel | None:
         result = await self._session.execute(
             select(AssetVersionModel)

@@ -8,7 +8,7 @@ import subprocess  # nosec B404
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, TypeVar, cast
 from uuid import UUID
@@ -65,6 +65,13 @@ SUPPORTED_CONTAINERS = {"mov,mp4,m4a,3gp,3g2,mj2", "mp4", "mov"}
 SUBPROCESS_TIMEOUT_SECONDS = 120
 T = TypeVar("T")
 logger = structlog.get_logger(__name__)
+
+
+class _UseAssetProductContext:
+    pass
+
+
+_USE_ASSET_PRODUCT_CONTEXT = _UseAssetProductContext()
 
 
 @dataclass(frozen=True)
@@ -155,13 +162,22 @@ class SyncMediaEvidencePipeline:
         snapshot: AssetVersionSnapshot,
         run_type: str,
         processing_job_id: UUID | None = None,
+        *,
+        product_context_snapshot: (
+            ProductContextSnapshot | None | _UseAssetProductContext
+        ) = _USE_ASSET_PRODUCT_CONTEXT,
     ) -> MediaEvidencePipelineResult:
         if self._settings.ai_mode == "fixture":
             return MediaEvidencePipelineResult(
                 self._process_fixture(snapshot, run_type, processing_job_id), None
             )
         validate_live_ai_settings(self._settings)
-        return self._process_live(snapshot, run_type, processing_job_id)
+        return self._process_live(
+            snapshot,
+            run_type,
+            processing_job_id,
+            product_context_snapshot,
+        )
 
     def _process_fixture(
         self, snapshot: AssetVersionSnapshot, run_type: str, processing_job_id: UUID | None
@@ -197,14 +213,30 @@ class SyncMediaEvidencePipeline:
         )
 
     def _process_live(
-        self, snapshot: AssetVersionSnapshot, run_type: str, processing_job_id: UUID | None
+        self,
+        snapshot: AssetVersionSnapshot,
+        run_type: str,
+        processing_job_id: UUID | None,
+        product_context_snapshot: ProductContextSnapshot | None | _UseAssetProductContext,
     ) -> MediaEvidencePipelineResult:
-        product_snapshot = self._product_context_snapshot(snapshot)
-        claim_hash = _media_analysis_claim_hash(
+        product_snapshot = self._resolve_product_context_snapshot(
             snapshot,
+            product_context_snapshot,
+        )
+        analysis_snapshot = replace(
+            snapshot,
+            product_id=(product_snapshot.product_id if product_snapshot is not None else None),
+        )
+        claim_hash = _media_analysis_claim_hash(
+            analysis_snapshot,
             self._settings,
             product_context_version=(
                 product_snapshot.product_context_version if product_snapshot is not None else None
+            ),
+            product_context_hash=(
+                _hash_json(product_snapshot.product_context.model_dump(mode="json"))
+                if product_snapshot is not None
+                else None
             ),
         )
         lease_seconds = (
@@ -225,7 +257,7 @@ class SyncMediaEvidencePipeline:
                 lease_seconds=lease_seconds,
             ):
                 return self._process_live_claimed(
-                    snapshot,
+                    analysis_snapshot,
                     run_type,
                     processing_job_id,
                     product_snapshot,
@@ -1050,6 +1082,15 @@ class SyncMediaEvidencePipeline:
             snapshot.workspace_id, snapshot.product_id
         )
 
+    def _resolve_product_context_snapshot(
+        self,
+        snapshot: AssetVersionSnapshot,
+        override: ProductContextSnapshot | None | _UseAssetProductContext,
+    ) -> ProductContextSnapshot | None:
+        if isinstance(override, _UseAssetProductContext):
+            return self._product_context_snapshot(snapshot)
+        return override
+
 
 def _row(
     asset_version_id: UUID,
@@ -1206,6 +1247,7 @@ def _media_analysis_claim_hash(
     settings: Settings,
     *,
     product_context_version: int | None,
+    product_context_hash: str | None = None,
 ) -> str:
     return stable_json_hash(
         {
@@ -1214,6 +1256,7 @@ def _media_analysis_claim_hash(
             "source_version_id": str(snapshot.asset_version_id),
             "source_checksum_sha256": snapshot.checksum_sha256,
             "product_context_version": product_context_version,
+            "product_context_hash": product_context_hash,
             "pipeline_version": MEDIA_PIPELINE_VERSION,
             "provider": settings.ai_provider,
             "vision_model": (

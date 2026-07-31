@@ -143,6 +143,30 @@ async def list_asset_versions(
     return success([version.model_dump(mode="json") for version in versions], request_id)
 
 
+@router.get("/{asset_id}/versions/{asset_version_id}/playback", response_model=Envelope)
+async def get_asset_version_playback(
+    workspace_id: UUID,
+    asset_id: UUID,
+    asset_version_id: UUID,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    settings: SettingsDep,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    await require_workspace_permission(
+        workspace_id,
+        Permission.REFERENCE_READ,
+        current_user,
+        db,
+    )
+    playback = await asset_service(db, settings).get_version_playback(
+        workspace_id,
+        asset_id,
+        asset_version_id,
+    )
+    return success(playback.model_dump(mode="json"), request_id)
+
+
 @router.get("", response_model=Envelope)
 async def list_assets(
     workspace_id: UUID,

@@ -88,6 +88,41 @@ Production sử dụng OIDC access token. Không lưu token trong source code, l
 analytics event hoặc URL. Local token `local-test` chỉ dùng khi backend được cấu
 hình ở local-test mode.
 
+Frontend phải đọc `GET /api/v1/auth/config` trước khi khởi tạo đăng nhập. Response
+`data` có contract:
+
+```json
+{
+  "auth_mode": "oidc",
+  "enabled": true,
+  "authorization_url": "https://identity.example/authorize",
+  "token_url": "https://identity.example/oauth/token",
+  "client_id": "viraldy-web",
+  "scopes": ["openid", "profile", "email", "phone", "offline_access"],
+  "registration_url": "https://identity.example/register",
+  "end_session_url": "https://identity.example/logout"
+}
+```
+
+`registration_url` và `end_session_url` có thể là `null`. Khi `auth_mode` là
+`local_test`, các URL và `client_id` là `null`, còn `scopes` là mảng rỗng. Endpoint
+này không trả issuer nội bộ, audience, JWKS URL, client secret hoặc bất kỳ secret
+nào khác.
+
+Với `auth_mode=oidc`, frontend dùng Authorization Code + PKCE (`S256`): tạo `state`,
+`code_verifier` và `code_challenge`; redirect đến `authorization_url` với
+`response_type=code`, `client_id`, `redirect_uri`, `scope`, `state`,
+`code_challenge` và `code_challenge_method=S256`; sau callback phải kiểm tra
+`state`, rồi đổi code tại `token_url` bằng `code_verifier`. Đây là public-client
+flow nên frontend không dùng client secret. Access token gửi đến API bằng header
+`Authorization: Bearer <access_token>`.
+
+Access token hợp lệ phải có claim `email` và `name` không rỗng, cùng
+`phone_number` theo E.164 (ví dụ `+84901234567`). Backend chỉ chấp nhận khi
+`email_verified` và `phone_number_verified` đều là boolean `true`. Scope
+`offline_access` được yêu cầu để provider cấp refresh token cho phiên dài hạn.
+`GET /api/v1/me` trả `phone_number` đã được backend lưu cùng identity.
+
 ## Async jobs and idempotency
 
 Các lệnh process, analyze, generation, scoring và preflight có thể trả
