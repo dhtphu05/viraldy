@@ -23,6 +23,7 @@ import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/utils";
+import { scrollElementIntoView } from "@/shared/lib/scroll";
 import { DisabledActionHint } from "@/shared/ui/disabled-action-hint";
 import { formatSystemValue, humanizeLabel } from "@/shared/lib/display";
 import { AnalysisTimelineSvg } from "@/shared/ui/analysis-timeline-svg";
@@ -1059,7 +1060,7 @@ function disabledReason(entries: Array<[boolean, string]>) {
 }
 
 function scrollToStep(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollElementIntoView(document.getElementById(id), { block: "start" });
 }
 
 function decisionTone(actionLabel: string, blockerCount: number) {

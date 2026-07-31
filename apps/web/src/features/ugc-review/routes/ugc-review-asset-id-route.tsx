@@ -22,6 +22,7 @@ import { ExpectedObservedTable } from "@/shared/ui/expected-observed-table";
 import { ValueReceipt } from "@/shared/ui/value-receipt";
 import { ConfidenceBadge } from "@/shared/ui/confidence-badge";
 import { cn } from "@/shared/lib/utils";
+import { scrollElementIntoView } from "@/shared/lib/scroll";
 import { useAppStore, useAllCampaigns } from "@/app/store/app-store";
 import { seedCreators } from "@/features/ugc-review/mocks/creators";
 import {
@@ -278,7 +279,7 @@ function UgcDetail() {
         if (selection?.issueId !== undefined) setActiveIssueId(selection.issueId);
         if (videoRef.current) {
             videoRef.current.currentTime = sec;
-            videoRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+            scrollElementIntoView(videoRef.current, { block: "center" });
         }
     };
 
@@ -301,7 +302,7 @@ function UgcDetail() {
     };
 
     const focusRevisionMessage = () => {
-        revisionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        scrollElementIntoView(revisionSectionRef.current, { block: "center" });
         window.setTimeout(
             () => revisionSectionRef.current?.querySelector("textarea")?.focus(),
             250,

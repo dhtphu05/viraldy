@@ -24,7 +24,8 @@ export function CampaignActionTray({
 
     return (
         <ActionTray
-            className="bottom-0 mb-0 rounded-md border border-control-border shadow-none"
+            sticky={false}
+            className="rounded-md border border-control-border shadow-none"
             context={
                 <div className="flex min-w-0 items-start gap-2">
                     <StatusChip tone={complete ? "ok" : "neutral"} dot>
@@ -33,7 +34,7 @@ export function CampaignActionTray({
                     <div className="min-w-0">
                         <p className="font-medium text-text-primary">{currentStep.label}</p>
                         <p className="mt-0.5 text-xs text-text-secondary">
-                            {complete ? "Saved locally." : blockerForStep(pack, step)}{" "}
+                            {complete ? "Saved in this browser." : blockerForStep(pack, step)}{" "}
                             {completionPercent(pack)}% complete.
                         </p>
                     </div>

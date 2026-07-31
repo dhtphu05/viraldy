@@ -175,7 +175,7 @@ export function EvidenceList({
                             key={e.id}
                             id={`evidence-${e.id}`}
                             className={cn(
-                                "px-1 py-4 transition-colors first:pt-2 last:pb-1",
+                                "scroll-mt-4 px-1 py-4 transition-colors first:pt-2 last:pb-1",
                                 activeId === e.id
                                     ? "rounded-md bg-primary-softer px-3 ring-2 ring-inset ring-primary"
                                     : "bg-transparent",

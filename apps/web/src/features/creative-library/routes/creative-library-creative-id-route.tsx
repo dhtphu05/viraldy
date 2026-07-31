@@ -47,6 +47,7 @@ import {
     Sparkles,
 } from "lucide-react";
 import { analysisSteps } from "@/features/creative-library/lib/mockAnalysis";
+import { scrollElementIntoView } from "@/shared/lib/scroll";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/creative-library/$creativeId")({
@@ -126,7 +127,7 @@ function CreativeDetailPage() {
             if (m) {
                 setActiveMarker(m.id);
                 const el = document.getElementById(`marker-evidence-${m.kind}`);
-                el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                scrollElementIntoView(el, { block: "nearest" });
             }
         }
     }
@@ -139,9 +140,9 @@ function CreativeDetailPage() {
                 (e) => e.timestamp && Math.abs(e.timestamp - m.at) < 1.5,
             );
             if (ev) {
-                document
-                    .getElementById(`evidence-${ev.id}`)
-                    ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                scrollElementIntoView(document.getElementById(`evidence-${ev.id}`), {
+                    block: "nearest",
+                });
             }
         }
     }
@@ -165,9 +166,12 @@ function CreativeDetailPage() {
 
     function reviewEvidence() {
         const firstEvidenceId = analysis?.evidence[0]?.id;
-        document
-            .getElementById(firstEvidenceId ? `evidence-${firstEvidenceId}` : "creative-evidence")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollElementIntoView(
+            document.getElementById(
+                firstEvidenceId ? `evidence-${firstEvidenceId}` : "creative-evidence",
+            ),
+            { block: "start" },
+        );
     }
 
     const notes = adaptationNotes[creative.id] ?? [];
@@ -340,15 +344,13 @@ function CreativeDetailPage() {
                     <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
                         {analysis && creative.analysisStatus === "analyzed" ? (
                             <>
-                                <div className="lg:sticky lg:top-20 lg:z-10">
-                                    <DecisionSummary
-                                        analysis={analysis}
-                                        onAdapt={() => setAdaptOpen(true)}
-                                        onReviewEvidence={reviewEvidence}
-                                        linked={linkedProduct?.name}
-                                    />
-                                </div>
-                                <div id="creative-evidence">
+                                <DecisionSummary
+                                    analysis={analysis}
+                                    onAdapt={() => setAdaptOpen(true)}
+                                    onReviewEvidence={reviewEvidence}
+                                    linked={linkedProduct?.name}
+                                />
+                                <div id="creative-evidence" className="scroll-mt-4">
                                     <EvidenceList
                                         evidence={analysis.evidence}
                                         activeId={

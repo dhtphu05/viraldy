@@ -75,7 +75,7 @@ export function EvidenceTimeline({
                     <div className="absolute left-0 right-0 top-5 h-1.5 rounded-full bg-surface-muted" />
                     <div
                         aria-hidden
-                        className="absolute top-3.5 z-20 h-4 w-0.5 -translate-x-1/2 bg-primary transition-[left] duration-[200ms] motion-reduce:transition-none"
+                        className="pointer-events-none absolute top-3.5 z-20 h-4 w-0.5 -translate-x-1/2 bg-primary transition-[left] duration-[200ms] motion-reduce:transition-none"
                         style={{ left: `${playhead}%` }}
                     />
                     {sorted.map((marker, index) => {

@@ -25,6 +25,7 @@ import type {
 import { CampaignDetailHeader } from "@/features/campaigns/components/campaign-detail-header";
 import { CampaignOverview } from "@/features/campaigns/components/campaign-overview";
 import { CampaignPackWorkspace } from "@/features/campaigns/components/campaign-pack-workspace";
+import { CampaignActionTray } from "@/features/campaigns/components/campaign-action-tray";
 import { CreatorPreviewDialog } from "@/features/campaigns/components/creator-preview-dialog";
 import { STEPS, readinessState, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
 import type { StepId } from "@/features/campaigns/types/campaign";
@@ -58,6 +59,7 @@ import {
 import { toast } from "sonner";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 import { cn } from "@/shared/lib/utils";
+import { formatUtcDateTime, formatUtcTime } from "@/shared/lib/date-format";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -156,8 +158,8 @@ function CampaignDetail() {
         saveState === "saving"
             ? "Saving…"
             : autosaveAt
-              ? `Saved locally · ${new Date(autosaveAt).toLocaleTimeString()}`
-              : "Saved locally";
+              ? `Saved in this browser · ${formatUtcTime(autosaveAt)}`
+              : "Saved in this browser";
 
     function openNextAction() {
         if (readiness.state === "Creator-ready") {
@@ -169,7 +171,18 @@ function CampaignDetail() {
     }
 
     return (
-        <AppShell>
+        <AppShell
+            footer={
+                tab === "pack" ? (
+                    <CampaignActionTray
+                        pack={pack}
+                        step={step}
+                        onStep={setStep}
+                        onPreview={() => setPreviewOpen(true)}
+                    />
+                ) : undefined
+            }
+        >
             <div className="flex flex-col gap-6">
                 <CampaignDetailHeader
                     pack={pack}
@@ -224,12 +237,7 @@ function CampaignDetail() {
                     </TabsContent>
 
                     <TabsContent value="pack" className="mt-6">
-                        <CampaignPackWorkspace
-                            pack={pack}
-                            step={step}
-                            onStep={setStep}
-                            onPreview={() => setPreviewOpen(true)}
-                        >
+                        <CampaignPackWorkspace pack={pack} step={step} onStep={setStep}>
                             <StepSection
                                 pack={pack}
                                 step={step}
@@ -288,7 +296,7 @@ function CampaignDetail() {
                                             {e.detail}
                                         </p>
                                         <p className="tabular text-xs text-text-tertiary">
-                                            {new Date(e.at).toLocaleString()}
+                                            {formatUtcDateTime(e.at)}
                                         </p>
                                     </div>
                                 ))

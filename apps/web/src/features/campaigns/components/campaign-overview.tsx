@@ -3,6 +3,7 @@ import { CampaignReadinessHero } from "@/features/campaigns/components/campaign-
 import { STEPS, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
 import type { ReadinessState } from "@/features/campaigns/lib/campaignSteps";
 import type { CampaignPack, StepId } from "@/features/campaigns/types/campaign";
+import { formatUtcDateTime, formatUtcTime } from "@/shared/lib/date-format";
 
 export function CampaignOverview({
     pack,
@@ -43,7 +44,7 @@ export function CampaignOverview({
                             Campaign summary
                         </h2>
                         <p className="text-xs text-text-tertiary">
-                            Updated {new Date(pack.updatedAt).toLocaleString()}
+                            Updated {formatUtcDateTime(pack.updatedAt)}
                         </p>
                     </div>
                     <dl className="mt-3 grid grid-cols-2 divide-x divide-y divide-divider border-y border-divider bg-surface sm:grid-cols-4 sm:divide-y-0">
@@ -111,7 +112,7 @@ export function CampaignOverview({
                                         {event.detail}
                                     </span>
                                     <span className="shrink-0 tabular text-xs text-text-tertiary">
-                                        {new Date(event.at).toLocaleTimeString()}
+                                        {formatUtcTime(event.at)}
                                     </span>
                                 </li>
                             ))}
@@ -120,7 +121,7 @@ export function CampaignOverview({
                 </section>
             </div>
 
-            <aside className="min-w-0 xl:sticky xl:top-20 xl:self-start">
+            <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
                 <EvidencePanel pack={pack} />
             </aside>
         </div>

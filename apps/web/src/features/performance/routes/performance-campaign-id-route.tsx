@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-ro
 import { useMemo, useState } from "react";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
-import { formatUtcDateTime } from "@/shared/lib/date-format";
+import { formatUtcDate, formatUtcDateTime, formatUtcMonthDay } from "@/shared/lib/date-format";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { DecisionHero } from "@/shared/ui/decision-hero";
 import { MetricStrip } from "@/shared/ui/metric-strip";
@@ -755,18 +755,11 @@ function CampaignPerformancePage() {
                                         />
                                         <XAxis
                                             dataKey="date"
-                                            tickFormatter={(v) =>
-                                                new Date(v).toLocaleDateString(undefined, {
-                                                    month: "short",
-                                                    day: "numeric",
-                                                })
-                                            }
+                                            tickFormatter={(v) => formatUtcMonthDay(v)}
                                             fontSize={11}
                                         />
                                         <YAxis fontSize={11} />
-                                        <Tooltip
-                                            labelFormatter={(v) => new Date(v).toLocaleDateString()}
-                                        />
+                                        <Tooltip labelFormatter={(v) => formatUtcDate(v)} />
                                         {chartMetric === "gmv" && (
                                             <>
                                                 <Line
