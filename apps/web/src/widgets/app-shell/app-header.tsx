@@ -47,7 +47,7 @@ export function AppHeader() {
                 >
                     <Search className="h-4 w-4 shrink-0" />
                     <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
-                        Search products, campaigns, system responses…
+                        Search products, campaigns, assets…
                     </span>
                     <kbd className="shrink-0 rounded border border-hairline bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
                         ⌘K

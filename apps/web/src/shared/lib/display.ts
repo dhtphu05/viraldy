@@ -37,6 +37,12 @@ export function humanizeLabel(value: unknown, fallback = "Not available") {
         .join(" ");
 }
 
+export function humanizeSystemText(value: string) {
+    return value.replace(/\b[a-z0-9]+(?:_[a-z0-9]+)+\b/gi, (token) =>
+        humanizeLabel(token).toLowerCase(),
+    );
+}
+
 export function formatSystemValue(value: unknown, fallback = "Not available"): string {
     if (value === null || value === undefined || value === "") return fallback;
     if (typeof value === "number" || typeof value === "boolean") return String(value);
