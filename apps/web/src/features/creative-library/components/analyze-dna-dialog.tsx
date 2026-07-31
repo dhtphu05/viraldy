@@ -12,7 +12,6 @@ import { analysisSteps } from "@/features/creative-library/lib/mockAnalysis";
 import { ProcessingStepper, type Step } from "@/shared/ui/processing-stepper";
 import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
 import type { CreativeReference } from "@/features/creative-library/types/creative";
 
 export function AnalyzeDnaDialog({
@@ -45,16 +44,10 @@ export function AnalyzeDnaDialog({
         for (const c of targets) {
             startJob(c.id, analysisSteps.length);
         }
-        if (targets.length > 1) {
-            toast(`Analyzing ${targets.length} creatives`);
-        }
     }
 
     function runInBackground() {
         onOpenChange(false);
-        toast("Running in background", {
-            description: "You'll see progress on the card and get a toast when it completes.",
-        });
     }
 
     function openResult() {

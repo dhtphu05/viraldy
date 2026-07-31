@@ -14,7 +14,6 @@ import { AnalyzeDnaDialog } from "@/features/creative-library/components/analyze
 import { AdaptToProductDialog } from "@/features/creative-library/components/adapt-to-product-dialog";
 import { NewBoardDialog } from "@/features/creative-library/components/new-board-dialog";
 import { MoveToBoardDialog } from "@/features/creative-library/components/move-to-board-dialog";
-import { AnalysisJobsRunner } from "@/features/creative-library/components/analysis-jobs-runner";
 import { ActionTray } from "@/shared/ui/action-tray";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/ui/sheet";
@@ -228,15 +227,14 @@ function CreativeLibraryPage() {
 
     const gridCols =
         view === "compact"
-            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-            : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
+            ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+            : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
 
     const emptyBoard = filtered.length === 0 && !query && activeFilterCount === 0;
     const emptyFilter = filtered.length === 0 && (query || activeFilterCount > 0);
 
     return (
         <AppShell>
-            <AnalysisJobsRunner />
             <div className="flex flex-col gap-6">
                 <PageHeader
                     title="Creative Library"

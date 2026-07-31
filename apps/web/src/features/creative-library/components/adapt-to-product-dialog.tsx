@@ -12,12 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Search, Package, ArrowRight, Check } from "lucide-react";
 import { seedProducts } from "@/features/products/data/products";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "@/app/store/app-store";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 import type { ProductCategory } from "@/features/creative-library/types/creative";
+import { rankProductsByPatternFit } from "@/features/creative-library/lib/product-pattern-fit";
 
 const categories: ("All" | ProductCategory)[] = [
     "All",
@@ -27,6 +28,11 @@ const categories: ("All" | ProductCategory)[] = [
     "POD Gifts",
     "Home Organization",
 ];
+const fitGroups = [
+    { id: "recommended", label: "Recommended matches" },
+    { id: "possible", label: "Possible matches" },
+    { id: "low", label: "Low-fit products" },
+] as const;
 
 export function AdaptToProductDialog({
     open,
@@ -44,16 +50,29 @@ export function AdaptToProductDialog({
     const [selected, setSelected] = useState<string | null>(null);
     const setLastAdaptation = useAppStore((s) => s.setLastAdaptation);
     const updateCreative = useAppStore((s) => s.updateCreative);
+    const creative = useAppStore((state) => state.creatives.find((item) => item.id === creativeId));
     const navigate = useNavigate();
 
     const products = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return seedProducts.filter(
+        const filtered = seedProducts.filter(
             (p) =>
                 (category === "All" || p.category === category) &&
                 (q === "" || p.name.toLowerCase().includes(q)),
         );
-    }, [query, category]);
+        if (!creative) {
+            return filtered.map((product) => ({
+                product,
+                fit: {
+                    level: "possible" as const,
+                    score: 0,
+                    reasons: ["Review the source pattern before choosing this product."],
+                    risk: "Pattern fit has not been calculated yet.",
+                },
+            }));
+        }
+        return rankProductsByPatternFit(creative, filtered);
+    }, [category, creative, query]);
 
     function confirm() {
         if (!selected) return;
@@ -64,10 +83,19 @@ export function AdaptToProductDialog({
         });
         updateCreative(creativeId, { linkedProductId: selected });
         onOpenChange(false);
-        toast.success("Adaptation handoff ready", {
-            description: "Product linked and ready to continue from Campaigns.",
+        toast.success("Production context selected", {
+            description: "Preparing the product and source creative in Production Run.",
         });
-        void navigate({ to: "/campaigns" });
+        void navigate({
+            to: "/mvp",
+            search: {
+                entryType: "reference-first",
+                localProductId: selected,
+                sourceCreativeId: creativeId,
+                objective: "tiktok_shop_affiliate_test",
+                market: "US",
+            },
+        });
     }
 
     return (
@@ -128,92 +156,129 @@ export function AdaptToProductDialog({
                         </div>
                     ) : (
                         <ul className="divide-y divide-hairline/60">
-                            {products.map((p) => {
-                                const active = selected === p.id;
+                            {fitGroups.map((group) => {
+                                const matches = products.filter(
+                                    ({ fit }) => fit.level === group.id,
+                                );
+                                if (matches.length === 0) return null;
                                 return (
-                                    <li key={p.id}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelected(p.id)}
-                                            role="radio"
-                                            aria-checked={active}
-                                            className={cn(
-                                                "flex min-h-16 w-full items-start gap-3 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:items-center",
-                                                active
-                                                    ? "bg-primary-softer"
-                                                    : "hover:bg-surface-soft",
-                                            )}
-                                        >
-                                            {p.imageUrl ? (
-                                                <img
-                                                    src={p.imageUrl}
-                                                    alt={p.imageAlt ?? ""}
-                                                    className="h-12 w-12 shrink-0 rounded-md bg-surface-muted object-cover"
-                                                />
-                                            ) : (
-                                                <span
-                                                    className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-surface-muted text-text-tertiary"
-                                                    aria-hidden
-                                                >
-                                                    <Package className="h-4 w-4" />
-                                                </span>
-                                            )}
-                                            <span className="min-w-0 flex-1">
-                                                <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                                                    <span className="break-words text-sm font-medium text-text-primary">
-                                                        {p.name}
-                                                    </span>
-                                                    <span className="tabular text-xs text-text-tertiary">
-                                                        ${p.price.toFixed(2)}
-                                                    </span>
-                                                </span>
-                                                <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                                                    <span className="text-text-tertiary">
-                                                        {p.category}
-                                                    </span>
-                                                    <StatusChip
-                                                        tone={
-                                                            p.readiness === "Ready"
-                                                                ? "ok"
-                                                                : p.readiness === "Setup needed"
-                                                                  ? "warn"
-                                                                  : "destructive"
-                                                        }
+                                    <Fragment key={group.id}>
+                                        <li className="bg-surface-soft px-3 py-2 text-[10px] font-semibold uppercase text-text-tertiary">
+                                            {group.label}
+                                        </li>
+                                        {matches.map(({ product, fit }) => {
+                                            const active = selected === product.id;
+                                            return (
+                                                <li key={product.id}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelected(product.id)}
+                                                        role="radio"
+                                                        aria-checked={active}
+                                                        className={cn(
+                                                            "flex min-h-16 w-full items-start gap-3 px-3 py-3 text-left transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none",
+                                                            active
+                                                                ? "bg-primary-softer"
+                                                                : "hover:bg-surface-soft",
+                                                        )}
                                                     >
-                                                        {p.readiness}
-                                                    </StatusChip>
-                                                    <StatusChip
-                                                        tone={
-                                                            p.fulfillmentRisk === "Low"
-                                                                ? "ok"
-                                                                : p.fulfillmentRisk === "Medium"
-                                                                  ? "warn"
-                                                                  : "destructive"
-                                                        }
-                                                    >
-                                                        {p.fulfillmentRisk} risk
-                                                    </StatusChip>
-                                                    {p.linkedCampaignCount > 0 && (
-                                                        <span className="text-text-tertiary">
-                                                            · {p.linkedCampaignCount} campaign
-                                                            {p.linkedCampaignCount > 1 ? "s" : ""}
+                                                        {product.imageUrl ? (
+                                                            <img
+                                                                src={product.imageUrl}
+                                                                alt={product.imageAlt ?? ""}
+                                                                className="h-12 w-12 shrink-0 rounded-md bg-surface-muted object-cover"
+                                                            />
+                                                        ) : (
+                                                            <span
+                                                                className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-surface-muted text-text-tertiary"
+                                                                aria-hidden
+                                                            >
+                                                                <Package className="h-4 w-4" />
+                                                            </span>
+                                                        )}
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                <span className="break-words text-sm font-medium text-text-primary">
+                                                                    {product.name}
+                                                                </span>
+                                                                <span className="tabular text-xs text-text-tertiary">
+                                                                    ${product.price.toFixed(2)}
+                                                                </span>
+                                                                <StatusChip
+                                                                    tone={
+                                                                        fit.level === "recommended"
+                                                                            ? "ok"
+                                                                            : fit.level ===
+                                                                                "possible"
+                                                                              ? "info"
+                                                                              : "warn"
+                                                                    }
+                                                                >
+                                                                    {fit.level === "recommended"
+                                                                        ? "High fit"
+                                                                        : fit.level === "possible"
+                                                                          ? "Possible fit"
+                                                                          : "Low fit"}
+                                                                </StatusChip>
+                                                            </span>
+                                                            <span className="mt-1 block text-xs leading-5 text-text-secondary">
+                                                                {fit.reasons
+                                                                    .slice(0, 2)
+                                                                    .join(" · ")}
+                                                            </span>
+                                                            <span className="mt-1 block text-[11px] leading-4 text-text-tertiary">
+                                                                Risk: {fit.risk}
+                                                            </span>
+                                                            <span className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                                                <span className="text-text-tertiary">
+                                                                    {product.category}
+                                                                </span>
+                                                                <StatusChip
+                                                                    tone={
+                                                                        product.readiness ===
+                                                                        "Ready"
+                                                                            ? "ok"
+                                                                            : product.readiness ===
+                                                                                "Setup needed"
+                                                                              ? "warn"
+                                                                              : "destructive"
+                                                                    }
+                                                                >
+                                                                    {product.readiness}
+                                                                </StatusChip>
+                                                                <StatusChip
+                                                                    tone={
+                                                                        product.fulfillmentRisk ===
+                                                                        "Low"
+                                                                            ? "ok"
+                                                                            : product.fulfillmentRisk ===
+                                                                                "Medium"
+                                                                              ? "warn"
+                                                                              : "destructive"
+                                                                    }
+                                                                >
+                                                                    {product.fulfillmentRisk} risk
+                                                                </StatusChip>
+                                                            </span>
                                                         </span>
-                                                    )}
-                                                </span>
-                                            </span>
-                                            <span
-                                                className={cn(
-                                                    "grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-all",
-                                                    active
-                                                        ? "border-primary bg-primary text-primary-foreground"
-                                                        : "border-hairline",
-                                                )}
-                                                aria-hidden
-                                            >
-                                                {active && <Check className="h-3 w-3" />}
-                                            </span>
-                                        </button>
-                                    </li>
+                                                        <span
+                                                            className={cn(
+                                                                "grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-all duration-[180ms] motion-reduce:transition-none",
+                                                                active
+                                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                                    : "border-hairline",
+                                                            )}
+                                                            aria-hidden
+                                                        >
+                                                            {active && (
+                                                                <Check className="h-3 w-3" />
+                                                            )}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </Fragment>
                                 );
                             })}
                         </ul>

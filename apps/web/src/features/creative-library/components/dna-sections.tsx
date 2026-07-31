@@ -241,33 +241,18 @@ export function KcaPanel({
     return (
         <SurfaceCard padding="md">
             <h2 className="text-sm font-semibold text-text-primary">Keep · Change · Avoid</h2>
-            <div className="mt-3 grid gap-5 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-divider">
-                <KcaColumn title="Keep" tone="ok" items={keep} className="sm:pr-4" />
-                <KcaColumn title="Change" tone="info" items={change} className="sm:px-4" />
-                <KcaColumn
-                    title="Avoid copying"
-                    tone="destructive"
-                    items={avoid}
-                    className="sm:pl-4"
-                />
+            <div className="mt-3 grid gap-5 sm:grid-cols-3">
+                <KcaColumn title="Keep" tone="ok" items={keep} />
+                <KcaColumn title="Change" tone="info" items={change} />
+                <KcaColumn title="Avoid copying" tone="destructive" items={avoid} />
             </div>
         </SurfaceCard>
     );
 }
 
-function KcaColumn({
-    title,
-    tone,
-    items,
-    className,
-}: {
-    title: string;
-    tone: MetricTone;
-    items: KcaItem[];
-    className?: string;
-}) {
+function KcaColumn({ title, tone, items }: { title: string; tone: MetricTone; items: KcaItem[] }) {
     return (
-        <div className={className}>
+        <div>
             <StatusChip tone={tone} dot>
                 {title}
             </StatusChip>

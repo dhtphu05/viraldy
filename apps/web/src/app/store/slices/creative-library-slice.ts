@@ -143,6 +143,20 @@ export function createCreativeLibrarySlice(set: StoreSet, get: StoreGet): Partia
                 },
             })),
 
+        toggleUsefulEvidence: (creativeId, evidenceId) =>
+            set((s) => {
+                const current = s.usefulEvidenceIds?.[creativeId] ?? [];
+                const next = current.includes(evidenceId)
+                    ? current.filter((id) => id !== evidenceId)
+                    : [...current, evidenceId];
+                return {
+                    usefulEvidenceIds: {
+                        ...(s.usefulEvidenceIds ?? {}),
+                        [creativeId]: next,
+                    },
+                };
+            }),
+
         setLastAdaptation: (h) => set({ lastAdaptation: h }),
     };
 }

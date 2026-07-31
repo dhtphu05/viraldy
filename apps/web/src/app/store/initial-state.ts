@@ -53,6 +53,7 @@ export const initialAppState = {
     analyses: seedAnalyses,
     analysisJobs: {} as Record<string, { step: number; total: number; startedAt: number }>,
     adaptationNotes: {} as Record<string, string[]>,
+    usefulEvidenceIds: {} as Record<string, string[]>,
     lastAdaptation: undefined as AdaptationHandoff | undefined,
     packs: seedPacks,
     localCampaignSummaries: [] as SeedCampaign[],

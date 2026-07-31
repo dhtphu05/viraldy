@@ -31,7 +31,6 @@ import {
 import { AdaptToProductDialog } from "@/features/creative-library/components/adapt-to-product-dialog";
 import { AnalyzeDnaDialog } from "@/features/creative-library/components/analyze-dna-dialog";
 import { MoveToBoardDialog } from "@/features/creative-library/components/move-to-board-dialog";
-import { AnalysisJobsRunner } from "@/features/creative-library/components/analysis-jobs-runner";
 import { seedProducts } from "@/features/products/data/products";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { SurfaceCard } from "@/shared/ui/surface-card";
@@ -57,6 +56,8 @@ export const Route = createFileRoute("/creative-library/$creativeId")({
     component: CreativeDetailPage,
 });
 
+const EMPTY_USEFUL_EVIDENCE: Record<string, string[]> = {};
+
 function CreativeDetailPage() {
     const { creativeId } = Route.useParams();
     const creatives = useAppStore((s) => s.creatives);
@@ -66,6 +67,9 @@ function CreativeDetailPage() {
     const startAnalysisJob = useAppStore((s) => s.startAnalysisJob);
     const addAdaptationNote = useAppStore((s) => s.addAdaptationNote);
     const adaptationNotes = useAppStore((s) => s.adaptationNotes);
+    const usefulEvidenceIds = useAppStore((s) => s.usefulEvidenceIds ?? EMPTY_USEFUL_EVIDENCE);
+    const usefulIds = usefulEvidenceIds[creativeId] ?? [];
+    const toggleUsefulEvidence = useAppStore((s) => s.toggleUsefulEvidence);
     const campaignDraft = useAppStore((s) => s.campaignDraft);
     const setDraft = useAppStore((s) => s.setDraft);
     const navigate = useNavigate();
@@ -76,7 +80,6 @@ function CreativeDetailPage() {
 
     const [t, setT] = useState(0);
     const [activeMarker, setActiveMarker] = useState<string | undefined>();
-    const [usefulIds, setUsefulIds] = useState<string[]>([]);
     const [adaptOpen, setAdaptOpen] = useState(false);
     const [analyzeOpen, setAnalyzeOpen] = useState(false);
     const [moveOpen, setMoveOpen] = useState(false);
@@ -187,7 +190,6 @@ function CreativeDetailPage() {
 
     return (
         <AppShell>
-            <AnalysisJobsRunner />
             <div className="flex flex-col gap-6">
                 {/* Header */}
                 <div className="flex flex-col gap-4">
@@ -273,9 +275,9 @@ function CreativeDetailPage() {
                 </div>
 
                 {/* Layout */}
-                <div className="grid min-w-0 gap-6 lg:grid-cols-12">
+                <div className="grid min-w-0 gap-6 xl:grid-cols-12">
                     {/* Main */}
-                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
+                    <div className="flex min-w-0 flex-col gap-4 xl:col-span-7">
                         <MediaPlayer
                             creative={creative}
                             markers={analysis?.markers ?? []}
@@ -341,7 +343,7 @@ function CreativeDetailPage() {
                     </div>
 
                     {/* Right panel */}
-                    <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
+                    <div className="flex min-w-0 flex-col gap-4 xl:col-span-5">
                         {analysis && creative.analysisStatus === "analyzed" ? (
                             <>
                                 <DecisionSummary
@@ -368,13 +370,7 @@ function CreativeDetailPage() {
                                                 : undefined
                                         }
                                         onJump={handleJump}
-                                        onMarkUseful={(id) =>
-                                            setUsefulIds((prev) =>
-                                                prev.includes(id)
-                                                    ? prev.filter((x) => x !== id)
-                                                    : [...prev, id],
-                                            )
-                                        }
+                                        onMarkUseful={(id) => toggleUsefulEvidence(creative.id, id)}
                                         onAddNote={(e) => {
                                             addAdaptationNote(
                                                 creative.id,
