@@ -69,8 +69,15 @@ export function ImportProductDialog({
                 createInputFromForm(preview.product_draft, form),
             );
         },
-        onSuccess: async (product) => {
-            await queryClient.invalidateQueries({
+        onSuccess: (product) => {
+            queryClient.setQueryData<Product[]>(
+                queryKeys.products.list(workspaceId),
+                (current = []) =>
+                    current.some((item) => item.id === product.id)
+                        ? current
+                        : [...current, product],
+            );
+            void queryClient.invalidateQueries({
                 queryKey: queryKeys.products.list(workspaceId),
             });
             setOpen(false);
