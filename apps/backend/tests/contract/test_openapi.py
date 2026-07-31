@@ -83,6 +83,7 @@ def test_openapi_generation_contains_foundation_routes() -> None:
     assert "/api/v1/workspaces/{workspace_id}/assets/{asset_id}/process" in paths
     assert "/api/v1/workspaces/{workspace_id}/jobs/{job_id}" in paths
     assert "/api/v1/workspaces/{workspace_id}/model-runs" in paths
+    assert "/api/v1/workspaces/{workspace_id}/model-runs/usage-summary" not in paths
     assert "/api/v1/workspaces/{workspace_id}/model-runs/{model_run_id}" in paths
     assert "/api/v1/workspaces/{workspace_id}/products/crawl-preview" in paths
     assert "/api/v1/workspaces/{workspace_id}/generation/storyboards" in paths
@@ -154,9 +155,7 @@ def test_openapi_has_professional_api_and_tag_metadata() -> None:
 
     declared_tags = {tag["name"]: tag for tag in schema["tags"]}
     operation_tags = {
-        tag
-        for _, _, operation in _operations(schema)
-        for tag in operation.get("tags", [])
+        tag for _, _, operation in _operations(schema) for tag in operation.get("tags", [])
     }
     assert operation_tags <= declared_tags.keys()
     assert all(len(declared_tags[tag]["description"]) >= 80 for tag in operation_tags)
@@ -198,11 +197,8 @@ def test_parameters_are_frontend_friendly() -> None:
         for parameter in operation.get("parameters", []):
             assert len(parameter["description"]) >= 25
             parameter_schema = parameter["schema"]
-            has_input_hint = any(
-                key in parameter for key in ("example", "examples")
-            ) or any(
-                key in parameter_schema
-                for key in ("example", "examples", "default", "enum")
+            has_input_hint = any(key in parameter for key in ("example", "examples")) or any(
+                key in parameter_schema for key in ("example", "examples", "default", "enum")
             )
             assert has_input_hint, parameter
 
@@ -271,9 +267,9 @@ def test_request_schema_fields_have_descriptions_and_examples() -> None:
     for schema_name in request_schemas:
         for field_name, field_schema in components[schema_name].get("properties", {}).items():
             assert len(field_schema["description"]) >= 25, f"{schema_name}.{field_name}"
-            assert "example" in field_schema or "examples" in field_schema, (
-                f"{schema_name}.{field_name}"
-            )
+            assert (
+                "example" in field_schema or "examples" in field_schema
+            ), f"{schema_name}.{field_name}"
 
 
 def test_standard_error_contracts_are_reusable_components() -> None:

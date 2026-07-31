@@ -57,6 +57,12 @@ class EvidenceItemModel(Base):
             "asset_version_id",
             "evidence_type",
         ),
+        Index(
+            "ix_evidence_items_workspace_analysis_request",
+            "workspace_id",
+            "asset_version_id",
+            "analysis_request_hash",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -78,6 +84,7 @@ class EvidenceItemModel(Base):
     )
     observation_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     identity_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    analysis_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     start_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     end_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     frame_storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -89,7 +89,7 @@ def test_isolated_context_setup_failure_cleans_created_workspace(
     assert cleaned == ["workspace-setup"]
 
 
-def test_main_failure_after_context_creation_cleans_workspace(
+def test_main_failure_after_context_creation_reports_cleanup_outcomes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -124,7 +124,7 @@ def test_main_failure_after_context_creation_cleans_workspace(
         token=smoke.AUTH_TOKEN,
         isolated_lifecycle=True,
         verify_db=False,
-        result_path=None,
+        result_path=tmp_path / "failure.json",
         timeout_seconds=300,
     )
     monkeypatch.setattr(smoke, "parse_args", lambda: args)
@@ -154,6 +154,131 @@ def test_main_failure_after_context_creation_cleans_workspace(
 
     assert cleaned == ["workspace-1"]
     assert client_closed == [True]
+    failure = json.loads(args.result_path.read_text(encoding="utf-8"))
+    assert failure == {
+        "failure_stage": "quick_score",
+        "golden_case": None,
+        "mode": "mock",
+        "model_runs_verified": False,
+        "run_id": "flow-failure",
+        "safe_error_code": "SMOKE_FLOW_FAILED",
+        "safe_error_type": "SmokeFailure",
+        "status": "error",
+        "workspace_deletion_status": "succeeded",
+    }
+
+    args.result_path = tmp_path / "cleanup-failure.json"
+
+    def fail_cleanup(_client: object, workspace_id: str) -> str:
+        cleaned.append(workspace_id)
+        raise RuntimeError("private cleanup diagnostic")
+
+    monkeypatch.setattr(smoke, "delete_and_verify_workspace", fail_cleanup)
+
+    with pytest.raises(smoke.SmokeFailure, match="isolated workspace cleanup failed"):
+        smoke.main()
+
+    assert cleaned == ["workspace-1", "workspace-1"]
+    assert client_closed == [True, True]
+    cleanup_failure = json.loads(args.result_path.read_text(encoding="utf-8"))
+    assert cleanup_failure == {
+        "cleanup_failure_stage": "workspace_cleanup",
+        "cleanup_safe_error_code": "WORKSPACE_CLEANUP_FAILED",
+        "cleanup_safe_error_type": "RuntimeError",
+        "failure_stage": "quick_score",
+        "golden_case": None,
+        "mode": "mock",
+        "model_runs_verified": False,
+        "run_id": "flow-failure",
+        "safe_error_code": "SMOKE_FLOW_FAILED",
+        "safe_error_type": "SmokeFailure",
+        "status": "error",
+        "workspace_deletion_status": "failed",
+    }
+
+
+def test_main_preserves_verified_cleanup_when_reporting_late_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ctx = _context()
+
+    class MainClient:
+        def __init__(
+            self,
+            _base_url: str,
+            _token: str,
+            timeout_seconds: int,
+        ) -> None:
+            assert timeout_seconds == 300
+
+        def get(self, path: str) -> dict[str, str]:
+            return {"mode": "mock"} if path == "/system/ai-readiness" else {"status": "active"}
+
+        def close(self) -> None:
+            pass
+
+    args = Namespace(
+        run_id="late-failure",
+        expect_mode="mock",
+        golden_case=None,
+        base_url="http://test/api/v1",
+        token=smoke.AUTH_TOKEN,
+        isolated_lifecycle=True,
+        verify_db=False,
+        result_path=tmp_path / "late-failure.json",
+        timeout_seconds=300,
+    )
+    monkeypatch.setattr(smoke, "parse_args", lambda: args)
+    monkeypatch.setattr(smoke, "ApiClient", MainClient)
+    monkeypatch.setattr(smoke, "prepare_media", lambda *_args: tmp_path / "media.mp4")
+    monkeypatch.setattr(smoke, "prepare_revision_media", lambda *_args: tmp_path / "revision.mp4")
+    monkeypatch.setattr(smoke, "load_context", lambda *_args: ctx)
+    monkeypatch.setattr(smoke, "run_quick_scorer", lambda *_args: ({"id": "score-1"}, "job-1"))
+    monkeypatch.setattr(smoke, "run_reference_dna", lambda *_args: "dna-1")
+    monkeypatch.setattr(smoke, "run_adaptation", lambda *_args: {"id": "adaptation-1"})
+    monkeypatch.setattr(
+        smoke,
+        "run_pattern_kit",
+        lambda *_args: {"kit": {"id": "pattern-1"}, "latest_version": {"pattern": {}}},
+    )
+    monkeypatch.setattr(
+        smoke,
+        "run_viral_kit",
+        lambda *_args: {"kit": {"id": "viral-1"}, "latest_version": {"viral_kit": {}}},
+    )
+    monkeypatch.setattr(
+        smoke,
+        "select_concept_and_compile_pack",
+        lambda *_args: ("concept-1", "pack-1", "pack-version-1"),
+    )
+    monkeypatch.setattr(
+        smoke,
+        "run_preflight",
+        lambda *_args, **_kwargs: {"id": "preflight-1", "action_label": "revise"},
+    )
+    monkeypatch.setattr(smoke, "run_presentation", lambda *_args, **_kwargs: {"sources": []})
+    monkeypatch.setattr(smoke, "run_learning_loop", lambda *_args: "recommendation-1")
+    monkeypatch.setattr(smoke, "upload_revision", lambda *_args: "not-run")
+    monkeypatch.setattr(smoke, "verify_learning_events", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(smoke, "delete_and_verify_workspace", lambda *_args: "succeeded")
+
+    original_dumps = json.dumps
+
+    def fail_success_serialization(payload: object, *args: object, **kwargs: object) -> str:
+        if isinstance(payload, dict) and payload.get("status") == "ok":
+            raise RuntimeError("late serialization failure")
+        return original_dumps(payload, *args, **kwargs)
+
+    monkeypatch.setattr(smoke.json, "dumps", fail_success_serialization)
+
+    with pytest.raises(RuntimeError, match="late serialization failure"):
+        smoke.main()
+
+    failure = json.loads(args.result_path.read_text(encoding="utf-8"))
+    assert failure["failure_stage"] == "workspace_cleanup"
+    assert failure["model_runs_verified"] is True
+    assert failure["workspace_deletion_status"] == "succeeded"
 
 
 def test_live_qualification_requires_local_tts(

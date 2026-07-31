@@ -86,19 +86,18 @@ to the backend process working directory; Docker Compose also reads
 | `OPENAI_TRANSCRIPTION_MODEL` | `whisper-1` | Native timed ASR model. |
 | `OPENAI_REASONING_EFFORT` | `medium` | Fallback only. Current registered prompts set their own operation defaults. |
 | `OPENAI_STORE_RESPONSES` | `false` | Sent to Responses API. Qualification fails when enabled. |
-| `OPENAI_MAX_OUTPUT_TOKENS` | `16000` | Fallback only. Current registered prompts use operation limits from 2,000 to 10,000. |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `16000` | Fallback only. Current registered prompts use operation limits from 2,000 to 12,000. |
 | `OPENAI_REQUEST_TIMEOUT_SECONDS` | `180` | Used by native Responses and transcription requests. |
 | `OPENAI_MAX_RETRIES` | `2` | Passed to the official SDK; allowed range is 0-10. |
 | `OPENAI_IMAGE_DETAIL` | `auto` | Applied to sampled frame inputs. |
 | `OPENAI_IMAGE_TRANSPORT` | `base64` | The current schema accepts only `base64`; signed URL mode is not implemented. |
 | `OPENAI_TRANSCRIPTION_RESPONSE_FORMAT` | `verbose_json` | Declared in settings, but native media analysis currently hard-codes `verbose_json`. |
 | `OPENAI_TRANSCRIPTION_TIMESTAMP_GRANULARITIES` | `segment` | CSV input; `segment,word` is accepted. |
-| `OPENAI_MAX_FRAMES_PER_VIDEO` | `12` | Limits native media-observation frame inputs. |
-| `OPENAI_MAX_FRAME_LONG_EDGE` | `1280` | Declared but not currently wired to a resize step. |
+| `OPENAI_MAX_FRAMES_PER_VIDEO` | `12` | Bounds native frame extraction after opening, detected-scene, and timeline coverage selection. |
+| `OPENAI_MAX_FRAME_LONG_EDGE` | `1280` | Downscales extracted JPEG frames before storage/provider transport and never upscales smaller frames. |
 | `OPENAI_MAX_TRANSCRIPT_CHARS` | `50000` | Bounds transcript text included in media observation. |
-| `OPENAI_MAX_PARALLEL_REQUESTS_PER_WORKSPACE` | `2` | Declared but no workspace semaphore currently enforces it. |
+| `OPENAI_MAX_PARALLEL_REQUESTS_PER_WORKSPACE` | `2` | Enforced across API/worker processes by an atomic Redis lease per workspace. Native requests fail closed if this guardrail is unavailable. |
 
-Do not describe a declared but unenforced setting as a production control.
 Storyboard image and concept video generation are separate provider paths,
 disabled by default, and are not part of native OpenAI qualification.
 
@@ -255,6 +254,40 @@ completed usage/latency fields. Failed runs retain safe error metadata.
 Input/output summaries are deliberately bounded and must not contain binary
 frames, API keys, full signed URLs, or complete raw model responses.
 
+Every new model run stores:
+
+- an `input_hash` over the stable operation context, selected few-shot payload,
+  and image-content digests;
+- a `request_hash` over operation, resolved model, prompt version, schema
+  version, and that input hash.
+
+Source-version IDs and product-context versions are part of the stable context,
+so changing a source invalidates request identity. Native media-evidence reuse
+requires the exact analysis request hash, including source version/checksum,
+full versioned product context, model, prompt/schema, pipeline/settings,
+detected scenes, selected frame timestamps and content digests, and the
+extracted audio digest. Identical in-flight media analyses are serialized by a
+Redis lease before any provider request. If Redis is unavailable the pipeline
+fails closed and does not call OpenAI.
+Viraldy does not maintain a generic model-output cache. Other artifact or
+idempotency reuse remains limited to immutable versioned domain boundaries; a
+future generic output cache must use the exact request hash and revalidate the
+typed output.
+
+Token and cost aggregates are intentionally not exposed through the
+workspace/seller HTTP API. An internal operator with direct backend and database
+access can run:
+
+```bash
+cd apps/backend
+uv run python scripts/summarize_openai_usage.py "${WORKSPACE_ID}"
+```
+
+Viraldy does not hard-code a guessed model price. Therefore
+`estimated_cost=null` and `cost_estimate_complete=false` are expected until an
+audited pricing source writes complete estimates. Partial provider usage is
+still aggregated field by field instead of being discarded.
+
 ## Data Flow And Privacy
 
 The native media path is:
@@ -316,7 +349,9 @@ See [Object Storage](OBJECT_STORAGE.md) for retry and retention details.
 | Startup says `OPENAI_API_KEY` is required | Set the secret only when `AI_MODE=live` and `AI_PROVIDER=openai`; restart API and workers. |
 | `OPENAI_UNAUTHORIZED` | Verify secret/project access without printing the key. |
 | `OPENAI_MODEL_NOT_AVAILABLE` | Change the named operation override or family model and rerun one operation. |
-| `OPENAI_RATE_LIMITED` | Reduce workload/concurrency operationally and retry after the provider window. The declared workspace parallel limit is not yet enforced. |
+| `OPENAI_RATE_LIMITED` | Retry after the provider window; do not increase SDK retries blindly. |
+| `OPENAI_WORKSPACE_BUSY` | Wait for an existing request in the same workspace to finish. The request was not sent to OpenAI. |
+| `OPENAI_GUARDRAIL_UNAVAILABLE` | Restore Redis/guardrail health. The request failed closed before provider transport. |
 | `OPENAI_TIMEOUT` | Review media size and operation latency, then adjust the explicit timeout cautiously. |
 | `OPENAI_REFUSED` | Treat as a failed model run; do not parse refusal text as output. |
 | `OPENAI_INCOMPLETE` | Check model output limits and provider status; do not persist partial output as success. |

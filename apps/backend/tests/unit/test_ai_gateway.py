@@ -24,6 +24,7 @@ from viraldy.modules.ai_gateway.operations import (
 )
 from viraldy.modules.ai_gateway.readiness import ai_readiness
 from viraldy.modules.ai_gateway.repository import _run
+from viraldy.modules.ai_gateway.request_identity import structured_request_hash
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.modules.products.contracts import build_minimal_product_context
 from viraldy.platform.config.settings import Settings
@@ -281,7 +282,13 @@ def test_model_run_populates_private_beta_trace_fields() -> None:
     assert run.operation == "media_observation"
     assert run.response_schema_version == "schema_v1"
     assert run.schema_version == "media_observation_v1"
-    assert run.request_hash == request_hash
+    assert run.request_hash == structured_request_hash(
+        operation="media_observation",
+        model="fixture-model",
+        prompt_version="prompt_v1",
+        schema_version="media_observation_v1",
+        input_hash=request_hash,
+    )
     assert run.input_hash == request_hash
     assert run.attempt == 1
     assert run.attempt_count == 2

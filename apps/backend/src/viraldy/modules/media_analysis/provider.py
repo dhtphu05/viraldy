@@ -27,6 +27,7 @@ from viraldy.modules.ai_gateway.public import (
     get_prompt_package,
     provider_error_to_app_error,
 )
+from viraldy.modules.ai_gateway.request_identity import structured_request_hash
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1
 from viraldy.modules.products.contracts import ProductContextV1
@@ -89,24 +90,38 @@ class LiveAnalysisProvider:
         audio_path: Path,
         *,
         request_id: str | None = None,
+        workspace_id: UUID | None = None,
         source_filename: str | None = None,
     ) -> tuple[TranscriptContract, ProviderCallMetadata | None]:
         if self._settings.ai_provider == "openai":
+            input_hash = _file_hash(audio_path)
+            request_hash = structured_request_hash(
+                operation="audio_transcription",
+                model=self._settings.openai_transcription_model,
+                prompt_version="audio_transcription_v1",
+                schema_version="audio_transcript_v1",
+                input_hash=input_hash,
+            )
+            request = AudioTranscriptionRequest(
+                audio_path=audio_path,
+                model=self._settings.openai_transcription_model,
+                request_id=request_id or input_hash,
+                input_hash=input_hash,
+                request_hash=request_hash,
+                workspace_id=workspace_id,
+                response_format="verbose_json",
+                timestamp_granularities=(
+                    self._settings.openai_transcription_timestamp_granularities
+                ),
+            )
             try:
-                result = OpenAINativeProvider(self._settings).transcribe_audio(
-                    AudioTranscriptionRequest(
-                        audio_path=audio_path,
-                        model=self._settings.openai_transcription_model,
-                        request_id=request_id or _file_hash(audio_path),
-                        input_hash=_file_hash(audio_path),
-                        response_format="verbose_json",
-                        timestamp_granularities=(
-                            self._settings.openai_transcription_timestamp_granularities
-                        ),
-                    )
-                )
+                result = OpenAINativeProvider(self._settings).transcribe_audio(request)
             except AiProviderError as exc:
-                raise provider_error_to_app_error(exc) from exc
+                raise provider_error_to_app_error(
+                    exc,
+                    input_hash=input_hash,
+                    request_hash=request_hash,
+                ) from exc
             return (
                 TranscriptContract(
                     language=result.language or "en",
@@ -231,7 +246,7 @@ class LiveAnalysisProvider:
                     "Native media observation requires workspace and asset context.",
                 )
             prompt = get_prompt_package(AiOperationName.MEDIA_OBSERVATION)
-            selected_frames = frame_paths[: self._settings.openai_max_frames_per_video]
+            selected_frames = frame_paths
             context = ViraldyOperationContextV1(
                 operation=AiOperationName.MEDIA_OBSERVATION,
                 request_id=request_id or str(asset_version_id),
@@ -253,7 +268,7 @@ class LiveAnalysisProvider:
                         }
                         for timestamp_ms, _, storage_key in selected_frames
                     ],
-                    "transcript": _bounded_transcript(
+                    "transcript": bounded_transcript_payload(
                         transcript,
                         self._settings.openai_max_transcript_chars,
                     ),
@@ -299,7 +314,7 @@ class LiveAnalysisProvider:
                     }
                     for timestamp_ms, _, storage_key in frame_paths
                 ],
-                "transcript": _bounded_transcript(
+                "transcript": bounded_transcript_payload(
                     transcript,
                     self._settings.openai_max_transcript_chars,
                 ),
@@ -430,7 +445,7 @@ def _file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _bounded_transcript(
+def bounded_transcript_payload(
     transcript: TranscriptContract,
     max_chars: int,
 ) -> dict[str, object]:

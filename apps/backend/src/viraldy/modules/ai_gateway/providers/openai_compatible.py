@@ -35,9 +35,7 @@ class OpenAICompatibleStructuredProvider:
         client: OpenAICompatibleClient | None = None,
     ) -> None:
         if settings.ai_mode != "mock" or settings.ai_provider != "openai_compatible":
-            raise ValueError(
-                "OpenAI-compatible structured provider is restricted to mock mode"
-            )
+            raise ValueError("OpenAI-compatible structured provider is restricted to mock mode")
         self._settings = settings
         self._client = client or OpenAICompatibleClient(settings)
 
@@ -48,9 +46,7 @@ class OpenAICompatibleStructuredProvider:
         messages = _messages(request)
         repair_attempt_count = 0
         while True:
-            response = self._client.chat_json(
-                _payload(request, messages)
-            )
+            response = self._client.chat_json(_payload(request, messages))
             raw = extract_message_json(response)
             try:
                 parsed = request.output_model.model_validate(raw)
@@ -100,6 +96,8 @@ class OpenAICompatibleStructuredProvider:
                 usage=_usage(response.payload),
                 response_status="completed",
                 repair_attempt_count=repair_attempt_count,
+                input_hash=request.input_hash,
+                request_hash=request.request_hash,
             )
 
     def transcribe_audio(

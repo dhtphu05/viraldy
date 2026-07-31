@@ -20,8 +20,9 @@ evidence. Read [OpenAI Provider](OPENAI_PROVIDER.md) first.
 full flow, mock success, browser rendering, or a report with
 `workspace_deleted=false` does not meet that boundary.
 
-Current implementation limit: the default `OpenAIQualificationExecutor` calls
-the native provider directly with Golden-derived contract payloads. It reports:
+Without `--application-base-url`, the default
+`OpenAIQualificationExecutor` calls the native provider directly with
+Golden-derived contract payloads. It reports:
 
 ```text
 execution_scope=contract
@@ -29,18 +30,21 @@ model_runs_persisted=false
 workspace_deleted=false
 ```
 
-Therefore the current CLI can produce `live_contract_verified`, but it cannot
-truthfully produce `live_qualified`. The runner only emits `live_qualified` for
-all three cases when an application-boundary executor supplies
-`execution_scope=application_e2e`, `model_runs_persisted=true`, and
-`workspace_deleted=true`. The only such executor currently in the repository is
-a unit-test fake; there is no operator CLI flag for it.
+With `--application-base-url`, the CLI uses
+`ApplicationQualificationExecutor`. It creates Golden-specific narrated CFR
+media, crosses HTTP/API, PostgreSQL, Redis/Celery, and private object storage,
+projects persisted application results into the Golden semantic contracts, and
+verifies audited workspace/object cleanup. The runner emits:
 
-The HTTP smoke runner covers real application persistence and cleanup, but it
-uses a separate CounterSpace Rack scenario and does not feed its evidence back
-into the three-case qualification report. Keep both evidence sets and label the
-release `live_contract_verified` plus `application live smoke passed`, not
-`live_qualified`, until those boundaries are connected.
+- `live_e2e_case_verified` only for one passing application case;
+- `live_qualified` only for exactly three passing application cases;
+- `failed` for any provider, persistence, semantic, or cleanup gate failure.
+
+The deterministic product-readiness assessment is stricter than a command exit
+code. `ready_for_limited_beta` requires all three live application cases,
+value score at least 4/5, zero generic outputs, persisted native model
+provenance, and verified cleanup. Seller validation and observed commercial
+performance remain separate evidence.
 
 ## Prerequisites
 
@@ -49,7 +53,7 @@ Required:
 - Python 3.12 and `uv`;
 - backend dependencies installed;
 - PostgreSQL, Redis, private S3-compatible storage, API, worker, and Beat;
-- migration head, including `0012_openai_provenance`;
+- migration head, including `0013_media_request_cache`;
 - `ffmpeg` or an explicit seller-owned MP4 for application smoke;
 - authenticated workspace access with the required operation permissions;
 - a real OpenAI key held only by the backend;
@@ -168,9 +172,10 @@ revision_message
 The canonical operation names such as `creative_dna_build` and
 `viral_kit_compose` are also accepted.
 
-### 3. Golden Contract Flows
+### 3. Golden Contract Diagnostics
 
-Run one case while diagnosing model access or semantics:
+These commands call OpenAI directly without application persistence. Use them
+only while diagnosing a specific model/schema issue:
 
 ```bash
 uv run python scripts/qualify_openai.py \
@@ -196,10 +201,53 @@ timestamp gates, native provider/request IDs, exactly three concepts, exact hard
 blockers, product hallucination/disclosure/personalization gates, generic-output
 rate, and deterministic usefulness/usability rubrics.
 
-A passing current run is `live_contract_verified`, not `live_qualified`, because
-its case execution scope is `contract`.
+A passing run is `live_contract_verified`, not `live_qualified`, because its
+case execution scope is `contract`.
 
-### 4. Opt-In Live Pytest
+### 4. Cost-Bounded Application Qualification
+
+Do not start with the all-case command. Start API and a worker with concurrency
+`1`, isolate the worker onto dedicated Redis broker/result databases, then run
+exactly one case:
+
+```bash
+uv run python scripts/qualify_openai.py \
+  --full-flow \
+  --case home_travel_steamer \
+  --application-base-url http://127.0.0.1:8003/api/v1 \
+  --write-report
+```
+
+The case creates its own workspace and uses a narrated synthetic video plus two
+references. It exercises Media Observation, Creative DNA, Adaptation,
+PatternKit, ViralKit, Campaign Pack, two Preflight passes, seller/creator
+presentations, revision messaging, model-run provenance, and hard deletion.
+
+If this command fails:
+
+1. stop;
+2. inspect the report and safe API/worker logs;
+3. fix the causal issue;
+4. rerun only the failed case after review.
+
+Do not launch the three cases concurrently and do not blindly retry. Only after
+the single case returns `live_e2e_case_verified` with every gate passing should
+the final matrix run once:
+
+```bash
+uv run python scripts/qualify_openai.py \
+  --full-flow \
+  --all-cases \
+  --application-base-url http://127.0.0.1:8003/api/v1 \
+  --write-report
+```
+
+A successful matrix is `live_qualified` only when all three cases report
+`execution_scope=application_e2e`, `model_runs_persisted=true`, and
+`workspace_deleted=true`. The product assessment must also report
+`ready_for_limited_beta`.
+
+### 5. Opt-In Live Pytest
 
 ```bash
 VIRALDY_RUN_OPENAI_LIVE_TESTS=1 uv run pytest -m openai_live --no-cov
@@ -211,9 +259,11 @@ provider smoke, not an application or release qualification.
 
 ## Application E2E
 
-The application runner crosses HTTP routes, local auth/OIDC, PostgreSQL, Redis,
-Celery jobs, object storage, domain services, revision flow, model-run query,
-and audited hard deletion.
+`qualify_openai.py --application-base-url` invokes this runner for the selected
+Golden case and should be the release path. The lower-level smoke command below
+is useful for application debugging. It crosses HTTP routes, local auth/OIDC,
+PostgreSQL, Redis, Celery jobs, object storage, domain services, revision flow,
+model-run query, and audited hard deletion.
 
 From `apps/backend`, with API/worker/Beat already running:
 
@@ -318,6 +368,7 @@ apps/backend/evaluation/reports/openai/<UTC timestamp>/
 |- qualification.json
 |- qualification.md
 |- outputs/
+|- best_outputs/
 `- failures/
 ```
 
@@ -353,10 +404,16 @@ jq '{
 ```
 
 The report writer redacts secret-shaped values and signed URLs. Reports still
-contain model outputs and may contain seller/product-derived data. This
-directory is not currently ignored by the repository. Do not stage or commit
-live reports. Move approved evidence to access-controlled storage, record only
-the safe release summary, then delete local report and `/tmp` artifacts.
+contain model outputs and may contain seller/product-derived data. The report
+directory is gitignored; do not force-add or commit live reports. Move approved
+evidence to access-controlled storage and record only the safe release summary.
+
+`best_outputs/` is deliberately selective. A case is archived there only when
+it is a live application E2E pass, all required model runs were persisted,
+cleanup succeeded, deterministic value is at least 4/5, output is
+product-specific, and the required presentation sections are present. Fixture,
+mock, contract-only, failed, generic, or weak-value responses are never promoted
+to this directory.
 
 Exit codes:
 
@@ -415,7 +472,9 @@ or sales.
 | Semantic gate fails | Inspect `failures/`, compare with the Golden fixture, adjust prompt/model only with version control, then rerun the failed case. |
 | Presentation source says `deterministic_fallback` | The OpenAI presentation run failed and was persisted as failed. Do not count it as live OpenAI presentation success. |
 | Smoke leaves `storage_cleanup_pending` | Keep worker/Beat maintenance running, inspect safe deletion audit/batch status, and rerun cleanup verification. |
-| Report says `live_contract_verified` | This is the current expected ceiling; application persistence and cleanup are separate evidence. |
+| Report says `live_contract_verified` | The run omitted `--application-base-url`; application persistence and cleanup were not qualified. |
+| Application report has `failure_summary` | Use `failure_stage`, `model_runs_verified`, safe error type/code, and deletion status for triage. Cleanup failures also include a separate safe cleanup stage/code/type. Raw provider payloads and subprocess stderr are intentionally excluded. |
+| Single application case fails | Stop. Do not run `--all-cases` and do not retry until the causal issue is understood. |
 
 ## Cleanup And Privacy
 
@@ -464,13 +523,14 @@ If no real-key evidence exists, use:
 > qualification requires a valid OpenAI API key and must be completed before
 > customer demonstrations using real model output.
 
-If live contract and separate application-smoke evidence both pass, use:
+If only contract and separate non-Golden application smoke evidence pass, use:
 
 > Viraldy's OpenAI path is live-contract-verified and the application live smoke
-> passed separately. The current qualification CLI does not connect Golden
-> cases to persisted application runs and cleanup, so this is not
-> `live_qualified`.
+> passed separately. The Golden application matrix has not passed, so this is
+> not `live_qualified`.
 
-Only after a real application-boundary executor connects all three Golden cases,
-persists their model runs, and verifies workspace cleanup may the release report
-use `live_qualified`. Seller validation remains a separate state.
+Only after the real application-boundary executor passes all three Golden cases,
+persists their model runs, verifies workspace cleanup, records zero generic
+outputs, and clears the value threshold may the release report use
+`live_qualified` and `ready_for_limited_beta`. Seller validation remains a
+separate state.
