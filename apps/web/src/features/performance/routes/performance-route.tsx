@@ -21,14 +21,16 @@ import {
     seedCampaignPerf,
     seedFatigueAlerts,
     seedPatterns,
-    overviewBusinessMetrics,
+    seedPerfAssets,
 } from "@/features/performance/mocks/performanceSeed";
 import {
     fmtMoney,
     fmtNum,
     decisionTone,
     generateVariants,
+    grossProfit,
 } from "@/features/performance/lib/performanceEngine";
+import { isWithinDemoDays } from "@/shared/mocks/time";
 import type { PerfRecommendation, DecisionGroup } from "@/features/performance/types/performance";
 import {
     BarChart3,
@@ -89,10 +91,35 @@ function PerformancePage() {
         const importParam = new URLSearchParams(window.location.search).get("import");
         if (!routeSearch.import && importParam !== "1" && importParam !== "true") return;
         setOpenImport(true);
-        void navigate({ to: "/performance", replace: true, search: {} });
+        void navigate({ to: "/performance", replace: true, search: { import: undefined } });
     }, [navigate, routeSearch.import]);
 
-    const business = overviewBusinessMetrics();
+    const rangeDays = Number.parseInt(filters.dateRange, 10);
+    const filteredAssets = useMemo(
+        () => seedPerfAssets.filter((asset) => isWithinDemoDays(asset.createdAt, rangeDays)),
+        [rangeDays],
+    );
+    const filteredCampaigns = useMemo(
+        () =>
+            seedCampaignPerf.filter((campaign) =>
+                isWithinDemoDays(campaign.lastUpdated, rangeDays),
+            ),
+        [rangeDays],
+    );
+    const business = useMemo(() => {
+        const gmv = filteredAssets.reduce((total, asset) => total + asset.gmv, 0);
+        const grossProfitTotal = filteredAssets.reduce(
+            (total, asset) => total + grossProfit(asset),
+            0,
+        );
+        const sampleCost = filteredAssets.reduce((total, asset) => total + asset.sampleCost, 0);
+        return {
+            gmv,
+            grossProfit: grossProfitTotal,
+            sampleEfficiency: sampleCost > 0 ? gmv / sampleCost : 0,
+            activeAssets: filteredAssets.length,
+        };
+    }, [filteredAssets]);
 
     const metrics: MetricStripItem[] = [
         {
@@ -123,7 +150,7 @@ function PerformancePage() {
             id: "m-assets",
             label: "Active assets w/ data",
             value: fmtNum(business.activeAssets),
-            delta: `${seedCampaignPerf.length} campaigns`,
+            delta: `${filteredCampaigns.length} campaigns`,
             tone: "info",
             hint: "Mapped to performance rows",
         },
@@ -140,15 +167,17 @@ function PerformancePage() {
         };
         for (const r of recs) {
             if (dismissed[r.id] || snoozed[r.id]) continue;
+            if (!isWithinDemoDays(r.createdAt, rangeDays)) continue;
             map[r.group].push(r);
         }
         return map;
-    }, [recs, dismissed, snoozed]);
+    }, [recs, dismissed, snoozed, rangeDays]);
 
     const visibleRecs = useMemo(() => {
         return recs.filter((r) => {
             if (dismissed[r.id]) return false;
             if (snoozed[r.id] && new Date(snoozed[r.id]) > new Date()) return false;
+            if (!isWithinDemoDays(r.createdAt, rangeDays)) return false;
             if (groupFilter !== "All" && r.group !== groupFilter) return false;
             if (filters.search) {
                 const q = filters.search.toLowerCase();
@@ -156,7 +185,7 @@ function PerformancePage() {
             }
             return true;
         });
-    }, [recs, dismissed, snoozed, groupFilter, filters.search]);
+    }, [recs, dismissed, snoozed, groupFilter, filters.search, rangeDays]);
 
     const topRecommendation = visibleRecs.find((r) => !accepted.includes(r.id)) ?? visibleRecs[0];
     const activeFilterLabels = [
@@ -289,7 +318,7 @@ function PerformancePage() {
                     />
                 )}
 
-                <section aria-labelledby="decision-filter">
+                <section aria-labelledby="decision-filter" className="hidden sm:block">
                     <div className="mb-2 flex items-center justify-between gap-3">
                         <h2
                             id="decision-filter"
@@ -393,31 +422,30 @@ function PerformancePage() {
                             <SelectItem value="90d">Last 90 days</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Select
-                        value={groupFilter}
-                        onValueChange={(v) => setGroupFilter(v as DecisionGroup | "All")}
-                    >
-                        <SelectTrigger
-                            className="h-9 min-w-0 flex-1 sm:w-[140px] sm:flex-none"
-                            aria-label="Performance objective"
+                    <div className="min-w-0 flex-1 sm:hidden">
+                        <Select
+                            value={groupFilter}
+                            onValueChange={(v) => setGroupFilter(v as DecisionGroup | "All")}
                         >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="All">All decisions</SelectItem>
-                            {decisionGroups.map((group) => (
-                                <SelectItem key={group} value={group}>
-                                    {group}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    {(filters.search || groupFilter !== "All") && (
+                            <SelectTrigger className="h-9 w-full" aria-label="Performance decision">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="All">All decisions</SelectItem>
+                                {decisionGroups.map((group) => (
+                                    <SelectItem key={group} value={group}>
+                                        {group}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {(filters.search || groupFilter !== "All" || filters.dateRange !== "30d") && (
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                                setFilters({ search: "" });
+                                setFilters({ search: "", dateRange: "30d" });
                                 setGroupFilter("All");
                             }}
                         >
@@ -568,7 +596,7 @@ function PerformancePage() {
                         </Button>
                     </div>
                     <div className="grid gap-3 p-3 sm:hidden">
-                        {seedCampaignPerf.map((c) => (
+                        {filteredCampaigns.map((c) => (
                             <button
                                 key={c.campaignId}
                                 type="button"
@@ -645,7 +673,7 @@ function PerformancePage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {seedCampaignPerf.map((c) => (
+                                {filteredCampaigns.map((c) => (
                                     <tr
                                         key={c.campaignId}
                                         className="cursor-pointer border-t border-hairline hover:bg-surface-soft/50"

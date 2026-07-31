@@ -99,7 +99,9 @@ export const Route = createFileRoute("/performance/$campaignId")({
                 icon={BarChart3}
                 action={
                     <Button asChild size="sm">
-                        <Link to="/performance">Back to Performance</Link>
+                        <Link to="/performance" search={{ import: undefined }}>
+                            Back to Performance
+                        </Link>
                     </Button>
                 }
             />
@@ -221,6 +223,7 @@ function CampaignPerformancePage() {
                 <div>
                     <Link
                         to="/performance"
+                        search={{ import: undefined }}
                         className="mb-2 inline-flex items-center gap-1 text-xs text-text-tertiary hover:text-text-primary"
                     >
                         <ArrowLeft className="h-3 w-3" /> Performance
