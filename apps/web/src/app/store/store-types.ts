@@ -91,6 +91,8 @@ export type AppState = {
 
     adaptationNotes: Record<string, string[]>;
     addAdaptationNote: (creativeId: string, note: string) => void;
+    usefulEvidenceIds: Record<string, string[]>;
+    toggleUsefulEvidence: (creativeId: string, evidenceId: string) => void;
 
     lastAdaptation?: AdaptationHandoff;
     setLastAdaptation: (h: AdaptationHandoff) => void;

@@ -7,6 +7,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+AiReadinessState = Literal[
+    "configured",
+    "not_configured",
+    "configuration_invalid",
+    "not_yet_qualified",
+    "qualified",
+]
+
 
 class AiCapabilities(BaseModel):
     text_chat: bool = False
@@ -20,6 +28,7 @@ class AiCapabilities(BaseModel):
 class AiReadiness(BaseModel):
     mode: str
     provider: str
+    state: AiReadinessState
     configured: bool
     capabilities: AiCapabilities
     missing: list[str] = Field(default_factory=list)
@@ -45,13 +54,17 @@ class AiModelRunResponse(BaseModel):
     operation: str
     analysis_mode: str
     provider: str
+    endpoint_family: str | None
     model: str
+    prompt_name: str | None
     prompt_version: str | None
     response_schema_version: str
     schema_version: str
     status: AiModelRunStatus
     attempt: int
     attempt_count: int
+    repair_attempt_count: int
+    request_id: str
     request_hash: str
     input_hash: str
     input_summary_json: dict[str, object]

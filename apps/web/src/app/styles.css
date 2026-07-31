@@ -238,10 +238,18 @@ body,
     animation: analysis-state-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.app-scroll-container {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    scroll-padding-block: 1rem;
+    scrollbar-gutter: stable;
+}
+
 @media (prefers-reduced-motion: reduce) {
     * {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
         transition-duration: 0.01ms !important;
     }
 }

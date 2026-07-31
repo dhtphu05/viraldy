@@ -2,16 +2,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.ai_gateway.models import AiModelRunModel
 from viraldy.modules.ai_gateway.public import (
+    CAMPAIGN_PACK_PROMPT_NAME,
+    CAMPAIGN_PACK_PROMPT_VERSION,
+    VIRAL_KIT_PROMPT_NAME,
     VIRAL_KIT_PROMPT_VERSION,
     VIRAL_KIT_SCHEMA_VERSION,
     AiModelRunRepository,
+    AiOperationName,
+    StructuredGenerationResult,
+    ViraldyOperationContextV1,
+    execute_structured_operation,
+    get_prompt_package,
 )
 from viraldy.modules.campaign_packs.contracts import (
     CampaignAngleV1,
@@ -93,7 +103,7 @@ class ViralKitService:
             input_summary=_input_summary(data, product, matches),
         )
         try:
-            viral_kit = await self._compose(
+            viral_kit, provider_result = await self._compose(
                 viral_kit_id=viral_kit_id,
                 workspace_id=workspace_id,
                 version=1,
@@ -112,7 +122,7 @@ class ViralKitService:
                 user_id=user_id,
                 viral_kit=viral_kit,
             )
-            await self._complete_model_run(model_run, viral_kit)
+            await self._complete_model_run(model_run, viral_kit, provider_result)
             await self._events.record(
                 event_type="viral_kit_created",
                 workspace_id=workspace_id,
@@ -128,12 +138,7 @@ class ViralKitService:
             await self._session.commit()
             return _detail_response(kit, version)
         except AppError as exc:
-            await AiModelRunRepository(self._session).fail(
-                model_run,
-                exc.code,
-                exc.message,
-                safe_error_message=exc.message,
-            )
+            await _fail_model_run(self._session, model_run, exc)
             await self._session.commit()
             raise
 
@@ -208,8 +213,9 @@ class ViralKitService:
         latest_viral_kit = _viral_kit_from_version(latest)
         new_version_number = kit.latest_version + 1
         model_run = None
+        provider_result = None
         if data.viral_kit is None:
-            viral_kit, model_run = await self._regenerate_version(
+            viral_kit, model_run, provider_result = await self._regenerate_version(
                 kit=kit,
                 version_number=new_version_number,
                 user_id=user_id,
@@ -233,16 +239,16 @@ class ViralKitService:
             _validate_viral_kit_business_rules(viral_kit)
         except AppError as exc:
             if model_run is not None:
-                await AiModelRunRepository(self._session).fail(
+                await _fail_model_run(
+                    self._session,
                     model_run,
-                    exc.code,
-                    exc.message,
-                    safe_error_message=exc.message,
+                    exc,
+                    provider_result,
                 )
                 await self._session.commit()
             raise
         if model_run is not None:
-            await self._complete_model_run(model_run, viral_kit)
+            await self._complete_model_run(model_run, viral_kit, provider_result)
         version = await self._repository.create_version(
             kit=kit,
             user_id=user_id,
@@ -312,16 +318,45 @@ class ViralKitService:
             raise NotFoundError("VIRAL_KIT_VERSION_NOT_FOUND", "ViralKit version was not found.")
         viral_kit = _viral_kit_from_version(latest_version)
         concept = _require_concept(viral_kit, concept_id)
-        brief = _campaign_pack_brief(viral_kit, concept, data.rights_note)
-        pack_result = await self._campaign_packs.create_from_brief(
+        brief, model_run, provider_result = await self._build_campaign_pack_brief(
             workspace_id=workspace_id,
             user_id=user_id,
-            product_id=kit.product_id,
-            brief=brief,
-            source_model_run_id=viral_kit.provenance.model_run_id,
-            source_prompt_version=viral_kit.provenance.prompt_version,
-            source_schema_version=viral_kit.schema_version,
+            viral_kit=viral_kit,
+            viral_kit_version_id=latest_version.id,
+            concept=concept,
+            rights_note=data.rights_note,
         )
+        try:
+            pack_result = await self._campaign_packs.create_from_brief(
+                workspace_id=workspace_id,
+                user_id=user_id,
+                product_id=kit.product_id,
+                brief=brief,
+                source_model_run_id=(
+                    model_run.id if model_run is not None else viral_kit.provenance.model_run_id
+                ),
+                source_prompt_version=(
+                    CAMPAIGN_PACK_PROMPT_VERSION
+                    if model_run is not None
+                    else viral_kit.provenance.prompt_version
+                ),
+                source_schema_version=brief.schema_version,
+            )
+        except AppError as exc:
+            if model_run is not None:
+                await _fail_model_run(
+                    self._session,
+                    model_run,
+                    exc,
+                    provider_result,
+                )
+            raise
+        if model_run is not None:
+            await self._complete_campaign_pack_model_run(
+                model_run,
+                brief,
+                provider_result,
+            )
         await self._repository.record_campaign_pack_link(
             workspace_id=workspace_id,
             viral_kit_version_id=latest_version.id,
@@ -358,6 +393,132 @@ class ViralKitService:
             campaign_pack_version_id=pack_result.campaign_pack_version_id,
             compiled_requirements_schema_version=(pack_result.compiled_requirements_schema_version),
             campaign_pack=pack_result.response,
+        )
+
+    async def _build_campaign_pack_brief(
+        self,
+        *,
+        workspace_id: UUID,
+        user_id: UUID,
+        viral_kit: ViralKitV1,
+        viral_kit_version_id: UUID,
+        concept: ViralKitConceptV1,
+        rights_note: str | None,
+    ) -> tuple[
+        CampaignPackBriefV1,
+        AiModelRunModel | None,
+        StructuredGenerationResult | None,
+    ]:
+        deterministic = _campaign_pack_brief(viral_kit, concept, rights_note)
+        if self._settings.ai_mode == "fixture":
+            return deterministic, None, None
+
+        prompt = get_prompt_package(AiOperationName.CAMPAIGN_PACK_GENERATE)
+        input_summary: dict[str, object] = {
+            "viral_kit_id": str(viral_kit.id),
+            "viral_kit_version_id": str(viral_kit_version_id),
+            "concept_id": concept.id,
+            "product_id": str(viral_kit.product.product_id),
+            "product_context_version": viral_kit.product.product_context_version,
+        }
+        input_hash = _hash_json(input_summary)
+        model_run = await AiModelRunRepository(self._session).create_running(
+            workspace_id=workspace_id,
+            processing_job_id=None,
+            subject_type="viral_kit_concept",
+            subject_id=viral_kit.id,
+            capability="campaign_pack_generate",
+            operation="campaign_pack_generate",
+            analysis_mode=self._settings.ai_mode,
+            provider=self._settings.ai_provider,
+            model=(
+                self._settings.resolve_openai_model("campaign_pack_generate")
+                if self._settings.ai_provider == "openai"
+                else self._settings.ai_text_model or "unconfigured"
+            ),
+            prompt_version=CAMPAIGN_PACK_PROMPT_VERSION,
+            response_schema_version=prompt.output_schema_version,
+            schema_version=prompt.output_schema_version,
+            request_hash=input_hash,
+            input_hash=input_hash,
+            input_summary=input_summary,
+            endpoint_family=(
+                "responses" if self._settings.ai_provider == "openai" else "chat_completions"
+            ),
+            prompt_name=CAMPAIGN_PACK_PROMPT_NAME,
+        )
+        context = ViraldyOperationContextV1(
+            operation=AiOperationName.CAMPAIGN_PACK_GENERATE,
+            request_id=str(model_run.id),
+            workspace_id=workspace_id,
+            actor_user_id=user_id,
+            product_context=viral_kit.product.snapshot_json,
+            product_context_version=viral_kit.product.product_context_version,
+            objective=viral_kit.objective,
+            target_market=viral_kit.target_market,
+            source_version_ids=[viral_kit_version_id],
+            seller_constraints={
+                "viral_kit_constraints": viral_kit.constraints.model_dump(mode="json"),
+                "rights_note": rights_note,
+            },
+            operation_payload={
+                "viral_kit_id": str(viral_kit.id),
+                "viral_kit_version": viral_kit.version,
+                "selected_concept": concept.model_dump(mode="json"),
+                "pattern_kit_version_ids": [
+                    str(value) for value in viral_kit.provenance.pattern_kit_version_ids
+                ],
+                "deterministic_requirement_baseline": deterministic.model_dump(mode="json"),
+            },
+            schema_version=prompt.output_schema_version,
+            prompt_version=prompt.prompt_version,
+        )
+        try:
+            provider_result = execute_structured_operation(
+                self._settings,
+                context,
+                CampaignPackBriefV1,
+                output_validator=_campaign_pack_output_validator(deterministic),
+            )
+        except AppError as exc:
+            await _fail_model_run(self._session, model_run, exc)
+            await self._session.commit()
+            raise
+        return (
+            CampaignPackBriefV1.model_validate(provider_result.parsed_output),
+            model_run,
+            provider_result,
+        )
+
+    async def _complete_campaign_pack_model_run(
+        self,
+        model_run: AiModelRunModel,
+        brief: CampaignPackBriefV1,
+        provider_result: StructuredGenerationResult | None,
+    ) -> None:
+        output_summary: dict[str, object] = {
+            "hook_count": len(brief.hooks),
+            "must_show_count": len(brief.must_show),
+            "source_concept_id": brief.source_concept_id,
+        }
+        repository = AiModelRunRepository(self._session)
+        if provider_result is None:
+            await repository.complete(
+                model_run,
+                output_summary,
+                http_status=None,
+                provider_request_id=None,
+                latency_ms=None,
+            )
+            return
+        await repository.complete(
+            model_run,
+            output_summary,
+            http_status=provider_result.http_status,
+            provider_request_id=provider_result.provider_request_id,
+            latency_ms=provider_result.latency_ms,
+            usage_json=provider_result.usage.model_dump(mode="json"),
+            repair_attempt_count=provider_result.repair_attempt_count,
         )
 
     async def create_feedback(
@@ -458,6 +619,12 @@ class ViralKitService:
             request_hash=input_hash,
             input_hash=input_hash,
             input_summary=input_summary,
+            endpoint_family=(
+                "responses"
+                if self._settings.ai_mode == "live" and self._settings.ai_provider == "openai"
+                else None
+            ),
+            prompt_name=VIRAL_KIT_PROMPT_NAME,
         )
 
     async def _compose(
@@ -473,21 +640,24 @@ class ViralKitService:
         patterns: list[PatternKitVersionSnapshot],
         matches: list[ViralKitPatternMatchV1],
         model_run_id: UUID,
-    ) -> ViralKitV1:
+    ) -> tuple[ViralKitV1, StructuredGenerationResult | None]:
         if self._settings.ai_mode == "fixture":
-            return build_fixture_viral_kit(
-                viral_kit_id=viral_kit_id,
-                workspace_id=workspace_id,
-                version=version,
-                created_by=user_id,
-                created_at=created_at,
-                request=data,
-                product=product,
-                patterns=patterns,
-                pattern_matches=matches,
-                model_run_id=model_run_id,
+            return (
+                build_fixture_viral_kit(
+                    viral_kit_id=viral_kit_id,
+                    workspace_id=workspace_id,
+                    version=version,
+                    created_by=user_id,
+                    created_at=created_at,
+                    request=data,
+                    product=product,
+                    patterns=patterns,
+                    pattern_matches=matches,
+                    model_run_id=model_run_id,
+                ),
+                None,
             )
-        return LiveViralKitProvider(self._settings).compose(
+        execution = LiveViralKitProvider(self._settings).compose_with_metadata(
             viral_kit_id=viral_kit_id,
             workspace_id=workspace_id,
             version=version,
@@ -499,6 +669,7 @@ class ViralKitService:
             pattern_matches=[match.model_dump(mode="json") for match in matches],
             model_run_id=model_run_id,
         )
+        return execution.output, execution.provider_result
 
     async def _regenerate_version(
         self,
@@ -508,7 +679,11 @@ class ViralKitService:
         user_id: UUID,
         change_reason: str,
         latest_viral_kit: ViralKitV1,
-    ) -> tuple[ViralKitV1, AiModelRunModel]:
+    ) -> tuple[
+        ViralKitV1,
+        AiModelRunModel,
+        StructuredGenerationResult | None,
+    ]:
         request = _request_from_viral_kit(latest_viral_kit, change_reason)
         product = ProductContextSnapshot(
             product_id=latest_viral_kit.product.product_id,
@@ -533,7 +708,7 @@ class ViralKitService:
             input_summary=_input_summary(request, product, matches),
         )
         try:
-            viral_kit = await self._compose(
+            viral_kit, provider_result = await self._compose(
                 viral_kit_id=kit.id,
                 workspace_id=kit.workspace_id,
                 version=version_number,
@@ -545,14 +720,9 @@ class ViralKitService:
                 matches=matches,
                 model_run_id=model_run.id,
             )
-            return viral_kit, model_run
+            return viral_kit, model_run, provider_result
         except AppError as exc:
-            await AiModelRunRepository(self._session).fail(
-                model_run,
-                exc.code,
-                exc.message,
-                safe_error_message=exc.message,
-            )
+            await _fail_model_run(self._session, model_run, exc)
             await self._session.commit()
             raise
 
@@ -560,17 +730,31 @@ class ViralKitService:
         self,
         model_run: AiModelRunModel,
         viral_kit: ViralKitV1,
+        provider_result: StructuredGenerationResult | None,
     ) -> None:
-        await AiModelRunRepository(self._session).complete(
+        output_summary: dict[str, object] = {
+            "concept_count": len(viral_kit.concepts),
+            "pattern_match_count": len(viral_kit.pattern_matches),
+            "overall_confidence": viral_kit.overall_confidence,
+        }
+        repository = AiModelRunRepository(self._session)
+        if provider_result is None:
+            await repository.complete(
+                model_run,
+                output_summary,
+                http_status=None,
+                provider_request_id=None,
+                latency_ms=None,
+            )
+            return
+        await repository.complete(
             model_run,
-            {
-                "concept_count": len(viral_kit.concepts),
-                "pattern_match_count": len(viral_kit.pattern_matches),
-                "overall_confidence": viral_kit.overall_confidence,
-            },
-            http_status=None,
-            provider_request_id=None,
-            latency_ms=None,
+            output_summary,
+            http_status=provider_result.http_status,
+            provider_request_id=provider_result.provider_request_id,
+            latency_ms=provider_result.latency_ms,
+            usage_json=provider_result.usage.model_dump(mode="json"),
+            repair_attempt_count=provider_result.repair_attempt_count,
         )
 
 
@@ -1032,6 +1216,54 @@ def _input_summary(
     }
 
 
+def _campaign_pack_output_validator(
+    expected: CampaignPackBriefV1,
+) -> Callable[[BaseModel], None]:
+    expected_requirements = {
+        requirement.id: (
+            requirement.requirement_type,
+            requirement.severity,
+            requirement.expected_before_ms,
+            requirement.source_path,
+        )
+        for requirement in expected.must_show
+    }
+
+    def validate(output: BaseModel) -> None:
+        brief = CampaignPackBriefV1.model_validate(output)
+        if brief.product_snapshot != expected.product_snapshot:
+            raise ValueError("Campaign Pack product snapshot changed.")
+        if brief.source_concept_id != expected.source_concept_id:
+            raise ValueError("Campaign Pack source concept changed.")
+        if brief.source_pattern_kit_version_ids != expected.source_pattern_kit_version_ids:
+            raise ValueError("Campaign Pack PatternKit source IDs changed.")
+        if brief.claim_guardrails.prohibited != expected.claim_guardrails.prohibited:
+            raise ValueError("Campaign Pack prohibited claims changed.")
+        if (
+            brief.claim_guardrails.required_disclosures
+            != expected.claim_guardrails.required_disclosures
+        ):
+            raise ValueError("Campaign Pack required disclosures changed.")
+        if (
+            brief.cta.product_tag_required != expected.cta.product_tag_required
+            or brief.cta.required_before_ms != expected.cta.required_before_ms
+        ):
+            raise ValueError("Campaign Pack CTA requirements changed.")
+        observed_requirements = {
+            requirement.id: (
+                requirement.requirement_type,
+                requirement.severity,
+                requirement.expected_before_ms,
+                requirement.source_path,
+            )
+            for requirement in brief.must_show
+        }
+        if observed_requirements != expected_requirements:
+            raise ValueError("Campaign Pack hard requirement semantics changed.")
+
+    return validate
+
+
 def _hash_json(payload: dict[str, object]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -1039,4 +1271,44 @@ def _hash_json(payload: dict[str, object]) -> str:
 def _model_name(settings: Settings) -> str:
     if settings.ai_mode == "fixture":
         return "fixture_viral_kit_v1"
+    if settings.ai_provider == "openai":
+        return settings.resolve_openai_model("viral_kit_compose")
     return settings.ai_text_model or "unconfigured"
+
+
+async def _fail_model_run(
+    session: AsyncSession,
+    model_run: AiModelRunModel,
+    error: AppError,
+    provider_result: StructuredGenerationResult | None = None,
+) -> None:
+    http_status = error.details.get("http_status")
+    provider_request_id = error.details.get("provider_request_id")
+    repair_attempt_count = error.details.get("repair_attempt_count")
+    await AiModelRunRepository(session).fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=(
+            http_status
+            if isinstance(http_status, int)
+            else provider_result.http_status
+            if provider_result
+            else None
+        ),
+        safe_error_message=error.message,
+        provider_request_id=(
+            provider_request_id
+            if isinstance(provider_request_id, str)
+            else provider_result.provider_request_id
+            if provider_result
+            else None
+        ),
+        repair_attempt_count=(
+            repair_attempt_count
+            if isinstance(repair_attempt_count, int)
+            else provider_result.repair_attempt_count
+            if provider_result
+            else None
+        ),
+    )

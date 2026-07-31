@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
 from viraldy.modules.ai_gateway.readiness import ai_readiness
+from viraldy.modules.ai_gateway.schemas import AiReadinessState
 from viraldy.platform.config.settings import Settings, get_settings
 from viraldy.platform.database.session import get_async_session
 from viraldy.platform.storage.ports import StoragePort
@@ -30,6 +31,7 @@ class ComponentHealth(BaseModel):
 
     status: CheckStatus
     latency_ms: int
+    safe_state: AiReadinessState | None = None
 
 
 class HealthReport(BaseModel):
@@ -135,9 +137,11 @@ async def _safe_check(check: Callable[[], Awaitable[bool]]) -> ComponentHealth:
 
 
 def _configuration_check(settings: Settings) -> ComponentHealth:
+    readiness = ai_readiness(settings)
     return ComponentHealth(
-        status="ok" if ai_readiness(settings).configured else "error",
+        status="ok" if readiness.configured else "error",
         latency_ms=0,
+        safe_state=readiness.state,
     )
 
 

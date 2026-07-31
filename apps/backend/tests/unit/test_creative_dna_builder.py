@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from viraldy.modules.creative_dna.contracts import ProductDnaV1
+from viraldy.modules.creative_dna.contracts import CreativeDnaV1, ProductDnaV1
 from viraldy.modules.creative_dna.service import _build_creative_dna, _evidence_by_type
 from viraldy.modules.media_analysis.public import EvidenceItemModel
 
@@ -144,6 +144,23 @@ def test_critical_dna_fields_reject_invalid_types() -> None:
             product_match=_observed_payload(0.8),
             appearance_sequence=_observed_payload([]),
         )
+
+
+def test_creative_dna_schema_has_no_untyped_observed_values() -> None:
+    schema = CreativeDnaV1.model_json_schema()
+    untyped_value_nodes = [
+        definition_name
+        for definition_name, definition in schema["$defs"].items()
+        if isinstance(definition, dict)
+        and isinstance(definition.get("properties"), dict)
+        and isinstance(definition["properties"].get("value"), dict)
+        and not any(
+            key in definition["properties"]["value"]
+            for key in ("type", "anyOf", "$ref")
+        )
+    ]
+
+    assert untyped_value_nodes == []
 
 
 def _observed_payload(value: object) -> dict[str, object]:

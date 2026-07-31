@@ -43,6 +43,13 @@ class AdaptationGuidanceV2(AdaptationContractBase):
     risk_codes: list[str] = Field(default_factory=list)
 
 
+class AdaptationRiskV2(AdaptationContractBase):
+    code: str
+    severity: Literal["low", "medium", "high", "hard_blocker"]
+    message: str
+    mitigation: str | None = None
+
+
 class AdaptationConceptV2(AdaptationContractBase):
     id: str
     name: str
@@ -63,7 +70,7 @@ class AdaptationConceptV2(AdaptationContractBase):
     cta_strategy: str
     claim_guardrails: list[str]
     must_show: list[str]
-    risks: list[dict[str, object]] = Field(default_factory=list)
+    risks: list[AdaptationRiskV2] = Field(default_factory=list)
     test_hypothesis: str
     source_evidence_ids: list[UUID] = Field(default_factory=list)
 

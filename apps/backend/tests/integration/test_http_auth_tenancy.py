@@ -947,6 +947,15 @@ async def test_http_auth_rbac_and_tenant_isolation(
             _assert_error(viewer_write, 403, "FORBIDDEN")
             _assert_error(
                 await client.post(
+                    f"/api/v1/workspaces/{workspace_alpha['id']}/products/crawl-preview",
+                    headers=_auth("beta-token"),
+                    json={"url": "https://www.amazon.com/dp/B0TEST1234"},
+                ),
+                403,
+                "FORBIDDEN",
+            )
+            _assert_error(
+                await client.post(
                     f"/api/v1/workspaces/{workspace_alpha['id']}/pattern-kits",
                     headers=_auth("beta-token"),
                     json=_pattern_kit_create_payload(uuid4()),

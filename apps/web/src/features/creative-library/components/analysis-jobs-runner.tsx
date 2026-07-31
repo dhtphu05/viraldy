@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useAppStore } from "@/app/store/app-store";
 import { buildMockAnalysis, analysisSteps } from "@/features/creative-library/lib/mockAnalysis";
+import { getAnalysisJobFeedback } from "@/features/creative-library/lib/analysis-job-feedback";
 
 // Drives any creative that is in `processing` state forward, whether the
 // analyze dialog is currently open or was closed via "Run in background".
@@ -14,6 +16,19 @@ export function useAnalysisJobsRunner() {
     useEffect(() => {
         const active = Object.keys(jobs);
         for (const id of active) {
+            const creative = creatives.find((item) => item.id === id);
+            if (creative) {
+                const feedback = getAnalysisJobFeedback(
+                    id,
+                    creative.title,
+                    jobs[id].step,
+                    jobs[id].total,
+                );
+                toast.loading(feedback.title, {
+                    id: feedback.id,
+                    description: feedback.description,
+                });
+            }
             if (timersRef.current[id]) continue;
             timersRef.current[id] = window.setInterval(() => {
                 const j = useAppStore.getState().analysisJobs[id];
@@ -24,7 +39,15 @@ export function useAnalysisJobsRunner() {
                 }
                 if (j.step >= j.total - 1) {
                     const cr = useAppStore.getState().creatives.find((c) => c.id === id);
-                    if (cr) save(buildMockAnalysis(cr));
+                    if (cr) {
+                        save(buildMockAnalysis(cr));
+                        const feedback = getAnalysisJobFeedback(id, cr.title, j.total, j.total);
+                        toast.success(feedback.title, {
+                            id: feedback.id,
+                            description: feedback.description,
+                            duration: 5000,
+                        });
+                    }
                     window.clearInterval(timersRef.current[id]);
                     delete timersRef.current[id];
                 } else {
@@ -41,6 +64,16 @@ export function useAnalysisJobsRunner() {
         }
         return () => {};
     }, [jobs, advance, save, creatives]);
+
+    useEffect(
+        () => () => {
+            for (const timer of Object.values(timersRef.current)) {
+                window.clearInterval(timer);
+            }
+            timersRef.current = {};
+        },
+        [],
+    );
 }
 
 export function AnalysisJobsRunner() {

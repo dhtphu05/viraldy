@@ -96,7 +96,7 @@ function UgcInbox() {
         if (!open && upload) {
             void navigate({
                 to: "/ugc-review",
-                search: campaignId ? { campaignId } : {},
+                search: { campaignId, upload: undefined },
                 replace: true,
             });
         }
@@ -189,7 +189,11 @@ function UgcInbox() {
         setQuery("");
         setFilter("all");
         if (campaignId) {
-            void navigate({ to: "/ugc-review", search: {}, replace: true });
+            void navigate({
+                to: "/ugc-review",
+                search: { campaignId: undefined, upload: undefined },
+                replace: true,
+            });
         }
     };
 
@@ -234,7 +238,12 @@ function UgcInbox() {
                             <Button
                                 size="sm"
                                 variant="secondary"
-                                onClick={() => navigate({ to: "/ugc-review" })}
+                                onClick={() =>
+                                    navigate({
+                                        to: "/ugc-review",
+                                        search: { campaignId: undefined, upload: undefined },
+                                    })
+                                }
                             >
                                 Clear handoff
                             </Button>
@@ -303,7 +312,10 @@ function UgcInbox() {
                         onValueChange={(value) =>
                             void navigate({
                                 to: "/ugc-review",
-                                search: value === "all" ? {} : { campaignId: value },
+                                search: {
+                                    campaignId: value === "all" ? undefined : value,
+                                    upload: undefined,
+                                },
                                 replace: true,
                             })
                         }

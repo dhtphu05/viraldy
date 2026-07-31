@@ -7,6 +7,10 @@ RUN uv sync --frozen --no-dev || uv sync --no-dev
 COPY apps/backend /app/apps/backend
 RUN uv sync --frozen --no-dev || uv sync --no-dev
 
+FROM builder AS crawler-builder
+
+RUN uv sync --frozen --no-dev --extra crawler || uv sync --no-dev --extra crawler
+
 FROM python:3.12-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,6 +20,32 @@ RUN groupadd -r viraldy && useradd -r -g viraldy viraldy
 WORKDIR /app
 
 COPY --from=builder --chown=viraldy:viraldy /app/apps/backend /app/apps/backend
+USER viraldy
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+
+WORKDIR /app/apps/backend
+CMD ["uvicorn", "viraldy.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+FROM python:3.12-slim-bookworm AS crawler-runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PATH="/app/apps/backend/.venv/bin:$PATH" \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    MALLOC_ARENA_MAX=2
+
+RUN groupadd -r viraldy && useradd -r -g viraldy viraldy
+WORKDIR /app
+
+COPY --from=crawler-builder /app/apps/backend /app/apps/backend
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+    && /app/apps/backend/.venv/bin/playwright install --with-deps chromium \
+    && mkdir -p /tmp/viraldy-product-crawl \
+    && chown -R viraldy:viraldy /app/apps/backend /ms-playwright /tmp/viraldy-product-crawl \
+    && rm -rf /var/lib/apt/lists/*
+
 USER viraldy
 
 EXPOSE 8000

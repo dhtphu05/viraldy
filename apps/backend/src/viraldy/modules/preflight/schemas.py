@@ -3,11 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from viraldy.modules.campaign_packs.requirements import CompiledRequirementsSnapshotV2
 from viraldy.modules.jobs.public import JobResponse
 from viraldy.modules.preflight.contracts import BriefAlignmentResultV2
+from viraldy.modules.presentations.contracts import (
+    CreatorRevisionMessageV2,
+    SellerDecisionSummaryV1,
+)
 from viraldy.modules.products.contracts import ProductContextV1
 from viraldy.modules.tiktok_scorer.contracts import BlockerV2, DimensionScoreV2, FixV2, StrengthV2
 
@@ -36,6 +40,10 @@ class PreflightRunResponse(BaseModel):
     blockers_json: list[BlockerV2]
     fixes_json: list[FixV2]
     revision_message: str
+    seller_summary_json: SellerDecisionSummaryV1 | None = None
+    creator_revision_json: CreatorRevisionMessageV2 | None = None
+    presentation_model_run_ids_json: list[UUID] = Field(default_factory=list)
+    presentation_source_json: dict[str, str] = Field(default_factory=dict)
     evidence_ids_json: list[UUID]
     product_snapshot_json: ProductContextV1 | None
     product_context_schema_version: str | None

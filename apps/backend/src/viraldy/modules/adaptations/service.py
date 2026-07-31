@@ -17,8 +17,10 @@ from viraldy.modules.adaptations.provider import LiveAdaptationProvider
 from viraldy.modules.adaptations.repository import AdaptationRepository
 from viraldy.modules.adaptations.schemas import AdaptationRunResponse, CreateAdaptationRequest
 from viraldy.modules.ai_gateway.public import (
+    ADAPTATION_PROMPT_NAME,
     ADAPTATION_PROMPT_VERSION,
     ADAPTATION_SCHEMA_VERSION,
+    AiModelRunModel,
     AiModelRunRepository,
 )
 from viraldy.modules.creative_dna.contracts import CreativeDnaV1
@@ -62,7 +64,7 @@ class AdaptationService:
                 data.constraints,
                 {},
                 self._settings.ai_mode,
-                self._settings.ai_text_model,
+                _model_name(self._settings),
                 status="processing",
                 product_snapshot_json=product.product_context.model_dump(mode="json"),
             )
@@ -79,16 +81,25 @@ class AdaptationService:
                 subject_type="adaptation_run",
                 subject_id=run.id,
                 capability="generate_adaptation",
+                operation="adaptation_generate",
                 analysis_mode=self._settings.ai_mode,
                 provider=self._settings.ai_provider,
-                model=str(self._settings.ai_text_model),
+                model=_model_name(self._settings),
                 prompt_version=ADAPTATION_PROMPT_VERSION,
                 response_schema_version=ADAPTATION_SCHEMA_VERSION,
+                schema_version=ADAPTATION_SCHEMA_VERSION,
                 request_hash=_hash_json(input_summary),
+                input_hash=_hash_json(input_summary),
                 input_summary=input_summary,
+                endpoint_family=(
+                    "responses" if self._settings.ai_provider == "openai" else None
+                ),
+                prompt_name=ADAPTATION_PROMPT_NAME,
             )
             try:
-                output = LiveAdaptationProvider(self._settings).generate(
+                execution = LiveAdaptationProvider(
+                    self._settings
+                ).generate_with_metadata(
                     product={
                         "id": str(product.product_id),
                         "context": adaptation_input.product_snapshot.model_dump(mode="json"),
@@ -98,24 +109,42 @@ class AdaptationService:
                     target_market=adaptation_input.target_market,
                     target_buyer=adaptation_input.target_buyer,
                     constraints=adaptation_input.constraints.model_dump(mode="json"),
+                    workspace_id=workspace_id,
+                    actor_user_id=user_id,
+                    model_run_id=model_run.id,
+                    product_context_version=product.product_context_version,
+                    creative_dna_version_id=dna.id,
                 )
+                output = execution.output
             except AppError as exc:
                 run.status = "failed"
                 run.primary_model_run_id = model_run.id
-                await model_repo.fail(model_run, exc.code, exc.message)
+                await _fail_model_run(model_repo, model_run, exc)
                 await self._session.commit()
                 raise
             result = output.model_dump(mode="json")
             run.result_json = result
             run.status = "completed"
             run.primary_model_run_id = model_run.id
-            await model_repo.complete(
-                model_run,
-                {"concept_count": len(output.concepts)},
-                http_status=None,
-                provider_request_id=None,
-                latency_ms=None,
-            )
+            provider_result = execution.provider_result
+            if provider_result is None:
+                await model_repo.complete(
+                    model_run,
+                    {"concept_count": len(output.concepts)},
+                    http_status=None,
+                    provider_request_id=None,
+                    latency_ms=None,
+                )
+            else:
+                await model_repo.complete(
+                    model_run,
+                    {"concept_count": len(output.concepts)},
+                    http_status=provider_result.http_status,
+                    provider_request_id=provider_result.provider_request_id,
+                    latency_ms=provider_result.latency_ms,
+                    usage_json=provider_result.usage.model_dump(mode="json"),
+                    repair_attempt_count=provider_result.repair_attempt_count,
+                )
             await self._session.commit()
             return AdaptationRunResponse.model_validate(run)
         else:
@@ -385,3 +414,32 @@ def _dna_evidence_ids(dna_json: dict[str, object]) -> list[UUID]:
 def _hash_json(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def _model_name(settings: Settings) -> str:
+    if settings.ai_provider == "openai":
+        return settings.resolve_openai_model("adaptation_generate")
+    return settings.ai_text_model or "unconfigured"
+
+
+async def _fail_model_run(
+    repository: AiModelRunRepository,
+    model_run: AiModelRunModel,
+    error: AppError,
+) -> None:
+    http_status = error.details.get("http_status")
+    provider_request_id = error.details.get("provider_request_id")
+    repair_attempt_count = error.details.get("repair_attempt_count")
+    await repository.fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=http_status if isinstance(http_status, int) else None,
+        safe_error_message=error.message,
+        provider_request_id=(
+            provider_request_id if isinstance(provider_request_id, str) else None
+        ),
+        repair_attempt_count=(
+            repair_attempt_count if isinstance(repair_attempt_count, int) else None
+        ),
+    )

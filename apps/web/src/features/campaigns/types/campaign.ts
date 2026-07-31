@@ -1,4 +1,4 @@
-import type { CreativeAngle, ProductCategory } from "./creative";
+import type { CreativeAngle, ProductCategory } from "@/features/creative-library/types/creative";
 
 export type CampaignObjective =
     | "Organic Product Test"

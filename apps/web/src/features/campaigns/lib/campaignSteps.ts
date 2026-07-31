@@ -17,6 +17,61 @@ export const STEPS: StepDef[] = [
     { id: "review", label: "Review", short: "Review" },
 ];
 
+export type CampaignPhaseId =
+    "context" | "creative-direction" | "creator-execution" | "guardrails" | "review-send";
+
+export type CampaignPhase = {
+    id: CampaignPhaseId;
+    label: string;
+    short: string;
+    steps: StepId[];
+};
+
+export const CAMPAIGN_PHASES: CampaignPhase[] = [
+    {
+        id: "context",
+        label: "Context",
+        short: "Context",
+        steps: ["product", "references"],
+    },
+    {
+        id: "creative-direction",
+        label: "Creative Direction",
+        short: "Direction",
+        steps: ["adaptation", "angles", "hooks"],
+    },
+    {
+        id: "creator-execution",
+        label: "Creator Execution",
+        short: "Execution",
+        steps: ["script", "storyboard"],
+    },
+    {
+        id: "guardrails",
+        label: "Guardrails",
+        short: "Guardrails",
+        steps: ["cta", "deliverables"],
+    },
+    {
+        id: "review-send",
+        label: "Review & Send",
+        short: "Review",
+        steps: ["review"],
+    },
+];
+
+export function phaseForStep(step: StepId): CampaignPhase {
+    return CAMPAIGN_PHASES.find((phase) => phase.steps.includes(step)) ?? CAMPAIGN_PHASES[0];
+}
+
+export function phaseIsComplete(pack: CampaignPack, phase: CampaignPhase): boolean {
+    return phase.steps.every((step) => stepIsComplete(pack, step));
+}
+
+export function firstStepForPhase(pack: CampaignPack, phase: CampaignPhase): StepId {
+    return phase.steps.find((step) => !stepIsComplete(pack, step)) ?? phase.steps[0];
+}
+
 export function stepIsComplete(pack: CampaignPack, id: StepId): boolean {
     switch (id) {
         case "product":

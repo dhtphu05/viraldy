@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,14 +49,20 @@ class DeletionService:
             user_id,
         )
         try:
-            storage_keys = await self._repository.storage_keys(plan)
+            storage_keys = set(await self._repository.storage_keys(plan))
+            if resource_type is DeletionResourceType.WORKSPACE:
+                workspace_objects = await asyncio.to_thread(
+                    self._storage.list_objects,
+                    f"workspaces/{workspace_id}/",
+                )
+                storage_keys.update(item.key for item in workspace_objects)
             row_counts = await self._repository.execute_plan(plan)
             batch = create_storage_deletion_batch(
                 self._session,
                 workspace_id=workspace_id,
                 source_type="hard_delete",
                 source_id=audit.id,
-                object_keys=storage_keys,
+                object_keys=sorted(storage_keys),
             )
             await self._repository.mark_storage_cleanup_pending(audit, row_counts)
             await self._session.flush()
@@ -92,11 +99,7 @@ class DeletionService:
             workspace_id=workspace_id,
             resource_type=resource_type,
             resource_id=resource_id,
-            status=(
-                "succeeded"
-                if cleanup.status == "succeeded"
-                else "storage_cleanup_pending"
-            ),
+            status=("succeeded" if cleanup.status == "succeeded" else "storage_cleanup_pending"),
             deleted_object_count=cleanup.deleted_object_count,
             deleted_row_counts=row_counts,
             completed_at=refreshed_audit.completed_at,

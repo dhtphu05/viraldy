@@ -14,4 +14,6 @@ dist/
 build/
 *.egg-info/
 docs/api/openapi.json
+apps/backend/evaluation/reports/
+apps/web/artifacts/
 .DS_Store

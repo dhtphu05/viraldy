@@ -24,6 +24,7 @@ class TranscriptSegmentEvidenceValueV1(EvidenceValueBaseV1):
 class OnScreenTextEvidenceValueV1(EvidenceValueBaseV1):
     evidence_type: Literal["on_screen_text"] = "on_screen_text"
     text: str
+    text_role: str | None = None
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=0)
     frame_storage_key: str | None = None

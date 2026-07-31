@@ -30,12 +30,17 @@ async def create_pack(
     payload: CreateCampaignPackRequest,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
         workspace_id, Permission.CAMPAIGN_PACK_WRITE, current_user, db
     )
-    pack = await CampaignPackService(db).create(workspace_id, current_user.id, payload)
+    pack = await CampaignPackService(db, settings).create(
+        workspace_id,
+        current_user.id,
+        payload,
+    )
     return success(pack.model_dump(mode="json"), request_id)
 
 
@@ -44,10 +49,11 @@ async def list_packs(
     workspace_id: UUID,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
-    packs = await CampaignPackService(db).list_packs(workspace_id)
+    packs = await CampaignPackService(db, settings).list_packs(workspace_id)
     return success([pack.model_dump(mode="json") for pack in packs], request_id)
 
 
@@ -57,10 +63,11 @@ async def get_pack(
     campaign_pack_id: UUID,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
-    pack = await CampaignPackService(db).get(workspace_id, campaign_pack_id)
+    pack = await CampaignPackService(db, settings).get(workspace_id, campaign_pack_id)
     return success(pack.model_dump(mode="json"), request_id)
 
 
@@ -71,12 +78,17 @@ async def update_pack(
     payload: UpdateCampaignPackRequest,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
         workspace_id, Permission.CAMPAIGN_PACK_WRITE, current_user, db
     )
-    pack = await CampaignPackService(db).update(workspace_id, campaign_pack_id, payload)
+    pack = await CampaignPackService(db, settings).update(
+        workspace_id,
+        campaign_pack_id,
+        payload,
+    )
     return success(pack.model_dump(mode="json"), request_id)
 
 
@@ -89,12 +101,13 @@ async def create_pack_version(
     payload: CreateCampaignPackVersionRequest,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(
         workspace_id, Permission.CAMPAIGN_PACK_WRITE, current_user, db
     )
-    version = await CampaignPackService(db).create_version(
+    version = await CampaignPackService(db, settings).create_version(
         workspace_id, campaign_pack_id, current_user.id, payload
     )
     return success(version.model_dump(mode="json"), request_id)
@@ -106,10 +119,14 @@ async def list_pack_versions(
     campaign_pack_id: UUID,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.WORKSPACE_READ, current_user, db)
-    versions = await CampaignPackService(db).list_versions(workspace_id, campaign_pack_id)
+    versions = await CampaignPackService(db, settings).list_versions(
+        workspace_id,
+        campaign_pack_id,
+    )
     return success([version.model_dump(mode="json") for version in versions], request_id)
 
 
@@ -120,10 +137,11 @@ async def export_pack(
     payload: ExportCampaignPackRequest,
     current_user: CurrentUserDep,
     db: DbSession,
+    settings: SettingsDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.DATA_EXPORT, current_user, db)
-    export = await CampaignPackService(db).export(
+    export = await CampaignPackService(db, settings).export(
         workspace_id,
         campaign_pack_id,
         current_user.id,

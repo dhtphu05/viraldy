@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +35,10 @@ class AiModelRunRepository:
         schema_version: str | None = None,
         input_hash: str | None = None,
         attempt_count: int = 1,
+        endpoint_family: str | None = None,
+        prompt_name: str | None = None,
+        repair_attempt_count: int = 0,
+        request_id: str | None = None,
     ) -> AiModelRunModel:
         run = _run(
             workspace_id,
@@ -53,6 +57,10 @@ class AiModelRunRepository:
             schema_version=schema_version,
             input_hash=input_hash,
             attempt_count=attempt_count,
+            endpoint_family=endpoint_family,
+            prompt_name=prompt_name,
+            repair_attempt_count=repair_attempt_count,
+            request_id=request_id,
         )
         self._session.add(run)
         await self._session.flush()
@@ -104,6 +112,7 @@ class AiModelRunRepository:
         *,
         usage_json: dict[str, object] | None = None,
         estimated_cost: Decimal | None = None,
+        repair_attempt_count: int | None = None,
     ) -> AiModelRunModel:
         run.status = "completed"
         run.output_summary_json = output_summary
@@ -111,6 +120,8 @@ class AiModelRunRepository:
             run.usage_json = usage_json
         if estimated_cost is not None:
             run.estimated_cost = estimated_cost
+        if repair_attempt_count is not None:
+            run.repair_attempt_count = repair_attempt_count
         run.http_status = http_status
         run.provider_request_id = provider_request_id
         run.latency_ms = latency_ms
@@ -126,13 +137,19 @@ class AiModelRunRepository:
         http_status: int | None = None,
         latency_ms: int | None = None,
         safe_error_message: str | None = None,
+        *,
+        provider_request_id: str | None = None,
+        repair_attempt_count: int | None = None,
     ) -> AiModelRunModel:
         run.status = "failed"
         run.error_code = code
         run.error_message = message
         run.safe_error_message = safe_error_message or message
         run.http_status = http_status
+        run.provider_request_id = provider_request_id
         run.latency_ms = latency_ms
+        if repair_attempt_count is not None:
+            run.repair_attempt_count = repair_attempt_count
         run.completed_at = utc_now()
         await self._session.flush()
         return run
@@ -161,6 +178,10 @@ class SyncAiModelRunRepository:
         schema_version: str | None = None,
         input_hash: str | None = None,
         attempt_count: int = 1,
+        endpoint_family: str | None = None,
+        prompt_name: str | None = None,
+        repair_attempt_count: int = 0,
+        request_id: str | None = None,
     ) -> AiModelRunModel:
         run = _run(
             workspace_id,
@@ -179,6 +200,10 @@ class SyncAiModelRunRepository:
             schema_version=schema_version,
             input_hash=input_hash,
             attempt_count=attempt_count,
+            endpoint_family=endpoint_family,
+            prompt_name=prompt_name,
+            repair_attempt_count=repair_attempt_count,
+            request_id=request_id,
         )
         self._session.add(run)
         self._session.flush()
@@ -194,6 +219,7 @@ class SyncAiModelRunRepository:
         *,
         usage_json: dict[str, object] | None = None,
         estimated_cost: Decimal | None = None,
+        repair_attempt_count: int | None = None,
     ) -> AiModelRunModel:
         run.status = "completed"
         run.output_summary_json = output_summary
@@ -201,6 +227,8 @@ class SyncAiModelRunRepository:
             run.usage_json = usage_json
         if estimated_cost is not None:
             run.estimated_cost = estimated_cost
+        if repair_attempt_count is not None:
+            run.repair_attempt_count = repair_attempt_count
         run.http_status = http_status
         run.provider_request_id = provider_request_id
         run.latency_ms = latency_ms
@@ -216,13 +244,19 @@ class SyncAiModelRunRepository:
         http_status: int | None = None,
         latency_ms: int | None = None,
         safe_error_message: str | None = None,
+        *,
+        provider_request_id: str | None = None,
+        repair_attempt_count: int | None = None,
     ) -> AiModelRunModel:
         run.status = "failed"
         run.error_code = code
         run.error_message = message
         run.safe_error_message = safe_error_message or message
         run.http_status = http_status
+        run.provider_request_id = provider_request_id
         run.latency_ms = latency_ms
+        if repair_attempt_count is not None:
+            run.repair_attempt_count = repair_attempt_count
         run.completed_at = utc_now()
         self._session.flush()
         return run
@@ -246,8 +280,14 @@ def _run(
     schema_version: str | None = None,
     input_hash: str | None = None,
     attempt_count: int = 1,
+    endpoint_family: str | None = None,
+    prompt_name: str | None = None,
+    repair_attempt_count: int = 0,
+    request_id: str | None = None,
 ) -> AiModelRunModel:
+    run_id = uuid4()
     return AiModelRunModel(
+        id=run_id,
         workspace_id=workspace_id,
         processing_job_id=processing_job_id,
         subject_type=subject_type,
@@ -256,13 +296,17 @@ def _run(
         operation=operation or capability,
         analysis_mode=analysis_mode,
         provider=provider,
+        endpoint_family=endpoint_family,
         model=model,
+        prompt_name=prompt_name,
         prompt_version=prompt_version,
         response_schema_version=response_schema_version,
         schema_version=schema_version or response_schema_version,
         status="running",
         attempt=1,
         attempt_count=attempt_count,
+        repair_attempt_count=repair_attempt_count,
+        request_id=request_id or str(run_id),
         request_hash=request_hash,
         input_hash=input_hash or request_hash,
         input_summary_json=input_summary,

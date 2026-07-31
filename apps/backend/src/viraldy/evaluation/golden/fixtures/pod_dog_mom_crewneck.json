@@ -1,0 +1,95 @@
+{
+  "schema_version": "golden_fixture_v1",
+  "scenario_id": "pod_dog_mom_crewneck",
+  "domain": "pod",
+  "product_name": "Personalized Dog Mom Crewneck",
+  "objective": "Validate exact personalization while preserving emotional creator delivery.",
+  "pattern_name": "Identity Hook \u2192 Personalization Reveal \u2192 Emotional Payoff \u2192 Ordering Clarity",
+  "concepts": [
+    {
+      "concept_id": "dog_mom_identity",
+      "name": "Dog Mom Identity",
+      "strategic_axis": "self_purchase_identity",
+      "buyer_persona": "Self-purchase dog owner",
+      "creator_persona": "Dog-owner lifestyle creator",
+      "spoken_hook": "Tell me you are a dog mom without telling me.",
+      "overlay_hook": null,
+      "diversity_axes": [
+        "buyer_persona",
+        "hook_mechanism",
+        "proof_mechanism"
+      ]
+    },
+    {
+      "concept_id": "gift_reaction",
+      "name": "Gift Reaction",
+      "strategic_axis": "recipient_emotional_payoff",
+      "buyer_persona": "Friend or partner buying a personalized gift",
+      "creator_persona": "Gifting lifestyle creator",
+      "spoken_hook": "Her reaction made this gift worth it.",
+      "overlay_hook": "A gift made for Milo's mom",
+      "diversity_axes": [
+        "buyer_persona",
+        "creator_persona",
+        "narrative_structure"
+      ]
+    },
+    {
+      "concept_id": "personalization_how_to",
+      "name": "How Personalization Works",
+      "strategic_axis": "ordering_clarity",
+      "buyer_persona": "Product-aware shopper uncertain about ordering",
+      "creator_persona": "Practical tutorial creator",
+      "spoken_hook": "Here is exactly what you submit to make yours.",
+      "overlay_hook": "Input \u2192 preview \u2192 delivered crewneck",
+      "diversity_axes": [
+        "buyer_persona",
+        "hook_mechanism",
+        "demo_mechanism"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "pod_personalization_mismatch",
+      "asset_role": "ugc_draft",
+      "has_audio": true,
+      "duration_ms": 18100,
+      "observations": {
+        "personalization_expected": "Milo",
+        "personalization_observed": "Miles",
+        "ocr_start_ms": 7200,
+        "ocr_end_ms": 9600
+      }
+    }
+  ],
+  "preflight_expectations": [
+    {
+      "asset_id": "pod_personalization_mismatch",
+      "action": "revise",
+      "product_required_before_ms": null,
+      "product_first_appearance_ms": null,
+      "disclosure_status": "not_applicable",
+      "proof_status": "satisfied",
+      "product_tag_status": "satisfied",
+      "hard_blocker_codes": [
+        "PERSONALIZATION_MISMATCH"
+      ],
+      "high_priority_fix_codes": [
+        "REPLACE_PERSONALIZED_SAMPLE"
+      ],
+      "personalization_expected": "Milo",
+      "personalization_observed": "Miles",
+      "prohibited_claims_observed": [],
+      "strengths_to_preserve": [
+        "Strong identity hook",
+        "Natural creator reaction"
+      ]
+    }
+  ],
+  "required_disclosures": [],
+  "prohibited_claims": [
+    "guaranteed delivery date",
+    "perfect gift for everyone"
+  ]
+}

@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportClientError } from "@/shared/lib/error-reporting";
 import { Toaster } from "@/shared/ui/sonner";
+import { AnalysisJobsRunner } from "@/features/creative-library/components/analysis-jobs-runner";
 
 function NotFoundComponent() {
     return (
@@ -129,6 +130,7 @@ function RootComponent() {
 
     return (
         <QueryClientProvider client={queryClient}>
+            <AnalysisJobsRunner />
             <Outlet />
             <Toaster />
         </QueryClientProvider>

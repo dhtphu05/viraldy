@@ -29,6 +29,14 @@ export const queryKeys = {
         detail: (workspaceId: string | undefined, dnaVersionId: string | null) =>
             ["creative-dna", workspaceId, dnaVersionId] as const,
     },
+    patternKits: {
+        detail: (workspaceId: string | undefined, patternKitId: string | null) =>
+            ["pattern-kits", workspaceId, patternKitId] as const,
+    },
+    viralKits: {
+        detail: (workspaceId: string | undefined, viralKitId: string | null) =>
+            ["viral-kits", workspaceId, viralKitId] as const,
+    },
     adaptations: {
         detail: (workspaceId: string | undefined, adaptationRunId: string | null) =>
             ["adaptations", workspaceId, adaptationRunId] as const,

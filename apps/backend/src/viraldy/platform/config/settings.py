@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import AnyUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_openai_timestamp_granularities() -> list[Literal["segment", "word"]]:
+    return ["segment"]
 
 
 class AppEnv(StrEnum):
@@ -38,6 +43,10 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
     job_stale_after_seconds: int = Field(default=900, ge=60)
+    product_crawl_max_concurrency: int = Field(default=2, ge=1, le=8)
+    product_crawl_public_base_url: str = "http://127.0.0.1:8000"
+    product_crawl_output_dir: str | None = None
+    product_crawl_review_clip_ttl_hours: int = Field(default=6, ge=1, le=168)
 
     auth_mode: AuthMode = AuthMode.LOCAL_TEST
     auth_disabled: bool = False
@@ -81,6 +90,38 @@ class Settings(BaseSettings):
     ai_request_timeout_seconds: int = 120
     ai_max_retries: int = 2
     ai_max_output_tokens: int | None = None
+
+    openai_api_key: SecretStr | None = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_text_model: str = "gpt-5"
+    openai_vision_model: str = "gpt-5"
+    openai_transcription_model: str = "whisper-1"
+    openai_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] = (
+        "medium"
+    )
+    openai_store_responses: bool = False
+    openai_max_output_tokens: int = Field(default=16000, ge=1)
+    openai_request_timeout_seconds: float = Field(default=180, gt=0)
+    openai_max_retries: int = Field(default=2, ge=0, le=10)
+    openai_image_detail: Literal["auto", "low", "high", "original"] = "auto"
+    openai_image_transport: Literal["base64"] = "base64"
+    openai_transcription_response_format: str = "verbose_json"
+    openai_transcription_timestamp_granularities: list[Literal["segment", "word"]] = Field(
+        default_factory=_default_openai_timestamp_granularities
+    )
+    openai_max_frames_per_video: int = Field(default=12, ge=1)
+    openai_max_frame_long_edge: int = Field(default=1280, ge=1)
+    openai_max_transcript_chars: int = Field(default=50000, ge=1)
+    openai_max_parallel_requests_per_workspace: int = Field(default=2, ge=1)
+    openai_model_media_observation: str | None = None
+    openai_model_creative_dna: str | None = None
+    openai_model_pattern_kit: str | None = None
+    openai_model_viral_kit: str | None = None
+    openai_model_adaptation: str | None = None
+    openai_model_campaign_pack: str | None = None
+    openai_model_decision_summary: str | None = None
+    openai_model_revision_message: str | None = None
+
     image_generation_enabled: bool = False
     video_generation_enabled: bool = False
     image_generation_model: str | None = None
@@ -101,12 +142,74 @@ class Settings(BaseSettings):
         "backend_cors_origins",
         "allowed_upload_mime_types",
         "oidc_allowed_algorithms",
+        "openai_transcription_timestamp_granularities",
         mode="before",
     )
     @classmethod
     def parse_csv(cls, value: Any) -> Any:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("openai_api_key", mode="before")
+    @classmethod
+    def normalize_empty_openai_key(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("openai_base_url")
+    @classmethod
+    def validate_openai_base_url(cls, value: str) -> str:
+        normalized = value.rstrip("/")
+        parsed = urlsplit(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("OPENAI_BASE_URL must be an absolute HTTP(S) URL.")
+        if parsed.username or parsed.password:
+            raise ValueError("OPENAI_BASE_URL must not contain credentials.")
+        return normalized
+
+    @field_validator("product_crawl_public_base_url")
+    @classmethod
+    def validate_product_crawl_public_base_url(cls, value: str) -> str:
+        normalized = value.rstrip("/")
+        parsed = urlsplit(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                "PRODUCT_CRAWL_PUBLIC_BASE_URL must be an absolute HTTP(S) URL."
+            )
+        if parsed.username or parsed.password:
+            raise ValueError(
+                "PRODUCT_CRAWL_PUBLIC_BASE_URL must not contain credentials."
+            )
+        return normalized
+
+    @field_validator(
+        "openai_text_model",
+        "openai_vision_model",
+        "openai_transcription_model",
+    )
+    @classmethod
+    def validate_required_openai_model(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Required OpenAI model settings must not be empty.")
+        return value.strip()
+
+    @field_validator(
+        "openai_model_media_observation",
+        "openai_model_creative_dna",
+        "openai_model_pattern_kit",
+        "openai_model_viral_kit",
+        "openai_model_adaptation",
+        "openai_model_campaign_pack",
+        "openai_model_decision_summary",
+        "openai_model_revision_message",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_openai_model(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip() or None
         return value
 
     @model_validator(mode="after")
@@ -142,6 +245,15 @@ class Settings(BaseSettings):
             ]
             if missing:
                 raise ValueError(f"Missing OIDC settings: {', '.join(missing)}")
+        if self.ai_mode == "live" and self.ai_provider == "openai" and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required when AI_MODE=live and AI_PROVIDER=openai.")
+        if (
+            is_prod_like
+            and self.ai_mode == "live"
+            and self.ai_provider == "openai"
+            and urlsplit(self.openai_base_url).scheme != "https"
+        ):
+            raise ValueError("OPENAI_BASE_URL must use HTTPS outside local/test.")
         return self
 
     @property
@@ -151,6 +263,22 @@ class Settings(BaseSettings):
     @property
     def public_version(self) -> str:
         return self.release_version or self.app_version
+
+    def resolve_openai_model(self, operation: str, *, vision: bool = False) -> str:
+        operation_models = {
+            "media_observation": self.openai_model_media_observation,
+            "creative_dna_build": self.openai_model_creative_dna,
+            "pattern_kit_extract": self.openai_model_pattern_kit,
+            "viral_kit_compose": self.openai_model_viral_kit,
+            "adaptation_generate": self.openai_model_adaptation,
+            "campaign_pack_generate": self.openai_model_campaign_pack,
+            "seller_decision_summary": self.openai_model_decision_summary,
+            "revision_message_generate": self.openai_model_revision_message,
+        }
+        uses_vision_model = vision or operation == "media_observation"
+        return operation_models.get(operation) or (
+            self.openai_vision_model if uses_vision_model else self.openai_text_model
+        )
 
 
 @lru_cache

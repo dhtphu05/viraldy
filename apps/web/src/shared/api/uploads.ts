@@ -19,11 +19,14 @@ export type UploadSession = {
     expires_at: string;
 };
 
+export type UploadAssetType = "reference" | "ugc" | "product_media" | "other";
+
 export async function uploadAsset(
     workspaceId: string,
     file: File,
     productId?: string,
     onProgress?: (value: number) => void,
+    assetType: UploadAssetType = "reference",
 ) {
     const session = await apiPost<UploadSession>(
         `/workspaces/${workspaceId}/assets/upload-sessions`,
@@ -31,7 +34,7 @@ export async function uploadAsset(
             filename: file.name,
             declared_mime_type: file.type || "video/mp4",
             declared_size_bytes: file.size,
-            asset_type: "video",
+            asset_type: assetType,
             product_id: productId ?? null,
         },
     );

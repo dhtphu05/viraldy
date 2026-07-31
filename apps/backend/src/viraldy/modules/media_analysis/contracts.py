@@ -52,6 +52,23 @@ class HookObservationV1(ObservationRefV1):
     product_present: bool | None = None
 
 
+class OnScreenTextObservationV1(ObservationRefV1):
+    time_range: TimeRangeV1
+    text: str = Field(min_length=1)
+    text_role: Literal[
+        "hook",
+        "product_identity",
+        "personalization",
+        "proof",
+        "offer",
+        "cta",
+        "disclosure",
+        "caption",
+        "other",
+        "unknown",
+    ] = "unknown"
+
+
 class ProductAppearanceV1(ObservationRefV1):
     time_range: TimeRangeV1
     visibility: Literal["clear", "partial", "obstructed", "uncertain"] = "uncertain"
@@ -254,6 +271,7 @@ class MediaObservationBundleV1(MediaObservationBase):
     schema_version: Literal["media_observation_v1"] = MEDIA_OBSERVATION_SCHEMA_VERSION
     duration_ms: int = Field(ge=0)
     hooks: list[HookObservationV1] = Field(default_factory=list)
+    on_screen_text: list[OnScreenTextObservationV1] = Field(default_factory=list)
     product_appearances: list[ProductAppearanceV1] = Field(default_factory=list)
     product_visibility: ProductVisibilitySummaryV1 = Field(
         default_factory=ProductVisibilitySummaryV1
@@ -307,6 +325,7 @@ def media_observation_bundle_to_json(bundle: MediaObservationBundleV1) -> dict[s
 def _all_time_ranges(bundle: MediaObservationBundleV1) -> list[TimeRangeV1]:
     ranges: list[TimeRangeV1] = []
     ranges.extend(item.time_range for item in bundle.hooks)
+    ranges.extend(item.time_range for item in bundle.on_screen_text)
     ranges.extend(item.time_range for item in bundle.product_appearances)
     ranges.extend(item.time_range for item in bundle.demo.steps)
     ranges.extend(item.time_range for item in bundle.proof_moments)
@@ -321,6 +340,7 @@ def _all_time_ranges(bundle: MediaObservationBundleV1) -> list[TimeRangeV1]:
 def _all_observation_ids(bundle: MediaObservationBundleV1) -> list[str]:
     ids: list[str] = []
     ids.extend(item.observation_id for item in bundle.hooks)
+    ids.extend(item.observation_id for item in bundle.on_screen_text)
     ids.extend(item.observation_id for item in bundle.product_appearances)
     ids.extend(item.observation_id for item in bundle.demo.steps)
     ids.extend(item.observation_id for item in bundle.proof_moments)

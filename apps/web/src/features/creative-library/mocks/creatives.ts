@@ -170,7 +170,7 @@ export const seedCreatives: CreativeReference[] = [
         tags: ["format:demo"],
         boardIds: ["b-kitchen"],
         linkedProductId: "p-1",
-        analysisStatus: "processing",
+        analysisStatus: "ready",
         savedAt: demoDaysAgo(0.05),
         thumbSeed: "sky",
     },

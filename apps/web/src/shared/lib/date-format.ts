@@ -20,3 +20,15 @@ export function formatUtcDate(value: string | Date) {
     if (!date) return "—";
     return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
+
+export function formatUtcMonthDay(value: string | Date) {
+    const date = toValidDate(value);
+    if (!date) return "—";
+    return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`;
+}
+
+export function formatUtcTime(value: string | Date) {
+    const date = toValidDate(value);
+    if (!date) return "—";
+    return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
+}

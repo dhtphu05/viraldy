@@ -44,7 +44,10 @@ from viraldy.modules.viral_kits.models import (
     ViralKitModel,
     ViralKitVersionModel,
 )
-from viraldy.modules.viral_kits.provider import build_fixture_viral_kit
+from viraldy.modules.viral_kits.provider import (
+    _native_output_validator,
+    build_fixture_viral_kit,
+)
 from viraldy.modules.viral_kits.schemas import (
     CreateViralKitCampaignPackRequest,
     CreateViralKitRequest,
@@ -118,6 +121,44 @@ class FakeAiModelRunRepository:
     ) -> FakeModelRun:
         self.failed.append((run.id, code))
         return run
+
+
+def test_native_viral_kit_validator_rejects_dropped_required_disclosure() -> None:
+    workspace_id = uuid4()
+    product = _product_snapshot(workspace_id)
+    pattern = _pattern_snapshot(workspace_id)
+    request = _create_request(product.product_id, [pattern.pattern_kit_version_id])
+    matches = match_patterns(
+        product_context=product.product_context,
+        patterns=[pattern],
+        request=request,
+    )
+    viral_kit = build_fixture_viral_kit(
+        viral_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=uuid4(),
+        created_at=utc_now(),
+        request=request,
+        product=product,
+        patterns=[pattern],
+        pattern_matches=matches,
+        model_run_id=uuid4(),
+    )
+    payload = viral_kit.model_dump(mode="json")
+    payload["concepts"][0]["required_disclosures"] = []  # type: ignore[index]
+    invalid = ViralKitV1.model_validate(payload)
+    validator = _native_output_validator(
+        viral_kit.id,
+        workspace_id,
+        1,
+        request,
+        product.model_dump(mode="json"),
+        [pattern.pattern_kit_version_id],
+    )
+
+    with pytest.raises(ValueError, match="required disclosures"):
+        validator(invalid)
 
 
 class FakeProductQueries:

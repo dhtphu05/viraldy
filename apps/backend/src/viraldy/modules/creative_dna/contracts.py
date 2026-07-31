@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,7 +16,6 @@ class CreativeDnaContractBase(BaseModel):
 
 
 class ObservedValueV1(CreativeDnaContractBase):
-    value: Any
     confidence: float = Field(ge=0, le=1)
     evidence_ids: list[UUID] = Field(default_factory=list)
     status: ObservedStatusV1
@@ -42,8 +41,31 @@ class ObservedStringListV1(ObservedValueV1):
     value: list[str] | None
 
 
-class ObservedObjectListV1(ObservedValueV1):
-    value: list[dict[str, object]] | None
+class TimeRangeValueV1(CreativeDnaContractBase):
+    start_ms: int | None
+    end_ms: int | None
+
+
+class ProductAppearanceValueV1(TimeRangeValueV1):
+    visibility: str | None
+    shot_type: str | None
+
+
+class DemoStepValueV1(TimeRangeValueV1):
+    step_index: int | None
+    action: str | None
+
+
+class ObservedTimeRangeListV1(ObservedValueV1):
+    value: list[TimeRangeValueV1] | None
+
+
+class ObservedProductAppearanceListV1(ObservedValueV1):
+    value: list[ProductAppearanceValueV1] | None
+
+
+class ObservedDemoStepListV1(ObservedValueV1):
+    value: list[DemoStepValueV1] | None
 
 
 class OpeningDnaV1(CreativeDnaContractBase):
@@ -54,7 +76,7 @@ class OpeningDnaV1(CreativeDnaContractBase):
     face_present: ObservedBoolV1
     product_present: ObservedBoolV1
     first_three_second_structure: ObservedStringV1
-    pattern_interrupts: ObservedObjectListV1
+    pattern_interrupts: ObservedTimeRangeListV1
 
 
 class ProductDnaV1(CreativeDnaContractBase):
@@ -65,68 +87,68 @@ class ProductDnaV1(CreativeDnaContractBase):
     hero_shot_present: ObservedBoolV1
     usage_present: ObservedBoolV1
     product_match: ObservedFloatV1
-    appearance_sequence: ObservedObjectListV1
+    appearance_sequence: ObservedProductAppearanceListV1
 
 
 class NarrativeDnaV1(CreativeDnaContractBase):
-    structure: ObservedValueV1
-    angle: ObservedValueV1
-    buyer_pain: ObservedValueV1
-    desired_outcome: ObservedValueV1
-    emotional_drivers: ObservedValueV1
-    awareness_stage: ObservedValueV1
+    structure: ObservedStringV1
+    angle: ObservedStringV1
+    buyer_pain: ObservedStringV1
+    desired_outcome: ObservedStringV1
+    emotional_drivers: ObservedStringListV1
+    awareness_stage: ObservedStringV1
 
 
 class DemoDnaV1(CreativeDnaContractBase):
     detected: ObservedBoolV1
-    demo_type: ObservedValueV1
-    mechanism_clarity: ObservedValueV1
-    before_state_visible: ObservedValueV1
-    after_state_visible: ObservedValueV1
-    result_clarity: ObservedValueV1
-    steps: ObservedValueV1
+    demo_type: ObservedStringV1
+    mechanism_clarity: ObservedStringV1
+    before_state_visible: ObservedBoolV1
+    after_state_visible: ObservedBoolV1
+    result_clarity: ObservedStringV1
+    steps: ObservedDemoStepListV1
 
 
 class ProofDnaV1(CreativeDnaContractBase):
-    proof_types: ObservedValueV1
-    strongest_proof: ObservedValueV1
-    verifiability: ObservedValueV1
-    proof_strength_label: ObservedValueV1
+    proof_types: ObservedStringListV1
+    strongest_proof: ObservedStringV1
+    verifiability: ObservedStringV1
+    proof_strength_label: ObservedStringV1
 
 
 class CreatorDnaV1(CreativeDnaContractBase):
     face_present: ObservedBoolV1
-    delivery_style: ObservedValueV1
-    creator_persona: ObservedValueV1
-    emotion: ObservedValueV1
-    pacing: ObservedValueV1
-    authenticity_cues: ObservedValueV1
-    sales_language_intensity: ObservedValueV1
+    delivery_style: ObservedStringV1
+    creator_persona: ObservedStringV1
+    emotion: ObservedStringV1
+    pacing: ObservedStringV1
+    authenticity_cues: ObservedStringListV1
+    sales_language_intensity: ObservedStringV1
 
 
 class EditingDnaV1(CreativeDnaContractBase):
     cut_count: ObservedIntV1
     average_shot_duration_ms: ObservedIntV1
     first_three_second_cut_count: ObservedIntV1
-    pacing: ObservedValueV1
-    caption_density: ObservedValueV1
-    pattern_interrupts: ObservedObjectListV1
-    dead_air_ranges: ObservedObjectListV1
+    pacing: ObservedStringV1
+    caption_density: ObservedStringV1
+    pattern_interrupts: ObservedTimeRangeListV1
+    dead_air_ranges: ObservedTimeRangeListV1
     dead_air_present: ObservedBoolV1
-    transition_types: ObservedValueV1
+    transition_types: ObservedStringListV1
 
 
 class OfferDnaV1(CreativeDnaContractBase):
     present: ObservedBoolV1
-    offer_types: ObservedValueV1
-    price_text: ObservedValueV1
-    discount_text: ObservedValueV1
+    offer_types: ObservedStringListV1
+    price_text: ObservedStringV1
+    discount_text: ObservedStringV1
     urgency_present: ObservedBoolV1
 
 
 class CtaDnaV1(CreativeDnaContractBase):
     present: ObservedBoolV1
-    cta_types: ObservedValueV1
+    cta_types: ObservedStringListV1
     first_appearance_ms: ObservedIntV1
     spoken_text: ObservedStringV1
     overlay_text: ObservedStringV1
@@ -134,11 +156,11 @@ class CtaDnaV1(CreativeDnaContractBase):
 
 
 class PlatformDnaV1(CreativeDnaContractBase):
-    vertical: ObservedValueV1
-    native_signals: ObservedValueV1
-    shop_signals: ObservedValueV1
-    safe_zone_risk: ObservedValueV1
-    format: ObservedValueV1
+    vertical: ObservedBoolV1
+    native_signals: ObservedStringListV1
+    shop_signals: ObservedStringListV1
+    safe_zone_risk: ObservedBoolV1
+    format: ObservedStringV1
 
 
 class ClaimDnaV1(CreativeDnaContractBase):
@@ -162,6 +184,17 @@ class ReusableMechanismV1(CreativeDnaContractBase):
     evidence_ids: list[UUID]
 
 
+class CreativeDnaCompletenessV1(CreativeDnaContractBase):
+    opening: bool
+    product: bool
+    demo: bool
+    proof: bool
+    cta: bool
+    creator: bool
+    editing: bool
+    platform: bool
+
+
 class CreativeDnaV1(CreativeDnaContractBase):
     schema_version: Literal["creative_dna_v1"] = CREATIVE_DNA_SCHEMA_VERSION
     opening: OpeningDnaV1
@@ -178,5 +211,5 @@ class CreativeDnaV1(CreativeDnaContractBase):
     risks: list[RiskDnaV1] = Field(default_factory=list)
     reusable_mechanisms: list[ReusableMechanismV1] = Field(default_factory=list)
     uncertainties: list[str] = Field(default_factory=list)
-    completeness: dict[str, bool]
+    completeness: CreativeDnaCompletenessV1
     overall_confidence: ConfidenceLabelV1

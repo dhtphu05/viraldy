@@ -15,7 +15,10 @@ import { CampaignRenameDialog } from "@/features/campaigns/components/campaign-r
 import { CampaignDeleteDialog } from "@/features/campaigns/components/campaign-delete-dialog";
 import { seedProducts } from "@/features/products/data/products";
 import { toast } from "sonner";
-import type { CampaignPackStatus } from "@/features/campaigns/types/campaign";
+import {
+    campaignLifecycleLabel,
+    selectCampaignReadiness,
+} from "@/features/campaigns/lib/campaignReadiness";
 
 export const Route = createFileRoute("/campaigns/")({
     head: () => ({
@@ -30,16 +33,15 @@ export const Route = createFileRoute("/campaigns/")({
     component: CampaignsIndex,
 });
 
-const STATUSES: (CampaignPackStatus | "All")[] = [
+const STATUSES = [
     "All",
     "Draft",
-    "Ready for creator",
+    "Ready to review",
+    "Creator-ready",
     "Creator production",
-    "Awaiting UGC",
-    "Active",
-    "Completed",
-    "Archived",
-];
+    "UGC received",
+    "Live",
+] as const;
 
 const SORTS = [
     { id: "updated", label: "Recently updated" },
@@ -51,11 +53,11 @@ const SORTS = [
 function CampaignsIndex() {
     const navigate = useNavigate();
     const campaigns = useAllCampaigns();
+    const packs = useAppStore((s) => s.packs);
     const duplicate = useAppStore((s) => s.duplicateCampaign);
     const archive = useAppStore((s) => s.archiveCampaign);
     const deleteLocal = useAppStore((s) => s.deleteLocalCampaign);
     const rename = useAppStore((s) => s.renameCampaign);
-    const setPackStatus = useAppStore((s) => s.setPackStatus);
     const localCampaignSummaries = useAppStore((s) => s.localCampaignSummaries);
     const localSet = useMemo(
         () => new Set(localCampaignSummaries.map((c) => c.id)),
@@ -95,7 +97,15 @@ function CampaignsIndex() {
                     (c.objective ?? "").toLowerCase().includes(query),
             );
         }
-        if (status !== "All") list = list.filter((c) => (c.packStatus ?? "Draft") === status);
+        if (status !== "All") {
+            list = list.filter((campaign) => {
+                const pack = campaign.packId ? packs[campaign.packId] : undefined;
+                return (
+                    pack &&
+                    campaignLifecycleLabel(selectCampaignReadiness(pack).lifecycle) === status
+                );
+            });
+        }
         if (productId !== "all") list = list.filter((c) => c.product === productId);
         if (objective !== "all") list = list.filter((c) => c.objective === objective);
         if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
@@ -106,7 +116,7 @@ function CampaignsIndex() {
                     new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
             );
         return list;
-    }, [campaigns, q, status, productId, objective, sort]);
+    }, [campaigns, packs, q, status, productId, objective, sort]);
 
     return (
         <AppShell>
@@ -256,6 +266,11 @@ function CampaignsIndex() {
                             <CampaignListRow
                                 key={c.id}
                                 campaign={c}
+                                readiness={
+                                    c.packId && packs[c.packId]
+                                        ? selectCampaignReadiness(packs[c.packId])
+                                        : undefined
+                                }
                                 onRename={() => setRenameTarget({ id: c.id, name: c.name })}
                                 onDuplicate={() => {
                                     const newId = duplicate(c.id);
@@ -265,16 +280,6 @@ function CampaignsIndex() {
                                             to: "/campaigns/$campaignId",
                                             params: { campaignId: newId },
                                         });
-                                    }
-                                }}
-                                onChangeStatus={() => {
-                                    const next: CampaignPackStatus =
-                                        (c.packStatus ?? "Draft") === "Draft"
-                                            ? "Ready for creator"
-                                            : "Draft";
-                                    if (c.packId) {
-                                        setPackStatus(c.packId, next);
-                                        toast.success(`Status: ${next}`);
                                     }
                                 }}
                                 onArchive={() => {

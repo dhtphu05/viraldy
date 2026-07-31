@@ -5,19 +5,33 @@ import type { CampaignPack } from "@/features/campaigns/types/campaign";
 import { Link } from "@tanstack/react-router";
 import { seedProducts } from "@/features/products/data/products";
 import { Info, Sparkles } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
 
-export function EvidencePanel({ pack }: { pack: CampaignPack }) {
+export function EvidencePanel({
+    pack,
+    layout = "rail",
+}: {
+    pack: CampaignPack;
+    layout?: "rail" | "summary";
+}) {
     const creatives = useAppStore((s) => s.creatives);
     const analyses = useAppStore((s) => s.analyses);
     const refs = pack.referenceCreativeIds
         .map((id) => creatives.find((c) => c.id === id))
         .filter(Boolean);
+    const visibleRefs = refs.slice(0, 3);
+    const remainingReferenceCount = Math.max(0, refs.length - visibleRefs.length);
     const product = seedProducts.find((p) => p.id === pack.productId);
     const primaryAngle = pack.angleOptions.find((a) => a.id === pack.primaryAngleId);
     return (
         <SurfaceCard
             padding="none"
-            className="divide-y divide-divider overflow-hidden border-y border-divider"
+            className={cn(
+                "overflow-hidden border-y border-divider",
+                layout === "summary"
+                    ? "grid divide-y divide-divider sm:grid-cols-2 sm:divide-x sm:divide-y-0"
+                    : "divide-y divide-divider",
+            )}
         >
             <section className="p-4">
                 <div className="flex items-center gap-2">
@@ -81,7 +95,7 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
                     <p className="mt-2 text-xs text-text-secondary">No references selected.</p>
                 ) : (
                     <ul className="mt-2 flex flex-col divide-y divide-hairline/60">
-                        {refs.map((c) => {
+                        {visibleRefs.map((c) => {
                             if (!c) return null;
                             const a = analyses[c.id];
                             return (
@@ -91,15 +105,15 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
                                         params={{ creativeId: c.id }}
                                         className="block rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                     >
-                                        <p className="truncate text-sm font-medium text-text-primary">
+                                        <p className="line-clamp-2 break-words text-sm font-medium text-text-primary">
                                             {c.title}
                                         </p>
-                                        <p className="truncate text-xs text-text-secondary">
+                                        <p className="mt-0.5 line-clamp-2 break-words text-xs text-text-secondary">
                                             {c.platform} · {c.angle}{" "}
                                             {c.dnaScore ? `· DNA ${c.dnaScore}` : ""}
                                         </p>
                                         {a && (
-                                            <p className="mt-1 truncate text-[11px] text-text-tertiary">
+                                            <p className="mt-1 line-clamp-2 break-words text-[11px] text-text-tertiary">
                                                 {a.decision}
                                             </p>
                                         )}
@@ -108,6 +122,12 @@ export function EvidencePanel({ pack }: { pack: CampaignPack }) {
                             );
                         })}
                     </ul>
+                )}
+                {remainingReferenceCount > 0 && (
+                    <p className="mt-2 text-[11px] font-medium text-text-tertiary">
+                        +{remainingReferenceCount} more selected reference
+                        {remainingReferenceCount === 1 ? "" : "s"}
+                    </p>
                 )}
             </section>
 

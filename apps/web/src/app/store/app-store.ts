@@ -12,6 +12,7 @@ import { createPerformanceSlice } from "./slices/performance-slice";
 import { createShellSlice } from "./slices/shell-slice";
 import { createUgcReviewSlice } from "./slices/ugc-review-slice";
 import type { AppState } from "./store-types";
+import { restoreInterruptedAnalysisStates } from "@/features/creative-library/lib/analysis-job-feedback";
 
 function mergeSeededList<T extends { id: string }>(seeded: T[], persisted?: T[]) {
     if (!persisted) return seeded;
@@ -21,11 +22,17 @@ function mergeSeededList<T extends { id: string }>(seeded: T[], persisted?: T[])
 
 function mergePersistedState(persisted: unknown, current: AppState): AppState {
     const state = (persisted ?? {}) as Partial<AppState>;
+    const analysisJobs = state.analysisJobs ?? current.analysisJobs;
+    const creatives = restoreInterruptedAnalysisStates(
+        mergeSeededList(current.creatives, state.creatives),
+        analysisJobs,
+    );
     return {
         ...current,
         ...state,
+        analysisJobs,
         boards: mergeSeededList(current.boards, state.boards),
-        creatives: mergeSeededList(current.creatives, state.creatives),
+        creatives,
         analyses: { ...current.analyses, ...(state.analyses ?? {}) },
         packs: { ...current.packs, ...(state.packs ?? {}) },
         ugcAssets: mergeSeededList(current.ugcAssets, state.ugcAssets),
@@ -41,16 +48,17 @@ function mergePersistedState(persisted: unknown, current: AppState): AppState {
 
 export const useAppStore = create<AppState>()(
     persist(
-        (set, get) => ({
-            ...initialAppState,
-            ...createShellSlice(set),
-            ...createDashboardSlice(set),
-            ...createCreativeLibrarySlice(set, get),
-            ...createCampaignsSlice(set, get),
-            ...createUgcReviewSlice(set, get),
-            ...createPerformanceSlice(set),
-            reset: () => set({ ...initialAppState }),
-        }),
+        (set, get) =>
+            ({
+                ...initialAppState,
+                ...createShellSlice(set),
+                ...createDashboardSlice(set),
+                ...createCreativeLibrarySlice(set, get),
+                ...createCampaignsSlice(set, get),
+                ...createUgcReviewSlice(set, get),
+                ...createPerformanceSlice(set),
+                reset: () => set({ ...initialAppState }),
+            }) as AppState,
         {
             name: "viraldy-app",
             storage:

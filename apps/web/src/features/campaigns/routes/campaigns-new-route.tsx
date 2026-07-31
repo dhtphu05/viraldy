@@ -7,6 +7,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { ActionTray } from "@/shared/ui/action-tray";
 import { toast } from "sonner";
 import { useAppStore } from "@/app/store/app-store";
 import { seedProducts } from "@/features/products/data/products";
@@ -242,7 +243,43 @@ function NewCampaign() {
     }
 
     return (
-        <AppShell>
+        <AppShell
+            footer={
+                <ActionTray
+                    sticky={false}
+                    className="rounded-md border border-divider shadow-floating-card"
+                    context={
+                        <div className="min-w-0 text-xs text-text-secondary">
+                            <p className="font-medium text-text-primary">
+                                {selectedProduct?.name ?? "Select a product"}
+                            </p>
+                            <p className="truncate">
+                                {objective} · {market} · {refs.length} reference
+                                {refs.length === 1 ? "" : "s"}
+                            </p>
+                        </div>
+                    }
+                    secondaryAction={
+                        <Button
+                            variant="ghost"
+                            onClick={() => {
+                                clearDraft();
+                                setName("");
+                                setNameEdited(false);
+                                setError(null);
+                            }}
+                        >
+                            Clear
+                        </Button>
+                    }
+                    primaryAction={
+                        <Button onClick={createCampaign} disabled={busy}>
+                            {busy ? "Creating…" : "Create campaign"}
+                        </Button>
+                    }
+                />
+            }
+        >
             <div className="flex flex-col gap-6">
                 <PageHeader
                     title="New campaign"
@@ -516,42 +553,9 @@ function NewCampaign() {
                                 Select up to 5 references. You can add more from the workspace.
                             </p>
                         </div>
-
-                        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-col gap-3 border-t border-divider bg-surface px-4 py-4 sm:-mx-7 sm:-mb-7 sm:flex-row sm:items-center sm:justify-between sm:px-7">
-                            <div className="min-w-0 text-xs text-text-secondary">
-                                <p className="font-medium text-text-primary">
-                                    {selectedProduct?.name ?? "Select a product"}
-                                </p>
-                                <p className="truncate">
-                                    {objective} · {market} · {refs.length} reference
-                                    {refs.length === 1 ? "" : "s"}
-                                </p>
-                            </div>
-                            <div className="flex w-full items-center gap-2 sm:w-auto">
-                                <Button
-                                    variant="ghost"
-                                    className="flex-1 sm:flex-none"
-                                    onClick={() => {
-                                        clearDraft();
-                                        setName("");
-                                        setNameEdited(false);
-                                        setError(null);
-                                    }}
-                                >
-                                    Clear
-                                </Button>
-                                <Button
-                                    className="flex-1 sm:flex-none"
-                                    onClick={createCampaign}
-                                    disabled={busy}
-                                >
-                                    {busy ? "Creating…" : "Create campaign"}
-                                </Button>
-                            </div>
-                        </div>
                     </section>
 
-                    <aside className="h-fit border-y border-divider bg-surface px-4 py-5 xl:sticky xl:top-20">
+                    <aside className="h-fit border-y border-divider bg-surface px-4 py-5 xl:sticky xl:top-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-xs font-semibold uppercase text-text-tertiary">
                                 Setup readiness

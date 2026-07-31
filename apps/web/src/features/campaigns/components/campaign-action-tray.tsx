@@ -2,7 +2,8 @@ import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { ActionTray } from "@/shared/ui/action-tray";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
-import { STEPS, completionPercent, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
+import { STEPS, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
+import { selectCampaignReadiness } from "@/features/campaigns/lib/campaignReadiness";
 import type { CampaignPack, StepId } from "@/features/campaigns/types/campaign";
 
 export function CampaignActionTray({
@@ -21,10 +22,12 @@ export function CampaignActionTray({
     const previousStep = STEPS[currentIndex - 1];
     const nextStep = STEPS[currentIndex + 1];
     const complete = stepIsComplete(pack, step);
+    const readiness = selectCampaignReadiness(pack);
 
     return (
         <ActionTray
-            className="bottom-0 mb-0 rounded-md border border-control-border shadow-none"
+            sticky={false}
+            className="rounded-md border border-control-border shadow-none"
             context={
                 <div className="flex min-w-0 items-start gap-2">
                     <StatusChip tone={complete ? "ok" : "neutral"} dot>
@@ -33,8 +36,8 @@ export function CampaignActionTray({
                     <div className="min-w-0">
                         <p className="font-medium text-text-primary">{currentStep.label}</p>
                         <p className="mt-0.5 text-xs text-text-secondary">
-                            {complete ? "Saved locally." : blockerForStep(pack, step)}{" "}
-                            {completionPercent(pack)}% complete.
+                            {complete ? "Saved in this browser." : blockerForStep(pack, step)}{" "}
+                            {readiness.completionPercent}% complete.
                         </p>
                     </div>
                 </div>

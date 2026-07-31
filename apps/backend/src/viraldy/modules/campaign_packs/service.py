@@ -4,24 +4,25 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from viraldy.modules.adaptations.contracts import AdaptationConceptV2, AdaptationOutputV2
 from viraldy.modules.adaptations.public import AdaptationRepository
-from viraldy.modules.ai_gateway.public import ADAPTATION_SCHEMA_VERSION
-from viraldy.modules.campaign_packs.contracts import (
-    CampaignAngleV1,
-    CampaignAudienceV1,
-    CampaignObjectiveV1,
-    CampaignPackBriefV1,
-    ClaimGuardrailsV1,
-    CreatorDirectionV1,
-    CtaDirectionV1,
-    HookOptionV1,
-    MustShowRequirementV1,
-    RightsNoteV1,
-    ScriptBeatV1,
-    StoryboardSceneV1,
+from viraldy.modules.ai_gateway.public import (
+    CAMPAIGN_PACK_PROMPT_NAME,
+    CAMPAIGN_PACK_PROMPT_VERSION,
+    AiModelRunModel,
+    AiModelRunRepository,
 )
+from viraldy.modules.campaign_packs.brief_builder import (
+    build_adaptation_campaign_pack_brief,
+)
+from viraldy.modules.campaign_packs.contracts import CampaignPackBriefV1
 from viraldy.modules.campaign_packs.exporter import build_campaign_pack_export
 from viraldy.modules.campaign_packs.models import CampaignPackModel, CampaignPackVersionModel
+from viraldy.modules.campaign_packs.provider import (
+    CampaignPackGenerationProvider,
+    CampaignPackProviderExecution,
+    stable_json_hash,
+)
 from viraldy.modules.campaign_packs.repository import CampaignPackRepository
 from viraldy.modules.campaign_packs.requirements import (
     compile_campaign_requirements,
@@ -36,17 +37,28 @@ from viraldy.modules.campaign_packs.schemas import (
     ExportCampaignPackRequest,
     UpdateCampaignPackRequest,
 )
-from viraldy.modules.creative_domain.schema_versions import COMPILED_REQUIREMENTS_SCHEMA_VERSION
+from viraldy.modules.creative_domain.schema_versions import (
+    CAMPAIGN_PACK_SCHEMA_VERSION,
+    COMPILED_REQUIREMENTS_SCHEMA_VERSION,
+)
 from viraldy.modules.product_events.public import ProductEventPublisher
 from viraldy.modules.products.contracts import ProductContextV1
+from viraldy.modules.products.public import ProductContextSnapshot, ProductQueries
+from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError, NotFoundError
+
+_brief_from_concept = build_adaptation_campaign_pack_brief
 
 
 class CampaignPackService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, settings: Settings) -> None:
         self._session = session
+        self._settings = settings
         self._repository = CampaignPackRepository(session)
         self._adaptations = AdaptationRepository(session)
+        self._products = ProductQueries(session)
+        self._model_runs = AiModelRunRepository(session)
+        self._provider = CampaignPackGenerationProvider(settings)
 
     async def create(
         self,
@@ -57,36 +69,169 @@ class CampaignPackService:
         adaptation = await self._adaptations.get(workspace_id, data.adaptation_run_id)
         if adaptation is None:
             raise NotFoundError("ADAPTATION_NOT_FOUND", "Adaptation run was not found.")
-        concept = _find_concept(adaptation.result_json, data.concept_id)
-        if concept is None:
-            raise NotFoundError("ADAPTATION_CONCEPT_NOT_FOUND", "Adaptation concept was not found.")
-        brief = _brief_from_concept(
+        if adaptation.status != "completed":
+            raise AppError(
+                "ADAPTATION_NOT_COMPLETED",
+                "Campaign Pack generation requires a completed adaptation.",
+                status_code=409,
+            )
+        product = await self._load_current_product(workspace_id, adaptation.product_id)
+        _validate_adaptation_product_snapshot(adaptation.product_snapshot_json, product)
+        concept = _selected_adaptation_concept(adaptation.result_json, data.concept_id)
+        _validate_source_concept(
+            product.product_context,
+            adaptation.target_buyer_json,
+            concept,
+        )
+        deterministic_brief = _brief_from_concept(
             adaptation.objective,
             adaptation.target_market,
             adaptation.target_buyer_json,
             adaptation.product_snapshot_json,
-            concept,
+            concept.model_dump(mode="json"),
             adaptation.id,
             data.concept_id,
         )
-        compiled = compile_campaign_requirements(brief.model_dump(mode="json"))
-        pack, version = await self._repository.create(
-            workspace_id,
-            user_id,
-            adaptation.product_id,
-            adaptation.id,
-            brief.model_dump(mode="json"),
-            adaptation.primary_model_run_id,
-            adaptation.prompt_version,
-            ADAPTATION_SCHEMA_VERSION,
-            brief.product_snapshot.model_dump(mode="json"),
-            compiled_requirements_to_json(compiled),
-            COMPILED_REQUIREMENTS_SCHEMA_VERSION,
+        input_summary: dict[str, object] = {
+            "adaptation_run_id": str(adaptation.id),
+            "concept_id": concept.id,
+            "objective": adaptation.objective,
+            "product_context_version": product.product_context_version,
+            "product_id": str(product.product_id),
+            "target_market": adaptation.target_market,
+        }
+        model_run = await self._create_model_run(
+            workspace_id=workspace_id,
+            adaptation_run_id=adaptation.id,
+            input_summary=input_summary,
         )
+        provider_execution: CampaignPackProviderExecution | None = None
+        try:
+            brief = deterministic_brief
+            if self._settings.ai_mode != "fixture":
+                provider_execution = self._provider.generate_with_metadata(
+                    workspace_id=workspace_id,
+                    actor_user_id=user_id,
+                    model_run_id=model_run.id,
+                    product_id=product.product_id,
+                    product_context=product.product_context,
+                    product_context_version=product.product_context_version,
+                    adaptation_run_id=adaptation.id,
+                    selected_concept=concept,
+                    objective=adaptation.objective,
+                    target_market=adaptation.target_market,
+                    target_buyer=adaptation.target_buyer_json,
+                    adaptation_constraints=adaptation.constraints_json,
+                    deterministic_baseline=deterministic_brief,
+                )
+                brief = provider_execution.output
+            compiled = compile_campaign_requirements(brief.model_dump(mode="json"))
+            pack, version = await self._repository.create(
+                workspace_id=workspace_id,
+                user_id=user_id,
+                product_id=adaptation.product_id,
+                adaptation_run_id=adaptation.id,
+                brief_json=brief.model_dump(mode="json"),
+                source_model_run_id=model_run.id,
+                source_prompt_version=CAMPAIGN_PACK_PROMPT_VERSION,
+                source_schema_version=CAMPAIGN_PACK_SCHEMA_VERSION,
+                product_snapshot_json=brief.product_snapshot.model_dump(mode="json"),
+                compiled_requirements_json=compiled_requirements_to_json(compiled),
+                requirements_schema_version=COMPILED_REQUIREMENTS_SCHEMA_VERSION,
+            )
+            await self._complete_model_run(
+                model_run,
+                brief,
+                provider_execution,
+            )
+        except AppError as exc:
+            await _fail_model_run(self._model_runs, model_run, exc)
+            await self._session.commit()
+            raise
         await self._session.commit()
         await self._session.refresh(pack)
         await self._session.refresh(version)
         return _pack_response(pack, version)
+
+    async def _load_current_product(
+        self,
+        workspace_id: UUID,
+        product_id: UUID,
+    ) -> ProductContextSnapshot:
+        product = await self._products.get_product_context_snapshot(
+            workspace_id,
+            product_id,
+        )
+        if product is None:
+            raise NotFoundError("PRODUCT_NOT_FOUND", "Product was not found.")
+        return product
+
+    async def _create_model_run(
+        self,
+        *,
+        workspace_id: UUID,
+        adaptation_run_id: UUID,
+        input_summary: dict[str, object],
+    ) -> AiModelRunModel:
+        input_hash = stable_json_hash(input_summary)
+        return await self._model_runs.create_running(
+            workspace_id=workspace_id,
+            processing_job_id=None,
+            subject_type="adaptation_concept",
+            subject_id=adaptation_run_id,
+            capability="campaign_pack_generate",
+            operation="campaign_pack_generate",
+            analysis_mode=self._settings.ai_mode,
+            provider=_provider_name(self._settings),
+            model=_model_name(self._settings),
+            prompt_version=CAMPAIGN_PACK_PROMPT_VERSION,
+            response_schema_version=CAMPAIGN_PACK_SCHEMA_VERSION,
+            schema_version=CAMPAIGN_PACK_SCHEMA_VERSION,
+            request_hash=input_hash,
+            input_hash=input_hash,
+            input_summary=input_summary,
+            endpoint_family=_endpoint_family(self._settings),
+            prompt_name=CAMPAIGN_PACK_PROMPT_NAME,
+            attempt_count=1,
+            repair_attempt_count=0,
+        )
+
+    async def _complete_model_run(
+        self,
+        model_run: AiModelRunModel,
+        brief: CampaignPackBriefV1,
+        execution: CampaignPackProviderExecution | None,
+    ) -> None:
+        output_summary: dict[str, object] = {
+            "hook_count": len(brief.hooks),
+            "must_show_count": len(brief.must_show),
+            "script_beat_count": len(brief.script_beats),
+            "source_adaptation_run_id": (
+                str(brief.source_adaptation_run_id) if brief.source_adaptation_run_id else None
+            ),
+            "source_concept_id": brief.source_concept_id,
+        }
+        if execution is None:
+            output_summary["execution_mode"] = "deterministic_fixture"
+            await self._model_runs.complete(
+                model_run,
+                output_summary,
+                http_status=None,
+                provider_request_id=None,
+                latency_ms=None,
+                usage_json={"fixture": True},
+                repair_attempt_count=0,
+            )
+            return
+        await self._model_runs.complete(
+            model_run,
+            {**output_summary, "execution_mode": "provider_structured_output"},
+            http_status=execution.http_status,
+            provider_request_id=execution.provider_request_id,
+            latency_ms=execution.latency_ms,
+            usage_json=execution.usage_json,
+            repair_attempt_count=execution.repair_attempt_count,
+        )
 
     async def list_packs(self, workspace_id: UUID) -> list[CampaignPackResponse]:
         packs = await self._repository.list(workspace_id)
@@ -225,207 +370,122 @@ def _pack_response(
     )
 
 
-def _find_concept(result_json: dict[str, object], concept_id: str) -> dict[str, object] | None:
-    concepts = result_json.get("concepts", [])
-    if not isinstance(concepts, list):
-        return None
-    for concept in concepts:
-        if isinstance(concept, dict) and concept.get("id") == concept_id:
-            return concept
-    return None
-
-
-def _brief_from_concept(
-    objective: str,
-    target_market: str,
-    target_buyer: dict[str, object],
-    product_snapshot_json: dict[str, object] | None,
-    concept: dict[str, object],
-    adaptation_run_id: UUID,
+def _selected_adaptation_concept(
+    result_json: dict[str, object],
     concept_id: str,
-) -> CampaignPackBriefV1:
+) -> AdaptationConceptV2:
+    try:
+        output = AdaptationOutputV2.model_validate(result_json)
+    except Exception as exc:
+        raise AppError(
+            "ADAPTATION_OUTPUT_INVALID",
+            "Campaign Pack generation requires valid AdaptationOutputV2 provenance.",
+        ) from exc
+    for concept in output.concepts:
+        if concept.id == concept_id:
+            return concept
+    raise NotFoundError(
+        "ADAPTATION_CONCEPT_NOT_FOUND",
+        "Adaptation concept was not found.",
+    )
+
+
+def _validate_adaptation_product_snapshot(
+    product_snapshot_json: dict[str, object] | None,
+    current_product: ProductContextSnapshot,
+) -> None:
     if not product_snapshot_json:
         raise AppError(
             "PRODUCT_CONTEXT_SNAPSHOT_REQUIRED",
-            "Campaign Pack generation requires a typed product context snapshot.",
+            "Campaign Pack generation requires the adaptation product snapshot.",
         )
-    product_snapshot = ProductContextV1.model_validate(product_snapshot_json)
-    hook_options = _list_of_text(concept.get("hook_options"))
-    must_show = _list_of_text(concept.get("must_show"))
-    demo_sequence = _list_of_text(concept.get("demo_sequence"))
-    claim_guardrails = _list_of_text(concept.get("claim_guardrails"))
-    buyer_persona_id = _buyer_persona_id(product_snapshot, target_buyer, concept)
-    buyer_persona_label = _buyer_persona_label(product_snapshot, target_buyer, concept)
-    creator_persona = _creator_persona(product_snapshot, concept)
-    pain = str(concept.get("buyer_pain") or target_buyer.get("pain") or "documented buyer pain")
-    outcome = str(
-        concept.get("desired_outcome")
-        or target_buyer.get("desired_outcome")
-        or "documented product outcome"
-    )
-    return CampaignPackBriefV1(
-        product_snapshot=product_snapshot,
-        objective=CampaignObjectiveV1(
-            objective_type=objective,
-            primary_action="create_ugc_revision",
-            channel="tiktok_shop" if "shop" in objective.lower() else "unknown",
-        ),
-        audience=CampaignAudienceV1(
-            persona_id=buyer_persona_id,
-            persona_label=buyer_persona_label,
-            pain_points=[pain],
-            desired_outcomes=[outcome],
-            objections=[],
-            awareness_stage="unknown",
-        ),
-        angle=CampaignAngleV1(
-            name=str(concept.get("angle") or product_snapshot.identity.name),
-            promise=outcome,
-            mechanism=str(concept.get("demo_mechanism") or "show product in use"),
-            emotional_driver=pain,
-        ),
-        creator_direction=CreatorDirectionV1(
-            persona=creator_persona,
-            delivery_style=str(concept.get("delivery_style") or "authentic_review"),
-            tone=["clear", "evidence-led"],
-            avoid_tones=["overclaiming"],
-            authenticity_notes=["show observed use, not performance predictions"],
-        ),
-        hooks=[
-            HookOptionV1(
-                id=f"hook_{index}",
-                spoken_text=hook,
-                opening_visual=str(concept.get("opening_visual") or "show product context"),
-                hook_type=str(concept.get("strategic_axis") or "unknown"),
-                target_time_ms=0,
-                mandatory=index == 1,
-            )
-            for index, hook in enumerate(
-                hook_options or [f"Show {product_snapshot.identity.name}"], start=1
-            )
-        ],
-        script_beats=[
-            ScriptBeatV1(
-                id=f"beat_{index}",
-                sequence=index,
-                beat_type="demo" if "demo" in beat.lower() else "scene",
-                instruction=beat,
-                required=True,
-            )
-            for index, beat in enumerate(demo_sequence or ["show product in use"], start=1)
-        ],
-        storyboard=[
-            StoryboardSceneV1(
-                id=f"scene_{index}",
-                sequence=index,
-                instruction=scene,
-                shot_type="close_up" if "close" in scene.lower() else "in_use",
-                product_visibility_required="product" in scene.lower() or "use" in scene.lower(),
-                required=True,
-            )
-            for index, scene in enumerate(must_show or demo_sequence or ["product in use"], start=1)
-        ],
-        must_show=[
-            MustShowRequirementV1(
-                id=f"must_show_{index}",
-                requirement_type=_requirement_type(text),
-                description=text,
-                severity="hard" if "claim" in text.lower() else "high",
-                expected_before_ms=3000 if "product" in text.lower() else None,
-                source_path=f"concepts[{concept_id}].must_show[{index - 1}]",
-            )
-            for index, text in enumerate(must_show or ["product visible", "demo in use"], start=1)
-        ],
-        talking_points=[pain, outcome],
-        text_overlays=hook_options[:2],
-        proof_direction=[str(concept.get("proof_mechanism") or "show observable result")],
-        offer_direction=[text] if (text := str(concept.get("offer_framing") or "").strip()) else [],
-        cta=CtaDirectionV1(
-            spoken="Check the product tag if this campaign is for TikTok Shop.",
-            overlay="Product tag",
-            cta_type="product_tag",
-            product_tag_required=True,
-            required_before_ms=None,
-        ),
-        claim_guardrails=ClaimGuardrailsV1(
-            allowed=[],
-            allowed_with_qualification=[],
-            prohibited=claim_guardrails,
-            required_disclosures=product_snapshot.governance.required_disclosures,
-        ),
-        do=["show product clearly", "show observable use", "keep claims evidence-backed"],
-        dont=["copy the reference script exactly", "add unsupported performance claims"],
-        rights_note=RightsNoteV1(
-            note="Rights/Spark requests are informational and remain pending until authorized."
-        ),
-        revision_checklist=[
-            "Product appears clearly",
-            "Demo shows product in use",
-            "Proof or result is observable",
-            "CTA/product tag is included when required",
-            "No prohibited claim is included",
-        ],
-        source_adaptation_run_id=adaptation_run_id,
-        source_concept_id=concept_id,
-    )
+    try:
+        adaptation_snapshot = ProductContextV1.model_validate(product_snapshot_json)
+    except Exception as exc:
+        raise AppError(
+            "PRODUCT_CONTEXT_SNAPSHOT_INVALID",
+            "Campaign Pack generation requires a valid product snapshot.",
+        ) from exc
+    if adaptation_snapshot != current_product.product_context:
+        raise AppError(
+            "CAMPAIGN_PACK_PRODUCT_SNAPSHOT_STALE",
+            "The product changed after adaptation. Regenerate the adaptation first.",
+            status_code=409,
+            details={
+                "current_product_context_version": current_product.product_context_version,
+            },
+        )
 
 
-def _list_of_text(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [text for item in value if (text := str(item).strip())]
-
-
-def _requirement_type(text: str) -> str:
-    lowered = text.lower()
-    if "cta" in lowered or "shop" in lowered or "tag" in lowered:
-        return "cta"
-    if "demo" in lowered or "use" in lowered or "using" in lowered:
-        return "demo"
-    if "before" in lowered or "after" in lowered or "result" in lowered or "proof" in lowered:
-        return "proof"
-    if "offer" in lowered or "discount" in lowered or "price" in lowered:
-        return "offer"
-    if "claim" in lowered or "disclosure" in lowered:
-        return "claim"
-    if "overlay" in lowered or "caption" in lowered or "text" in lowered:
-        return "overlay"
-    if "creator" in lowered or "face" in lowered or "voice" in lowered:
-        return "creator"
-    if "product" in lowered or "close-up" in lowered or "close up" in lowered:
-        return "product"
-    return "scene"
-
-
-def _buyer_persona_id(
-    product_snapshot: ProductContextV1,
+def _validate_source_concept(
+    product: ProductContextV1,
     target_buyer: dict[str, object],
-    concept: dict[str, object],
-) -> str | None:
-    concept_id = concept.get("buyer_persona_id")
-    if concept_id:
-        return str(concept_id)
-    if product_snapshot.personas:
-        return product_snapshot.personas[0].id
-    target_id = target_buyer.get("persona_id")
-    return str(target_id) if target_id else None
+    concept: AdaptationConceptV2,
+) -> None:
+    if concept.buyer_persona_label.casefold() == concept.creator_persona.casefold():
+        raise AppError(
+            "CAMPAIGN_PACK_PERSONA_COLLISION",
+            "Buyer and creator personas must remain separate.",
+        )
+    target_persona_id = str(target_buyer.get("persona_id") or "").strip()
+    if target_persona_id and concept.buyer_persona_id != target_persona_id:
+        raise AppError(
+            "CAMPAIGN_PACK_BUYER_MISMATCH",
+            "The selected concept does not match the adaptation buyer.",
+        )
+    product_persona_ids = {persona.id for persona in product.personas}
+    if (
+        concept.buyer_persona_id
+        and product_persona_ids
+        and concept.buyer_persona_id not in product_persona_ids
+    ):
+        raise AppError(
+            "CAMPAIGN_PACK_BUYER_MISMATCH",
+            "The selected concept buyer is not present in Product Context.",
+        )
+    if product.creative.creator_personas and concept.creator_persona not in (
+        product.creative.creator_personas
+    ):
+        raise AppError(
+            "CAMPAIGN_PACK_CREATOR_MISMATCH",
+            "The selected concept creator is not present in Product Context.",
+        )
 
 
-def _buyer_persona_label(
-    product_snapshot: ProductContextV1,
-    target_buyer: dict[str, object],
-    concept: dict[str, object],
-) -> str:
-    if label := str(concept.get("buyer_persona_label") or "").strip():
-        return label
-    if product_snapshot.personas:
-        return product_snapshot.personas[0].label
-    return str(target_buyer.get("persona") or "unspecified buyer")
+def _provider_name(settings: Settings) -> str:
+    return "fixture" if settings.ai_mode == "fixture" else settings.ai_provider
 
 
-def _creator_persona(product_snapshot: ProductContextV1, concept: dict[str, object]) -> str:
-    if persona := str(concept.get("creator_persona") or "").strip():
-        return persona
-    if product_snapshot.creative.creator_personas:
-        return product_snapshot.creative.creator_personas[0]
-    return "unspecified creator"
+def _model_name(settings: Settings) -> str:
+    if settings.ai_mode == "fixture":
+        return "fixture_campaign_pack_v1"
+    if settings.ai_provider == "openai":
+        return settings.resolve_openai_model("campaign_pack_generate")
+    return settings.ai_text_model or "unconfigured"
+
+
+def _endpoint_family(settings: Settings) -> str | None:
+    if settings.ai_mode == "fixture":
+        return None
+    return "responses" if settings.ai_provider == "openai" else "chat_completions"
+
+
+async def _fail_model_run(
+    repository: AiModelRunRepository,
+    model_run: AiModelRunModel,
+    error: AppError,
+) -> None:
+    http_status = error.details.get("http_status")
+    provider_request_id = error.details.get("provider_request_id")
+    repair_attempt_count = error.details.get("repair_attempt_count")
+    await repository.fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=http_status if isinstance(http_status, int) else None,
+        safe_error_message=error.message,
+        provider_request_id=(provider_request_id if isinstance(provider_request_id, str) else None),
+        repair_attempt_count=(
+            repair_attempt_count if isinstance(repair_attempt_count, int) else None
+        ),
+    )

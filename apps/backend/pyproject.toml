@@ -11,6 +11,7 @@ dependencies = [
   "fastapi==0.139.0",
   "gunicorn==23.0.0",
   "httpx==0.28.1",
+  "openai==2.51.0",
   "opentelemetry-api==1.29.0",
   "opentelemetry-sdk==1.29.0",
   "psycopg[binary]==3.2.3",
@@ -24,9 +25,16 @@ dependencies = [
   "structlog==24.4.0",
   "uvicorn[standard]==0.34.0",
   "pytest>=8.3.4",
+  "pillow==12.3.0",
 ]
 
 [project.optional-dependencies]
+crawler = [
+  "beautifulsoup4==4.15.0",
+  "crawl4ai==0.8.9",
+  "playwright==1.60.0",
+  "playwright-stealth>=2.0.0",
+]
 dev = [
   "bandit==1.8.0",
   "mypy==1.14.1",
@@ -51,6 +59,10 @@ packages = ["src/viraldy"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+extend-exclude = [
+  "src/viraldy/modules/product_import/crawler.py",
+  "src/viraldy/modules/product_import/vendor",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]
@@ -66,9 +78,19 @@ exclude = ["alembic/versions"]
 module = ["boto3", "botocore.*", "celery", "redis.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = [
+  "viraldy.modules.product_import.crawler",
+  "viraldy.modules.product_import.vendor.aveflow.*",
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 addopts = "--cov=viraldy --cov-report=term-missing --cov-fail-under=70"
+markers = [
+  "openai_live: opt-in tests that require a real OpenAI API key and explicit live-test flag",
+]

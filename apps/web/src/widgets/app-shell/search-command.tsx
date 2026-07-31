@@ -39,7 +39,7 @@ const quickActions = [
         hint: "Open review upload dialog",
         icon: Upload,
         to: "/ugc-review",
-        search: { upload: true },
+        search: { campaignId: undefined, upload: true },
     },
     {
         label: "Import creative",
@@ -142,7 +142,7 @@ export function SearchCommand({
             <CommandInput
                 value={query}
                 onValueChange={setQuery}
-                placeholder="Search products, campaigns, and system responses…"
+                placeholder="Search products, campaigns, assets…"
             />
             <CommandList>
                 <CommandEmpty>No results.</CommandEmpty>
@@ -156,8 +156,21 @@ export function SearchCommand({
                                     value={`${action.label} ${action.hint}`}
                                     onSelect={() => {
                                         onOpenChange(false);
-                                        if ("search" in action) {
-                                            navigate({ to: action.to, search: action.search });
+                                        if (action.to === "/ugc-review") {
+                                            navigate({
+                                                to: "/ugc-review",
+                                                search: action.search,
+                                            });
+                                        } else if (action.to === "/creative-library") {
+                                            navigate({
+                                                to: "/creative-library",
+                                                search: action.search,
+                                            });
+                                        } else if (action.to === "/performance") {
+                                            navigate({
+                                                to: "/performance",
+                                                search: action.search,
+                                            });
                                         } else {
                                             navigate({ to: action.to });
                                         }

@@ -15,6 +15,11 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { CampaignRenameDialog } from "@/features/campaigns/components/campaign-rename-dialog";
+import type {
+    CampaignLifecycle,
+    CampaignReadiness,
+} from "@/features/campaigns/lib/campaignReadiness";
+import { campaignLifecycleLabel } from "@/features/campaigns/lib/campaignReadiness";
 import type { CampaignPack, CampaignPackStatus } from "@/features/campaigns/types/campaign";
 import { useState } from "react";
 
@@ -28,19 +33,22 @@ const STATUSES: CampaignPackStatus[] = [
     "Archived",
 ];
 
-const STATUS_TONE: Record<CampaignPackStatus, "ok" | "warn" | "info" | "neutral" | "destructive"> =
-    {
-        Draft: "neutral",
-        "Ready for creator": "info",
-        "Creator production": "info",
-        "Awaiting UGC": "warn",
-        Active: "ok",
-        Completed: "ok",
-        Archived: "neutral",
-    };
+const LIFECYCLE_TONE: Record<
+    CampaignLifecycle,
+    "ok" | "warn" | "info" | "neutral" | "destructive"
+> = {
+    draft: "neutral",
+    ready_for_review: "info",
+    creator_ready: "ok",
+    sent: "info",
+    creator_production: "info",
+    ugc_received: "warn",
+    live: "ok",
+};
 
 export function CampaignDetailHeader({
     pack,
+    readiness,
     productName,
     saveLabel,
     primaryActionLabel,
@@ -51,6 +59,7 @@ export function CampaignDetailHeader({
     onStatusChange,
 }: {
     pack: CampaignPack;
+    readiness: CampaignReadiness;
     productName: string;
     saveLabel: string;
     primaryActionLabel: string;
@@ -81,8 +90,8 @@ export function CampaignDetailHeader({
                         {productName} · {pack.objective} · {pack.market} · {pack.platform}
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <StatusChip tone={STATUS_TONE[pack.status]} dot>
-                            {pack.status}
+                        <StatusChip tone={LIFECYCLE_TONE[readiness.lifecycle]} dot>
+                            {campaignLifecycleLabel(readiness.lifecycle)}
                         </StatusChip>
                         <span className="text-xs text-text-tertiary">{saveLabel}</span>
                     </div>
@@ -123,7 +132,17 @@ export function CampaignDetailHeader({
                                         }
                                     >
                                         {STATUSES.map((status) => (
-                                            <DropdownMenuRadioItem key={status} value={status}>
+                                            <DropdownMenuRadioItem
+                                                key={status}
+                                                value={status}
+                                                disabled={
+                                                    status !== "Draft" &&
+                                                    status !== "Archived" &&
+                                                    (!readiness.contentComplete ||
+                                                        !readiness.qualityPassed ||
+                                                        readiness.hardBlockers.length > 0)
+                                                }
+                                            >
                                                 {status}
                                             </DropdownMenuRadioItem>
                                         ))}

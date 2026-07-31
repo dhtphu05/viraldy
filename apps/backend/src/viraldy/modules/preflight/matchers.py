@@ -70,6 +70,8 @@ def evaluate_requirement(context: RequirementMatcherContext) -> RequirementEvalu
         return _product_match(context, facts)
     if matcher == "product_in_use":
         return _product_in_use(context, facts)
+    if matcher == "personalization_exact_match":
+        return _personalization_exact_match(context, facts)
     if matcher == "demo_presence":
         return _demo_presence(context, facts)
     if matcher == "demo_mechanism_match":
@@ -447,6 +449,79 @@ def _product_in_use(
         evidence_ids,
         expected=requirement.matcher_config,
         observed={"usage_visible": usage},
+    )
+
+
+def _personalization_exact_match(
+    context: RequirementMatcherContext,
+    facts: EvidenceFacts,
+) -> RequirementEvaluationV2:
+    requirement = context.requirement
+    expected_value = _clean_text(requirement.matcher_config.get("expected_value"))
+    label = _clean_text(requirement.matcher_config.get("label"))
+    case_sensitive = bool(requirement.matcher_config.get("case_sensitive"))
+    text_items = _overlay_text_items(facts)
+    if not text_items:
+        return _evaluation(
+            requirement,
+            "unknown",
+            40,
+            "low",
+            "No OCR evidence exists to verify the personalized field.",
+            [],
+            expected={"label": label, "expected_value": expected_value},
+            observed={"observed_value": None, "available_text_sources": 0},
+        )
+
+    expected_compare = expected_value if case_sensitive else normalize_text(expected_value)
+    for item, text in text_items:
+        observed_compare = text if case_sensitive else normalize_text(text)
+        pattern = rf"(?<!\w){re.escape(expected_compare)}(?!\w)" if expected_compare else ""
+        if pattern and re.search(pattern, observed_compare):
+            return _evaluation(
+                requirement,
+                "satisfied",
+                100,
+                "high",
+                "OCR evidence exactly matched the expected personalization.",
+                [item.id],
+                expected={"label": label, "expected_value": expected_value},
+                observed={
+                    "observed_value": expected_value,
+                    "source_text": text,
+                },
+            )
+
+    observed_value, observed_evidence_id = _labeled_personalization_value(
+        label,
+        text_items,
+    )
+    if observed_value is not None:
+        return _evaluation(
+            requirement,
+            "violated",
+            0,
+            "high",
+            "OCR evidence showed a different personalization value.",
+            [observed_evidence_id] if observed_evidence_id is not None else [],
+            expected={"label": label, "expected_value": expected_value},
+            observed={
+                "observed_value": observed_value,
+                "available_text_sources": len(text_items),
+            },
+        )
+    return _evaluation(
+        requirement,
+        "missing",
+        0,
+        "medium",
+        "OCR evidence did not show the required personalization value.",
+        [item.id for item, _ in text_items],
+        expected={"label": label, "expected_value": expected_value},
+        observed={
+            "observed_value": None,
+            "available_text_sources": len(text_items),
+        },
     )
 
 
@@ -912,6 +987,23 @@ def _best_text_match(
             if best is None or overlap > best[2]:
                 best = (item, text, overlap)
     return best
+
+
+def _labeled_personalization_value(
+    label: str,
+    items: list[tuple[EvidenceItemModel, str]],
+) -> tuple[str | None, UUID | None]:
+    if not label:
+        return None, None
+    pattern = re.compile(
+        rf"\b{re.escape(label)}\s*[:=\-]\s*([^\s,;|]+)",
+        flags=re.IGNORECASE,
+    )
+    for item, text in items:
+        match = pattern.search(text)
+        if match is not None:
+            return match.group(1).strip().rstrip(".!?"), item.id
+    return None, None
 
 
 def _all_text_items(facts: EvidenceFacts) -> list[tuple[EvidenceItemModel, str]]:

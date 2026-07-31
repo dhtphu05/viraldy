@@ -24,7 +24,11 @@ from viraldy.modules.campaign_packs.requirements import (
 from viraldy.modules.media_analysis.public import EvidenceItemModel
 from viraldy.modules.preflight.schemas import PreflightRunResponse
 from viraldy.modules.preflight.service import calculate_preflight_result
-from viraldy.modules.products.contracts import build_minimal_product_context
+from viraldy.modules.products.contracts import (
+    PersonalizationFieldV1,
+    ProductPersonalizationV1,
+    build_minimal_product_context,
+)
 
 
 @dataclass(slots=True)
@@ -86,6 +90,13 @@ def test_compile_requirements_reads_typed_campaign_pack_brief() -> None:
                 severity="high",
                 source_path="concepts[concept_1].must_show[1]",
             ),
+            MustShowRequirementV1(
+                id="concept_1_disclosure_1",
+                requirement_type="claim",
+                description="Results vary by fabric.",
+                severity="hard",
+                source_path="concepts[concept_1].must_show[2].disclosure",
+            ),
         ],
         cta=CtaDirectionV1(
             cta_type="product_tag",
@@ -108,6 +119,7 @@ def test_compile_requirements_reads_typed_campaign_pack_brief() -> None:
     assert by_id["must_show_product"].severity == "hard"
     assert by_id["must_show_product"].matcher_config["before_ms"] == 3000
     assert by_id["must_show_demo"].matcher_type == "demo_mechanism_match"
+    assert by_id["concept_1_disclosure_1"].matcher_type == "required_disclosure_presence"
     assert by_id["cta_presence"].matcher_type == "cta_presence"
     assert by_id["cta_type_match"].matcher_type == "cta_type_match"
     assert by_id["product_tag_presence"].severity == "hard"
@@ -186,6 +198,87 @@ def test_optional_hooks_compile_as_one_of_group() -> None:
     assert {item.minimum_satisfied for item in hooks} == {1}
 
 
+def test_script_scene_beats_compile_to_observable_requirement_matchers() -> None:
+    brief = _brief(
+        script_beats=[
+            {
+                "id": "show_product",
+                "sequence": 1,
+                "beat_type": "scene",
+                "instruction": "Show the product clearly.",
+                "required": True,
+            },
+            {
+                "id": "show_proof",
+                "sequence": 2,
+                "beat_type": "scene",
+                "instruction": "Show the same item before and after use.",
+                "required": True,
+            },
+            {
+                "id": "show_disclosure",
+                "sequence": 3,
+                "beat_type": "scene",
+                "instruction": "Results vary by fabric.",
+                "required": True,
+            },
+            {
+                "id": "show_product_tag",
+                "sequence": 4,
+                "beat_type": "scene",
+                "instruction": "Include the TikTok Shop product tag.",
+                "required": True,
+            },
+            {
+                "id": "spoken_line",
+                "sequence": 5,
+                "beat_type": "spoken",
+                "instruction": "This is the exact spoken line.",
+                "required": True,
+            },
+        ],
+        claim_guardrails={
+            "allowed": [],
+            "allowed_with_qualification": [],
+            "prohibited": [],
+            "required_disclosures": ["Results vary by fabric."],
+        },
+    )
+
+    by_id = {item.id: item for item in compile_requirements(brief)}
+
+    assert by_id["show_product"].matcher_type == "product_visibility"
+    assert by_id["show_proof"].matcher_type == "proof_type_match"
+    assert by_id["show_disclosure"].matcher_type == "required_disclosure_presence"
+    assert by_id["show_product_tag"].matcher_type == "cta_presence"
+    assert by_id["spoken_line"].matcher_type == "spoken_text_presence"
+
+
+def test_missing_medium_requirement_is_an_optional_fix_not_a_blocker() -> None:
+    requirement = CompiledRequirementV2(
+        id="optional_spoken_line",
+        requirement_type="spoken",
+        source_path="cta.spoken",
+        description="Optional spoken CTA refinement.",
+        severity="medium",
+        matcher_type="spoken_text_presence",
+        matcher_config={"text": "Check the product tag."},
+        expected_semantics="presence",
+    )
+
+    result = calculate_preflight_result(
+        {**_structural(), "structural_score": 90},
+        _brief(),
+        compiled_requirements_to_json([requirement]),
+        cast(list[EvidenceItemModel], [_transcript("This line does not contain the CTA.")]),
+    )
+
+    assert _requirement(result, "optional_spoken_line")["status"] == "missing"
+    assert result["blockers"] == []
+    assert result["action"] == "organic_ready_or_small_paid_test"
+    assert result["fixes"][0]["code"] == "FIX_BRIEF_REQUIREMENT"
+
+
 def test_prohibited_claim_absent_and_present_are_distinct() -> None:
     brief = _brief(
         claim_guardrails={
@@ -215,6 +308,88 @@ def test_required_disclosure_matches_transcript_and_ocr_but_not_similar_text() -
     assert _requirement(transcript, "required_disclosure_1")["status"] == "satisfied"
     assert _requirement(ocr, "required_disclosure_1")["status"] == "satisfied"
     assert _requirement(similar, "required_disclosure_1")["status"] == "missing"
+
+
+def test_product_context_compiles_reveal_proof_and_personalization_requirements() -> None:
+    product_context = build_minimal_product_context(
+        name="Personalized Dog Mom Crewneck",
+        description=None,
+        market="US",
+        metadata_json={"category": "pod_personalized_apparel"},
+    ).model_copy(
+        update={
+            "creative": build_minimal_product_context(
+                name="Personalized Dog Mom Crewneck",
+                description=None,
+                market="US",
+            ).creative.model_copy(
+                update={
+                    "required_product_reveal_before_ms": 2000,
+                    "required_proof_mechanisms": ["same item before and after"],
+                }
+            ),
+            "personalization": ProductPersonalizationV1(
+                required=True,
+                fields=[
+                    PersonalizationFieldV1(
+                        key="pet_name",
+                        label="Pet name",
+                        expected_value="Milo",
+                        visual_verification_required=True,
+                    )
+                ],
+                physical_sample_required=True,
+            ),
+        }
+    )
+    brief = _brief(product_snapshot=product_context.model_dump(mode="json"))
+
+    by_id = {item.id: item for item in compile_requirements(brief)}
+
+    assert by_id["product_required_reveal_timing"].matcher_type == ("product_visibility_timing")
+    assert by_id["product_required_reveal_timing"].matcher_config["before_ms"] == 2000
+    assert by_id["product_required_proof_1"].matcher_type == "proof_type_match"
+    assert by_id["personalization_pet_name"].matcher_type == ("personalization_exact_match")
+    assert by_id["personalization_pet_name"].severity == "hard"
+    assert by_id["personalization_pet_name"].matcher_config["expected_value"] == "Milo"
+
+
+def test_personalization_exact_match_distinguishes_match_mismatch_and_missing() -> None:
+    product_context = build_minimal_product_context(
+        name="Personalized Dog Mom Crewneck",
+        description=None,
+        market="US",
+    ).model_copy(
+        update={
+            "personalization": ProductPersonalizationV1(
+                required=True,
+                fields=[
+                    PersonalizationFieldV1(
+                        key="pet_name",
+                        label="Pet name",
+                        expected_value="Milo",
+                    )
+                ],
+            )
+        }
+    )
+    brief = _brief(product_snapshot=product_context.model_dump(mode="json"))
+
+    matched = _calculate(brief, [_ocr("Pet name: Milo")])
+    mismatched = _calculate(
+        brief,
+        [_ocr("Pet name: Miles. Recipient: Dog Mom.")],
+    )
+    missing = _calculate(brief, [])
+
+    matched_result = _requirement(matched, "personalization_pet_name")
+    mismatched_result = _requirement(mismatched, "personalization_pet_name")
+    missing_result = _requirement(missing, "personalization_pet_name")
+    assert matched_result["status"] == "satisfied"
+    assert matched_result["observed"]["observed_value"] == "Milo"
+    assert mismatched_result["status"] == "violated"
+    assert mismatched_result["observed"]["observed_value"] == "Miles"
+    assert missing_result["status"] == "unknown"
 
 
 def test_allowed_claim_without_qualification_is_violated() -> None:
@@ -295,9 +470,7 @@ def _brief(**overrides: object) -> dict[str, object]:
     return brief
 
 
-def _calculate(
-    brief: dict[str, object], evidence: list[FakeEvidence]
-) -> dict[str, Any]:
+def _calculate(brief: dict[str, object], evidence: list[FakeEvidence]) -> dict[str, Any]:
     return calculate_preflight_result(
         _structural(),
         brief,

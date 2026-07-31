@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess  # nosec B404
+import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,14 @@ from tempfile import TemporaryDirectory
 from typing import Any, cast
 
 import httpx
+from PIL import Image, ImageDraw, ImageFont
+
+from viraldy.evaluation.qualification.application_scenarios import (
+    GoldenApplicationScenario,
+    QualificationMediaStory,
+    load_application_scenario,
+)
+from viraldy.evaluation.qualification.catalog import CASE_ALIASES, resolve_case
 
 # The isolated runner uses local-test auth and a locally selected ffmpeg executable only.
 # Documented local-only token; production settings reject local-test auth mode.
@@ -26,6 +35,7 @@ class SmokeContext:
     product_id: str
     product_context_version: int
     primary_category: str
+    viral_objective: str
     board_id: str
     reference_ids: tuple[str, str]
     quick_asset_id: str
@@ -37,12 +47,12 @@ class SmokeFailure(RuntimeError):
 
 
 class ApiClient:
-    def __init__(self, base_url: str, token: str) -> None:
+    def __init__(self, base_url: str, token: str, timeout_seconds: int = 30) -> None:
         self._base_url = base_url.rstrip("/")
         self._client = httpx.Client(
             base_url=self._base_url,
             headers={"Authorization": f"Bearer {token}"},
-            timeout=30.0,
+            timeout=float(timeout_seconds),
         )
 
     def close(self) -> None:
@@ -92,8 +102,12 @@ class ApiClient:
 def main() -> None:
     args = parse_args()
     args.run_id = args.run_id or f"{args.expect_mode}-{int(time.time())}"
-    client = ApiClient(args.base_url, args.token)
+    if args.golden_case is not None:
+        args.golden_case = resolve_case(args.golden_case)
+    client = ApiClient(args.base_url, args.token, args.timeout_seconds)
     completed_job_ids: list[str] = []
+    ctx: SmokeContext | None = None
+    workspace_deleted = False
     try:
         readiness = client.get("/system/ai-readiness")
         assert_equal(readiness["mode"], args.expect_mode, "AI readiness mode")
@@ -102,12 +116,18 @@ def main() -> None:
 
         with TemporaryDirectory(prefix="viraldy-smoke-") as temp_dir:
             media_path = prepare_media(args, Path(temp_dir))
+            revision_media_path = prepare_revision_media(
+                args,
+                Path(temp_dir),
+                media_path,
+            )
             ctx = load_context(client, args, media_path)
             quick_run, quick_job_id = run_quick_scorer(client, ctx, args, completed_job_ids)
             dna_ids = [
                 run_reference_dna(client, ctx, reference_id, index, args, completed_job_ids)
                 for index, reference_id in enumerate(ctx.reference_ids, start=1)
             ]
+            adaptation = run_adaptation(client, ctx, dna_ids[0], args)
             pattern = run_pattern_kit(client, ctx, dna_ids, args)
             viral = run_viral_kit(client, ctx, pattern, args)
             concept_id, pack_id, pack_version_id = select_concept_and_compile_pack(
@@ -121,6 +141,13 @@ def main() -> None:
                 pack_version_id,
                 args,
                 completed_job_ids,
+                run_label="draft-1",
+            )
+            presentation = run_presentation(
+                client,
+                ctx,
+                preflight_run,
+                expect_mode=args.expect_mode,
             )
             recommendation_id = run_learning_loop(
                 client,
@@ -130,15 +157,48 @@ def main() -> None:
                 preflight_run,
                 pack_id,
             )
-            revision_version_id = upload_revision(client, ctx, media_path, args)
-            verify_learning_events(
+            revision_version_id = upload_revision(
+                client,
+                ctx,
+                revision_media_path,
+                args,
+            )
+            revision_preflight_run = None
+            revision_presentation = None
+            if revision_version_id != "not-run":
+                revision_preflight_run = run_preflight(
+                    client,
+                    ctx,
+                    pack_version_id,
+                    args,
+                    completed_job_ids,
+                    run_label="draft-2",
+                )
+                revision_presentation = run_presentation(
+                    client,
+                    ctx,
+                    revision_preflight_run,
+                    expect_mode=args.expect_mode,
+                )
+                verify_revision_comparison(
+                    preflight_run,
+                    revision_preflight_run,
+                    revision_version_id,
+                )
+            model_runs = verify_learning_events(
                 client,
                 ctx,
                 pattern,
                 viral,
                 creative_dna_ids=dna_ids,
+                adaptation_id=str(adaptation["id"]),
                 campaign_pack_id=pack_id,
                 preflight_run_id=str(preflight_run["id"]),
+                revision_preflight_run_id=(
+                    str(revision_preflight_run["id"])
+                    if revision_preflight_run is not None
+                    else None
+                ),
                 recommendation_id=recommendation_id,
                 revision_version_id=revision_version_id,
                 isolated_lifecycle=args.isolated_lifecycle,
@@ -155,32 +215,80 @@ def main() -> None:
                 )
             deletion_status = "not_requested"
             if args.isolated_lifecycle:
-                client.delete(f"/workspaces/{ctx.workspace_id}")
-                deletion_status = verify_workspace_deletion(ctx.workspace_id)
+                deletion_status = delete_and_verify_workspace(client, ctx.workspace_id)
+                workspace_deleted = True
 
-            print(
-                json.dumps(
-                    {
-                        "status": "ok",
-                        "mode": args.expect_mode,
-                        "workspace_id": ctx.workspace_id,
-                        "quick_score_run_id": quick_run["id"],
-                        "creative_dna_version_ids": dna_ids,
-                        "pattern_kit_id": pattern["kit"]["id"],
-                        "viral_kit_id": viral["kit"]["id"],
-                        "selected_concept_id": concept_id,
-                        "campaign_pack_id": pack_id,
-                        "campaign_pack_version_id": pack_version_id,
-                        "preflight_run_id": preflight_run["id"],
-                        "recommendation_id": recommendation_id,
-                        "revision_asset_version_id": revision_version_id,
-                        "workspace_deletion_status": deletion_status,
-                        "completed_job_ids": completed_job_ids,
+            summary = {
+                "status": "ok",
+                "mode": args.expect_mode,
+                "golden_case": args.golden_case,
+                "workspace_id": ctx.workspace_id,
+                "quick_score_run_id": quick_run["id"],
+                "creative_dna_version_ids": dna_ids,
+                "adaptation_id": adaptation["id"],
+                "pattern_kit_id": pattern["kit"]["id"],
+                "viral_kit_id": viral["kit"]["id"],
+                "selected_concept_id": concept_id,
+                "campaign_pack_id": pack_id,
+                "campaign_pack_version_id": pack_version_id,
+                "preflight_run_id": preflight_run["id"],
+                "preflight_action": preflight_run["action_label"],
+                "presentation_sources": presentation["sources"],
+                "recommendation_id": recommendation_id,
+                "revision_asset_version_id": revision_version_id,
+                "revision_preflight_run_id": (
+                    revision_preflight_run["id"] if revision_preflight_run is not None else None
+                ),
+                "revision_preflight_action": (
+                    revision_preflight_run["action_label"]
+                    if revision_preflight_run is not None
+                    else None
+                ),
+                "revision_presentation_sources": (
+                    revision_presentation["sources"] if revision_presentation is not None else None
+                ),
+                "workspace_deletion_status": deletion_status,
+                "completed_job_ids": completed_job_ids,
+            }
+            result_payload = dict(summary)
+            if args.golden_case is not None:
+                result_payload["qualification_evidence"] = {
+                    "pattern_kit": pattern["latest_version"]["pattern"],
+                    "adaptation": adaptation,
+                    "viral_kit": viral["latest_version"]["viral_kit"],
+                    "draft_1": {
+                        "preflight": preflight_run,
+                        "presentation": presentation,
                     },
-                    indent=2,
-                    sort_keys=True,
+                    "draft_2": (
+                        {
+                            "preflight": revision_preflight_run,
+                            "presentation": revision_presentation,
+                        }
+                        if revision_preflight_run is not None
+                        else None
+                    ),
+                    "model_runs": model_runs,
+                }
+            rendered_summary = json.dumps(summary, indent=2, sort_keys=True)
+            if args.result_path is not None:
+                args.result_path.parent.mkdir(parents=True, exist_ok=True)
+                args.result_path.write_text(
+                    json.dumps(result_payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
                 )
-            )
+            print(rendered_summary)
+    except Exception as original_error:
+        if args.isolated_lifecycle and ctx is not None and not workspace_deleted:
+            try:
+                delete_and_verify_workspace(client, ctx.workspace_id)
+            except Exception as cleanup_error:
+                raise SmokeFailure(
+                    "Smoke flow failed "
+                    f"({type(original_error).__name__}) and isolated workspace cleanup failed "
+                    f"({type(cleanup_error).__name__})."
+                ) from original_error
+        raise
     finally:
         client.close()
 
@@ -204,6 +312,16 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("FFMPEG_BIN") or shutil.which("ffmpeg"),
         help="ffmpeg binary for generating mock/live smoke video.",
     )
+    parser.add_argument(
+        "--qualification-tts",
+        default=(
+            os.getenv("QUALIFICATION_TTS_BIN")
+            or shutil.which("say")
+            or shutil.which("espeak-ng")
+            or shutil.which("espeak")
+        ),
+        help="Local say/espeak executable used to narrate Golden qualification media.",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=90)
     parser.add_argument("--run-id", default=os.getenv("SMOKE_RUN_ID"))
     parser.add_argument("--verify-db", action="store_true")
@@ -216,6 +334,18 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--product-name", default=os.getenv("SMOKE_PRODUCT_NAME"))
+    parser.add_argument(
+        "--golden-case",
+        choices=sorted(CASE_ALIASES),
+        default=os.getenv("SMOKE_GOLDEN_CASE"),
+        help="Run an isolated Golden Product Context and Draft 1/Draft 2 media pair.",
+    )
+    parser.add_argument(
+        "--result-path",
+        type=Path,
+        default=None,
+        help="Optional path for the redacted machine-readable smoke result.",
+    )
     parser.add_argument(
         "--reference-fixture-id",
         default=os.getenv("SMOKE_REFERENCE_FIXTURE_ID", "viraldy-demo-reference-v1"),
@@ -305,6 +435,7 @@ def load_context(
         primary_category=str(
             metadata.get("category") or metadata.get("fixture_category") or "home_organization"
         ),
+        viral_objective="tiktok_shop_affiliate_test",
         board_id=board["id"],
         reference_ids=(reference["id"], second_reference["id"]),
         quick_asset_id=quick_asset_id,
@@ -329,78 +460,97 @@ def create_isolated_context(
         ),
     )
     workspace_id = str(workspace["id"])
-    product = cast(
-        dict[str, Any],
-        client.post(
-            f"/workspaces/{workspace_id}/products",
-            isolated_product_payload(args.run_id),
-        ),
-    )
-    product_id = str(product["id"])
-    board = cast(
-        dict[str, Any],
-        client.post(
-            f"/workspaces/{workspace_id}/reference-boards",
-            {
-                "name": "Private beta creative research",
-                "description": "Isolated fixture/mock E2E reference board.",
-                "product_id": product_id,
-                "board_type": "creative_research",
-            },
-        ),
-    )
+    try:
+        scenario = _selected_application_scenario(args)
+        product = cast(
+            dict[str, Any],
+            client.post(
+                f"/workspaces/{workspace_id}/products",
+                (
+                    scenario.product_payload
+                    if scenario is not None
+                    else isolated_product_payload(args.run_id)
+                ),
+            ),
+        )
+        product_id = str(product["id"])
+        board = cast(
+            dict[str, Any],
+            client.post(
+                f"/workspaces/{workspace_id}/reference-boards",
+                {
+                    "name": "Private beta creative research",
+                    "description": "Isolated fixture/mock E2E reference board.",
+                    "product_id": product_id,
+                    "board_type": "creative_research",
+                },
+            ),
+        )
 
-    quick_asset_id = upload_asset(
-        client,
-        workspace_id,
-        product_id,
-        media_path,
-        "quick-reference",
-        fixture_id=args.quick_fixture_id if args.expect_mode == "fixture" else None,
-    )
-    reference_asset_id = upload_asset(
-        client,
-        workspace_id,
-        product_id,
-        media_path,
-        "reference",
-        fixture_id=args.reference_fixture_id if args.expect_mode == "fixture" else None,
-    )
-    ugc_asset_id = upload_asset(
-        client,
-        workspace_id,
-        product_id,
-        media_path,
-        "ugc",
-        fixture_id=args.ugc_fixture_id if args.expect_mode == "fixture" else None,
-    )
-    first_reference = create_reference(
-        client,
-        workspace_id,
-        str(board["id"]),
-        product_id,
-        reference_asset_id,
-        f"Isolated {args.expect_mode} primary reference",
-    )
-    second_reference = create_reference(
-        client,
-        workspace_id,
-        str(board["id"]),
-        product_id,
-        quick_asset_id,
-        f"Isolated {args.expect_mode} comparison reference",
-    )
-    metadata = product.get("metadata_json") or {}
-    return SmokeContext(
-        workspace_id=workspace_id,
-        product_id=product_id,
-        product_context_version=int(product["product_context_version"]),
-        primary_category=str(metadata.get("category") or "home_organization"),
-        board_id=str(board["id"]),
-        reference_ids=(str(first_reference["id"]), str(second_reference["id"])),
-        quick_asset_id=quick_asset_id,
-        ugc_asset_id=ugc_asset_id,
-    )
+        quick_asset_id = upload_asset(
+            client,
+            workspace_id,
+            product_id,
+            media_path,
+            "quick-reference",
+            fixture_id=args.quick_fixture_id if args.expect_mode == "fixture" else None,
+        )
+        reference_asset_id = upload_asset(
+            client,
+            workspace_id,
+            product_id,
+            media_path,
+            "reference",
+            fixture_id=args.reference_fixture_id if args.expect_mode == "fixture" else None,
+        )
+        ugc_asset_id = upload_asset(
+            client,
+            workspace_id,
+            product_id,
+            media_path,
+            "ugc",
+            fixture_id=args.ugc_fixture_id if args.expect_mode == "fixture" else None,
+        )
+        first_reference = create_reference(
+            client,
+            workspace_id,
+            str(board["id"]),
+            product_id,
+            reference_asset_id,
+            f"Isolated {args.expect_mode} primary reference",
+        )
+        second_reference = create_reference(
+            client,
+            workspace_id,
+            str(board["id"]),
+            product_id,
+            quick_asset_id,
+            f"Isolated {args.expect_mode} comparison reference",
+        )
+        metadata = product.get("metadata_json") or {}
+        return SmokeContext(
+            workspace_id=workspace_id,
+            product_id=product_id,
+            product_context_version=int(product["product_context_version"]),
+            primary_category=str(metadata.get("category") or "home_organization"),
+            viral_objective=(
+                scenario.viral_objective if scenario is not None else "tiktok_shop_affiliate_test"
+            ),
+            board_id=str(board["id"]),
+            reference_ids=(str(first_reference["id"]), str(second_reference["id"])),
+            quick_asset_id=quick_asset_id,
+            ugc_asset_id=ugc_asset_id,
+        )
+    except Exception as original_error:
+        try:
+            delete_and_verify_workspace(client, workspace_id)
+        except Exception as cleanup_error:
+            raise SmokeFailure(
+                "Isolated context setup failed "
+                f"({type(original_error).__name__}) and workspace cleanup failed "
+                f"({type(cleanup_error).__name__})."
+            ) from original_error
+        raise
 
 
 def isolated_product_payload(run_id: str) -> dict[str, object]:
@@ -489,6 +639,14 @@ def prepare_media(args: argparse.Namespace, temp_dir: Path) -> Path | None:
         return path
     if not args.ffmpeg:
         raise SmokeFailure("ffmpeg is required to generate mock/live smoke media.")
+    scenario = _selected_application_scenario(args)
+    if scenario is not None:
+        return render_qualification_media(
+            args,
+            temp_dir,
+            scenario.draft_story,
+            f"{scenario.scenario_id}-draft-1.mp4",
+        )
     output = temp_dir / "smoke-video.mp4"
     # Operator-selected local executable, fixed argv, no shell, and a bounded timeout.
     subprocess.run(  # noqa: S603  # nosec B603
@@ -518,6 +676,252 @@ def prepare_media(args: argparse.Namespace, temp_dir: Path) -> Path | None:
         timeout=30,
     )
     return output
+
+
+def prepare_revision_media(
+    args: argparse.Namespace,
+    temp_dir: Path,
+    primary_media_path: Path | None,
+) -> Path | None:
+    scenario = _selected_application_scenario(args)
+    if scenario is None or args.media_file:
+        return primary_media_path
+    return render_qualification_media(
+        args,
+        temp_dir,
+        scenario.revision_story,
+        f"{scenario.scenario_id}-revision.mp4",
+    )
+
+
+def render_qualification_media(
+    args: argparse.Namespace,
+    temp_dir: Path,
+    story: QualificationMediaStory,
+    filename: str,
+) -> Path:
+    if not args.ffmpeg:
+        raise SmokeFailure("ffmpeg is required to render Golden qualification media.")
+    image_paths: list[Path] = []
+    video_filters: list[str] = []
+    palette = (
+        "#204B57",
+        "#3B394E",
+        "#51432E",
+        "#315044",
+        "#533A43",
+        "#344B63",
+    )
+    for index, scene in enumerate(story.scenes, start=1):
+        image_path = temp_dir / f"{filename}-scene-{index:02d}.png"
+        _render_qualification_frame(
+            image_path,
+            scene.text,
+            palette[(index - 1) % len(palette)],
+            scene_number=index,
+        )
+        image_paths.append(image_path)
+        video_filters.append(
+            f"[{index - 1}:v]"
+            f"trim=duration={scene.end_seconds - scene.start_seconds:.3f},"
+            f"setpts=PTS-STARTPTS[v{index - 1}]"
+        )
+    video_inputs = [
+        item
+        for image_path in image_paths
+        for item in (
+            "-loop",
+            "1",
+            "-framerate",
+            "24",
+            "-i",
+            str(image_path),
+        )
+    ]
+    video_filter = (
+        ";".join(video_filters)
+        + ";"
+        + "".join(f"[v{index}]" for index in range(len(image_paths)))
+        + f"concat=n={len(image_paths)}:v=1:a=0,"
+        + f"trim=duration={story.duration_seconds:.3f},"
+        + "setpts=PTS-STARTPTS,format=yuv420p[vout]"
+    )
+    output = temp_dir / filename
+    narration_path = _render_qualification_narration(
+        args,
+        temp_dir,
+        story.narration,
+        filename,
+    )
+    audio_input = (
+        ["-i", str(narration_path)]
+        if narration_path is not None
+        else [
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=mono:sample_rate=16000",
+        ]
+    )
+    audio_filter = ["-af", "apad"] if narration_path is not None else []
+    subprocess.run(  # noqa: S603  # nosec B603
+        [
+            str(args.ffmpeg),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            *video_inputs,
+            *audio_input,
+            "-filter_complex",
+            video_filter,
+            "-t",
+            str(story.duration_seconds),
+            "-map",
+            "[vout]",
+            "-map",
+            f"{len(image_paths)}:a:0",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            *audio_filter,
+            "-movflags",
+            "+faststart",
+            "-y",
+            str(output),
+        ],
+        check=True,
+        timeout=60,
+    )
+    return output
+
+
+def _render_qualification_narration(
+    args: argparse.Namespace,
+    temp_dir: Path,
+    narration: str,
+    filename_stem: str,
+) -> Path | None:
+    executable = (
+        getattr(args, "qualification_tts", None)
+        or shutil.which("say")
+        or shutil.which("espeak-ng")
+        or shutil.which("espeak")
+    )
+    if not executable:
+        if args.expect_mode == "live":
+            raise SmokeFailure(
+                "OpenAI live Golden qualification requires local TTS "
+                "(macOS say, espeak-ng, or espeak)."
+            )
+        return None
+    executable_name = Path(str(executable)).name.casefold()
+    if executable_name == "say":
+        output = temp_dir / f"{filename_stem}.aiff"
+        command = [
+            str(executable),
+            "-r",
+            "170",
+            "-o",
+            str(output),
+            narration,
+        ]
+    elif executable_name in {"espeak", "espeak-ng"}:
+        output = temp_dir / f"{filename_stem}.wav"
+        command = [
+            str(executable),
+            "-s",
+            "165",
+            "-w",
+            str(output),
+            narration,
+        ]
+    else:
+        raise SmokeFailure(
+            "Qualification TTS executable must be macOS say, espeak-ng, or espeak."
+        )
+    try:
+        subprocess.run(  # noqa: S603  # nosec B603
+            command,
+            check=True,
+            capture_output=True,
+            timeout=90,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise SmokeFailure("Failed to render local Golden qualification narration.") from exc
+    if not output.is_file() or output.stat().st_size == 0:
+        raise SmokeFailure("Local TTS did not produce Golden qualification narration.")
+    return output
+
+
+def _render_qualification_frame(
+    path: Path,
+    raw_text: str,
+    background: str,
+    *,
+    scene_number: int,
+) -> None:
+    image = Image.new("RGB", (720, 1280), color=background)
+    draw = ImageDraw.Draw(image)
+    title_font = ImageFont.load_default(size=34)
+    body_font = ImageFont.load_default(size=50)
+    draw.rounded_rectangle(
+        (48, 60, 672, 180),
+        radius=16,
+        fill="#F4F6F7",
+    )
+    draw.text(
+        (76, 94),
+        f"VIRALDY QUALIFICATION  |  SCENE {scene_number}",
+        fill="#16252C",
+        font=title_font,
+    )
+    lines = [
+        wrapped
+        for line in raw_text.splitlines()
+        for wrapped in textwrap.wrap(line, width=25) or [""]
+    ]
+    text = "\n".join(lines)
+    box = draw.multiline_textbbox(
+        (0, 0),
+        text,
+        font=body_font,
+        spacing=24,
+        align="center",
+    )
+    text_width = box[2] - box[0]
+    text_height = box[3] - box[1]
+    x = (720 - text_width) / 2
+    y = (1280 - text_height) / 2
+    draw.rounded_rectangle(
+        (max(36, x - 40), y - 48, min(684, x + text_width + 40), y + text_height + 48),
+        radius=24,
+        fill="#111820",
+        outline="#FFFFFF",
+        width=3,
+    )
+    draw.multiline_text(
+        (x, y),
+        text,
+        fill="#FFFFFF",
+        font=body_font,
+        spacing=24,
+        align="center",
+    )
+    image.save(path, format="PNG")
+
+
+def _selected_application_scenario(
+    args: argparse.Namespace,
+) -> GoldenApplicationScenario | None:
+    if args.golden_case is None:
+        return None
+    return load_application_scenario(
+        str(args.golden_case),
+        run_id=str(args.run_id),
+    )
 
 
 def upload_asset(
@@ -708,7 +1112,7 @@ def run_pattern_kit(
             "primary_category": ctx.primary_category,
             "target_platforms": ["tiktok_shop"],
             "target_markets": ["US"],
-            "objectives": ["tiktok_shop_affiliate_test"],
+            "objectives": [ctx.viral_objective],
             "extraction_mode": "ai_assisted",
             "review_notes": "Private beta fixture/mock E2E review.",
         },
@@ -737,6 +1141,36 @@ def run_pattern_kit(
     return reviewed
 
 
+def run_adaptation(
+    client: ApiClient,
+    ctx: SmokeContext,
+    creative_dna_version_id: str,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    adaptation = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{ctx.workspace_id}/adaptations",
+            {
+                "product_id": ctx.product_id,
+                "creative_dna_version_id": creative_dna_version_id,
+                "objective": ctx.viral_objective,
+                "target_market": "US",
+                "target_buyer": {"persona": "primary Product Context buyer"},
+                "constraints": {
+                    "max_duration_seconds": 30,
+                    "channel_constraints": ["TikTok Shop vertical UGC"],
+                },
+            },
+        ),
+    )
+    assert_equal(adaptation["status"], "completed", "Adaptation status")
+    assert_equal(adaptation["analysis_mode"], args.expect_mode, "Adaptation mode")
+    concepts = (adaptation.get("result_json") or {}).get("concepts") or []
+    assert_equal(len(concepts), EXPECTED_CONCEPT_COUNT, "Adaptation concept count")
+    return adaptation
+
+
 def run_viral_kit(
     client: ApiClient,
     ctx: SmokeContext,
@@ -751,7 +1185,7 @@ def run_viral_kit(
                 "product_id": ctx.product_id,
                 "expected_product_context_version": ctx.product_context_version,
                 "pattern_kit_version_ids": [pattern["latest_version"]["id"]],
-                "objective": "tiktok_shop_affiliate_test",
+                "objective": ctx.viral_objective,
                 "platform": "tiktok_shop",
                 "target_market": "US",
                 "concept_count": EXPECTED_CONCEPT_COUNT,
@@ -823,11 +1257,13 @@ def run_preflight(
     campaign_pack_version_id: str,
     args: argparse.Namespace,
     completed_job_ids: list[str],
+    *,
+    run_label: str,
 ) -> dict[str, Any]:
     result = client.post(
         f"/workspaces/{ctx.workspace_id}/preflight-runs",
         {"ugc_asset_id": ctx.ugc_asset_id, "campaign_pack_version_id": campaign_pack_version_id},
-        idempotency_key=f"smoke-{args.run_id}-preflight",
+        idempotency_key=f"smoke-{args.run_id}-preflight-{run_label}",
     )
     job = poll_job(client, ctx.workspace_id, result["job"]["id"], args.timeout_seconds)
     completed_job_ids.append(job["id"])
@@ -845,6 +1281,59 @@ def run_preflight(
         if "rights" not in run["revision_message"].lower():
             raise SmokeFailure("Spark-ready Preflight did not expose pending-rights wording.")
     return run
+
+
+def run_presentation(
+    client: ApiClient,
+    ctx: SmokeContext,
+    preflight_run: dict[str, Any],
+    *,
+    expect_mode: str,
+) -> dict[str, Any]:
+    presentation = cast(
+        dict[str, Any],
+        client.post(
+            f"/workspaces/{ctx.workspace_id}/preflight-runs/" f"{preflight_run['id']}/presentation",
+            {"seller_locale": "en-US", "force_regenerate": False},
+        ),
+    )
+    seller_summary = presentation.get("seller_summary") or {}
+    if not seller_summary.get("one_sentence_decision"):
+        raise SmokeFailure("Preflight presentation returned no seller decision.")
+    if preflight_run["action_label"] == "revise":
+        creator_revision = presentation.get("creator_revision") or {}
+        if not creator_revision.get("required_changes"):
+            raise SmokeFailure("Revise presentation returned no creator-ready required changes.")
+    sources = presentation.get("sources") or {}
+    if not sources.get("seller_summary"):
+        raise SmokeFailure("Presentation did not expose its safe generation source.")
+    if expect_mode == "live":
+        expected_live_sources = {
+            key: value
+            for key, value in sources.items()
+            if key == "seller_summary" or presentation.get("creator_revision") is not None
+        }
+        if not expected_live_sources or any(
+            value != "openai" for value in expected_live_sources.values()
+        ):
+            raise SmokeFailure("Live presentation used a deterministic fallback instead of OpenAI.")
+    return presentation
+
+
+def verify_revision_comparison(
+    draft_one: dict[str, Any],
+    draft_two: dict[str, Any],
+    revision_version_id: str,
+) -> None:
+    if str(draft_one["ugc_asset_version_id"]) == str(draft_two["ugc_asset_version_id"]):
+        raise SmokeFailure("Draft 2 Preflight reused the Draft 1 asset version.")
+    assert_equal(
+        str(draft_two["ugc_asset_version_id"]),
+        revision_version_id,
+        "Draft 2 Preflight asset version",
+    )
+    if draft_one["campaign_pack_version_id"] != draft_two["campaign_pack_version_id"]:
+        raise SmokeFailure("Draft comparison changed the locked Campaign Pack version.")
 
 
 def run_learning_loop(
@@ -954,13 +1443,15 @@ def verify_learning_events(
     viral: dict[str, Any],
     *,
     creative_dna_ids: list[str],
+    adaptation_id: str,
     campaign_pack_id: str,
     preflight_run_id: str,
+    revision_preflight_run_id: str | None,
     recommendation_id: str,
     revision_version_id: str,
     isolated_lifecycle: bool,
     expect_mode: str,
-) -> None:
+) -> list[dict[str, Any]]:
     events = client.get(f"/workspaces/{ctx.workspace_id}/events?limit=500")
     event_subjects = {(event["event_type"], str(event.get("subject_id") or "")) for event in events}
     required_event_subjects = {
@@ -979,6 +1470,8 @@ def verify_learning_events(
     }
     if revision_version_id != "not-run":
         required_event_subjects.add(("revision_uploaded", ctx.ugc_asset_id))
+    if revision_preflight_run_id is not None:
+        required_event_subjects.add(("preflight_viewed", revision_preflight_run_id))
     if isolated_lifecycle:
         required_event_subjects.update(
             {
@@ -1002,12 +1495,19 @@ def verify_learning_events(
         ("pattern_kit", str(pattern["kit"]["id"])),
         ("viral_kit", str(viral["kit"]["id"])),
     }
+    if expect_mode != "fixture":
+        required_model_subjects.add(("adaptation_run", adaptation_id))
+    if expect_mode == "live":
+        required_model_subjects.add(("preflight_run", preflight_run_id))
+        if revision_preflight_run_id is not None:
+            required_model_subjects.add(("preflight_run", revision_preflight_run_id))
     missing_model_subjects = required_model_subjects - model_subjects
     if missing_model_subjects:
         raise SmokeFailure(
             f"HTTP model-run query is missing completed {expect_mode} subjects: "
             f"{sorted(missing_model_subjects)}"
         )
+    return cast(list[dict[str, Any]], model_runs)
 
 
 def poll_job(
@@ -1163,6 +1663,11 @@ def verify_workspace_deletion(workspace_id: str) -> str:
         return str(audit["status"])
     finally:
         engine.dispose()
+
+
+def delete_and_verify_workspace(client: ApiClient, workspace_id: str) -> str:
+    client.delete(f"/workspaces/{workspace_id}")
+    return verify_workspace_deletion(workspace_id)
 
 
 def find_fixture_asset(assets: list[dict[str, Any]], fixture_id: str) -> str:

@@ -64,6 +64,21 @@ class SyncCreativeDnaRepository:
             .limit(1)
         ).scalar_one_or_none()
 
+    def for_processing_job(
+        self,
+        workspace_id: UUID,
+        asset_version_id: UUID,
+        processing_job_id: UUID,
+    ) -> CreativeDnaVersionModel | None:
+        return self._session.execute(
+            select(CreativeDnaVersionModel).where(
+                CreativeDnaVersionModel.workspace_id == workspace_id,
+                CreativeDnaVersionModel.asset_version_id == asset_version_id,
+                CreativeDnaVersionModel.processing_job_id == processing_job_id,
+                CreativeDnaVersionModel.status == "completed",
+            )
+        ).scalar_one_or_none()
+
     def create(
         self,
         workspace_id: UUID,
@@ -75,6 +90,10 @@ class SyncCreativeDnaRepository:
         taxonomy_version: str,
         model_version: str | None,
         prompt_version: str | None,
+        *,
+        dna_version_id: UUID | None = None,
+        processing_job_id: UUID | None = None,
+        primary_model_run_id: UUID | None = None,
     ) -> CreativeDnaVersionModel:
         next_version = (
             self._session.execute(
@@ -85,9 +104,12 @@ class SyncCreativeDnaRepository:
             or 0
         ) + 1
         dna = CreativeDnaVersionModel(
+            **({"id": dna_version_id} if dna_version_id is not None else {}),
             workspace_id=workspace_id,
             reference_id=reference_id,
             asset_version_id=asset_version_id,
+            processing_job_id=processing_job_id,
+            primary_model_run_id=primary_model_run_id,
             version_number=next_version,
             status="completed",
             schema_version=CREATIVE_DNA_SCHEMA_VERSION,

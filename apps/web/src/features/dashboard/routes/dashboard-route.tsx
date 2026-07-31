@@ -11,7 +11,6 @@ import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { RelativeTime } from "@/shared/ui/relative-time";
 import { AnalyzeCreativeDialog } from "@/features/dashboard/components/analyze-creative-dialog";
-import { CreateCampaignDialog } from "@/features/dashboard/components/create-campaign-dialog";
 import { overviewMetrics, decisionQueue } from "@/features/dashboard/mocks/dashboard";
 import { recommendations as seedRecs } from "@/features/dashboard/mocks/recommendations";
 import { activities } from "@/features/dashboard/mocks/activities";
@@ -20,7 +19,6 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
     Sparkles,
-    Plus,
     ClipboardCheck,
     MessageSquare,
     FolderKanban,
@@ -62,7 +60,6 @@ function DashboardPage() {
     const acceptRec = useAppStore((s) => s.acceptRecommendation);
 
     const [analyzeOpen, setAnalyzeOpen] = useState(false);
-    const [createOpen, setCreateOpen] = useState(false);
     const [activeDecision, setActiveDecision] = useState<DecisionItem | null>(null);
     const [evidenceRec, setEvidenceRec] = useState<Recommendation | null>(null);
     const [variantsRec, setVariantsRec] = useState<Recommendation | null>(null);
@@ -104,8 +101,22 @@ function DashboardPage() {
     }
 
     function openDecisionObject(item: DecisionItem) {
+        const campaign = campaigns.find((candidate) => candidate.name === item.object);
+        if (item.id === "d-1" || item.id === "d-2") {
+            navigate({
+                to: "/ugc-review",
+                search: { campaignId: campaign?.id, upload: undefined },
+            });
+            return;
+        }
+        if (item.id === "d-3" && campaign) {
+            navigate({
+                to: "/performance/$campaignId",
+                params: { campaignId: campaign.id },
+            });
+            return;
+        }
         if (item.objectType === "Campaign") {
-            const campaign = campaigns.find((c) => c.name === item.object);
             if (campaign) {
                 navigate({
                     to: "/campaigns/$campaignId",
@@ -117,7 +128,10 @@ function DashboardPage() {
             return;
         }
         if (item.objectType === "UGC" || item.objectType === "Asset") {
-            navigate({ to: "/ugc-review" });
+            navigate({
+                to: "/ugc-review",
+                search: { campaignId: undefined, upload: undefined },
+            });
             return;
         }
         navigate({ to: "/campaigns" });
@@ -131,10 +145,6 @@ function DashboardPage() {
                     description="Resolve the highest-impact creative and campaign decisions, then track the outcomes."
                     actions={
                         <>
-                            <Button variant="secondary" onClick={() => setCreateOpen(true)}>
-                                <Plus className="h-4 w-4" />
-                                Create campaign
-                            </Button>
                             <Button variant="secondary" onClick={() => setAnalyzeOpen(true)}>
                                 <Sparkles className="h-4 w-4" />
                                 Analyze creative
@@ -174,11 +184,10 @@ function DashboardPage() {
                 </section>
 
                 <section className="min-w-0">
-                    <div className="mb-3 flex items-center justify-between">
+                    <div className="mb-3">
                         <h2 className="text-sm font-semibold uppercase text-text-tertiary">
                             Needs attention
                         </h2>
-                        <StatusChip tone="warn">{decisionQueue.length} open</StatusChip>
                     </div>
                     <SurfaceCard
                         variant="raised"
@@ -319,7 +328,6 @@ function DashboardPage() {
 
             {/* Dialogs */}
             <AnalyzeCreativeDialog open={analyzeOpen} onOpenChange={setAnalyzeOpen} />
-            <CreateCampaignDialog open={createOpen} onOpenChange={setCreateOpen} />
 
             {/* Decision drawer */}
             <RightDrawer
@@ -335,14 +343,7 @@ function DashboardPage() {
                             </Button>
                             <Button
                                 onClick={() => {
-                                    const item = activeDecision;
-                                    toast.success("Action queued", {
-                                        description: activeDecision.nextAction,
-                                        action: {
-                                            label: "Undo",
-                                            onClick: () => setActiveDecision(item),
-                                        },
-                                    });
+                                    openDecisionObject(activeDecision);
                                     setActiveDecision(null);
                                 }}
                             >

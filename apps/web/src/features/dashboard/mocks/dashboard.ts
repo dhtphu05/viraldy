@@ -3,19 +3,19 @@ import type { Metric, DecisionItem } from "@/shared/types";
 export const overviewMetrics: Metric[] = [
     {
         id: "gmv-influenced",
-        label: "GMV influenced",
+        label: "Demo GMV influenced",
         value: "$128,410",
         delta: "+18%",
         deltaTone: "ok",
-        hint: "vs last 30 days",
+        hint: "Demo scenario estimate · vs last 30 days",
     },
     {
         id: "waste-avoided",
-        label: "Est. waste avoided",
+        label: "Demo waste avoided",
         value: "$4,820",
         delta: "This month",
         deltaTone: "neutral",
-        hint: "Killed underperformers early",
+        hint: "Demo scenario estimate · killed underperformers early",
     },
     {
         id: "ugc-pending",
@@ -79,7 +79,7 @@ export const decisionQueue: DecisionItem[] = [
         object: "Beauty Mirror Creator Test",
         objectType: "Campaign",
         urgency: "Review today",
-        action: "Investigate",
+        action: "Review conversion diagnosis",
         reason: "High view count with low product page CTR usually indicates price, shipping, or product page friction.",
         evidence: [
             "Views: 148,204 (top 12% of tests)",

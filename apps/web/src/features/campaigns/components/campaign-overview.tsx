@@ -1,35 +1,30 @@
 import { EvidencePanel } from "@/features/campaigns/components/evidence-panel";
 import { CampaignReadinessHero } from "@/features/campaigns/components/campaign-readiness-hero";
-import { STEPS, stepIsComplete } from "@/features/campaigns/lib/campaignSteps";
-import type { ReadinessState } from "@/features/campaigns/lib/campaignSteps";
+import type { CampaignReadiness } from "@/features/campaigns/lib/campaignReadiness";
 import type { CampaignPack, StepId } from "@/features/campaigns/types/campaign";
+import { formatUtcDateTime, formatUtcTime } from "@/shared/lib/date-format";
 
 export function CampaignOverview({
     pack,
-    readinessState,
-    reasons,
+    readiness,
     activity,
     onContinue,
     onPreview,
 }: {
     pack: CampaignPack;
-    readinessState: ReadinessState;
-    reasons: string[];
+    readiness: CampaignReadiness;
     activity: { id: string; detail: string; at: string }[];
     onContinue: (step: StepId) => void;
     onPreview: () => void;
 }) {
     const primaryAngle = pack.angleOptions.find((angle) => angle.id === pack.primaryAngleId);
-    const nextIncomplete = STEPS.find((step) => !stepIsComplete(pack, step.id));
-    const currentBottleneck = readinessState === "Blocked" ? nextIncomplete : undefined;
+    const currentBottleneck = readiness.hardBlockers[0];
 
     return (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex min-w-0 flex-col gap-6">
                 <CampaignReadinessHero
-                    pack={pack}
-                    state={readinessState}
-                    reasons={reasons}
+                    readiness={readiness}
                     onContinue={onContinue}
                     onPreview={onPreview}
                 />
@@ -43,7 +38,7 @@ export function CampaignOverview({
                             Campaign summary
                         </h2>
                         <p className="text-xs text-text-tertiary">
-                            Updated {new Date(pack.updatedAt).toLocaleString()}
+                            Updated {formatUtcDateTime(pack.updatedAt)}
                         </p>
                     </div>
                     <dl className="mt-3 grid grid-cols-2 divide-x divide-y divide-divider border-y border-divider bg-surface sm:grid-cols-4 sm:divide-y-0">
@@ -79,13 +74,16 @@ export function CampaignOverview({
                     <p className="mt-1 text-sm font-medium text-text-primary">
                         {currentBottleneck
                             ? currentBottleneck.label
-                            : readinessState === "Needs review"
-                              ? "Claim review"
+                            : readiness.warnings.length > 0
+                              ? "Review campaign warnings"
                               : "No blocking work"}
                     </p>
                     <p className="mt-1 text-sm text-text-secondary">
-                        {reasons[0]?.replace(/^Missing:\s*/, "") ??
-                            "The Campaign Pack is ready for creator preview."}
+                        {currentBottleneck
+                            ? "Resolve this item to unlock the next campaign decision."
+                            : readiness.lifecycle === "creator_ready"
+                              ? "The approved creator brief is ready to share."
+                              : "The Campaign Pack is ready for creator preview."}
                     </p>
                 </section>
 
@@ -111,7 +109,7 @@ export function CampaignOverview({
                                         {event.detail}
                                     </span>
                                     <span className="shrink-0 tabular text-xs text-text-tertiary">
-                                        {new Date(event.at).toLocaleTimeString()}
+                                        {formatUtcTime(event.at)}
                                     </span>
                                 </li>
                             ))}
@@ -120,7 +118,7 @@ export function CampaignOverview({
                 </section>
             </div>
 
-            <aside className="min-w-0 xl:sticky xl:top-20 xl:self-start">
+            <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
                 <EvidencePanel pack={pack} />
             </aside>
         </div>
