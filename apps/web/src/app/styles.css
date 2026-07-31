@@ -241,7 +241,6 @@ body,
 .app-scroll-container {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    scroll-behavior: smooth;
     scroll-padding-block: 1rem;
     scrollbar-gutter: stable;
 }
