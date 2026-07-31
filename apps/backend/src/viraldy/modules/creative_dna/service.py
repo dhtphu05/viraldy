@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from viraldy.modules.ai_gateway.models import AiModelRunModel
+from viraldy.modules.ai_gateway.prompt_packages import (
+    CREATIVE_DNA_PROMPT_NAME,
+    CREATIVE_DNA_PROMPT_VERSION,
+)
+from viraldy.modules.ai_gateway.repository import SyncAiModelRunRepository
+from viraldy.modules.creative_dna import taxonomy as creative_dna_taxonomy
 from viraldy.modules.creative_dna.contracts import (
     ClaimDnaV1,
     CreativeDnaV1,
@@ -22,15 +31,15 @@ from viraldy.modules.creative_dna.contracts import (
     RiskDnaV1,
 )
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
+from viraldy.modules.creative_dna.provider import LiveCreativeDnaProvider
 from viraldy.modules.creative_dna.repository import CreativeDnaRepository, SyncCreativeDnaRepository
 from viraldy.modules.creative_dna.schemas import CreativeDnaVersionResponse
-from viraldy.modules.creative_dna.taxonomy import (
-    CREATIVE_DNA_PROMPT_VERSION,
-    CREATIVE_DNA_TAXONOMY_VERSION,
-)
+from viraldy.modules.creative_domain.schema_versions import CREATIVE_DNA_SCHEMA_VERSION
 from viraldy.modules.media_analysis.public import EvidenceItemModel
 from viraldy.modules.product_events.public import ProductEventPublisher
-from viraldy.shared.errors.base import NotFoundError
+from viraldy.modules.products.public import SyncProductQueries
+from viraldy.platform.config.settings import Settings, get_settings
+from viraldy.shared.errors.base import AppError, NotFoundError
 
 
 class CreativeDnaService:
@@ -85,7 +94,9 @@ class CreativeDnaService:
 
 
 class SyncCreativeDnaBuilder:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, settings: Settings | None = None) -> None:
+        self._session = session
+        self._settings = settings or get_settings()
         self._repository = SyncCreativeDnaRepository(session)
 
     def build(
@@ -95,7 +106,45 @@ class SyncCreativeDnaBuilder:
         reference_id: UUID | None,
         evidence: list[EvidenceItemModel],
         analysis_mode: str,
+        *,
+        asset_id: UUID | None = None,
+        processing_job_id: UUID | None = None,
+        actor_user_id: UUID | None = None,
+        product_id: UUID | None = None,
+        media_duration_ms: int | None = None,
+        attempt_count: int = 1,
     ) -> CreativeDnaVersionModel:
+        if processing_job_id is not None:
+            existing = self._repository.for_processing_job(
+                workspace_id,
+                asset_version_id,
+                processing_job_id,
+            )
+            if existing is not None:
+                return existing
+        if analysis_mode != self._settings.ai_mode:
+            raise AppError(
+                "CREATIVE_DNA_AI_MODE_INVALID",
+                "Creative DNA analysis mode does not match configured AI mode.",
+            )
+        if analysis_mode != "fixture":
+            if asset_id is None:
+                raise AppError(
+                    "CREATIVE_DNA_SOURCE_INVALID",
+                    "AI Creative DNA requires a source asset ID.",
+                )
+            return self._build_with_ai(
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                asset_version_id=asset_version_id,
+                reference_id=reference_id,
+                evidence=evidence,
+                processing_job_id=processing_job_id,
+                actor_user_id=actor_user_id,
+                product_id=product_id,
+                media_duration_ms=media_duration_ms,
+                attempt_count=attempt_count,
+            )
         evidence_by_type = _evidence_by_type(evidence)
         dna = _build_creative_dna(evidence_by_type)
         dna_json = dna.model_dump(mode="json")
@@ -106,10 +155,190 @@ class SyncCreativeDnaBuilder:
             dna_json=dna_json,
             confidence=dna.overall_confidence,
             analysis_mode=analysis_mode,
-            taxonomy_version=CREATIVE_DNA_TAXONOMY_VERSION,
-            model_version="fixture_creative_dna_v1" if analysis_mode == "fixture" else None,
-            prompt_version=CREATIVE_DNA_PROMPT_VERSION,
+            taxonomy_version=creative_dna_taxonomy.CREATIVE_DNA_TAXONOMY_VERSION,
+            model_version="fixture_creative_dna_v1",
+            prompt_version=creative_dna_taxonomy.CREATIVE_DNA_PROMPT_VERSION,
+            processing_job_id=processing_job_id,
         )
+
+    def _build_with_ai(
+        self,
+        *,
+        workspace_id: UUID,
+        asset_id: UUID,
+        asset_version_id: UUID,
+        reference_id: UUID | None,
+        evidence: list[EvidenceItemModel],
+        processing_job_id: UUID | None,
+        actor_user_id: UUID | None,
+        product_id: UUID | None,
+        media_duration_ms: int | None,
+        attempt_count: int,
+    ) -> CreativeDnaVersionModel:
+        product_snapshot = None
+        if product_id is not None:
+            product_snapshot = SyncProductQueries(self._session).get_product_context_snapshot(
+                workspace_id,
+                product_id,
+            )
+            if product_snapshot is None:
+                raise AppError(
+                    "CREATIVE_DNA_PRODUCT_CONTEXT_NOT_FOUND",
+                    "Creative DNA source product context was not found.",
+                )
+        dna_version_id = uuid4()
+        model_name = _creative_dna_model_name(self._settings)
+        input_summary: dict[str, object] = {
+            "asset_id": str(asset_id),
+            "asset_version_id": str(asset_version_id),
+            "creative_dna_version_id": str(dna_version_id),
+            "evidence_count": len(evidence),
+            "evidence_ids": [str(item.id) for item in evidence],
+            "evidence_types": sorted({item.evidence_type for item in evidence}),
+            "media_duration_ms": media_duration_ms,
+            "product_context_version": (
+                product_snapshot.product_context_version if product_snapshot else None
+            ),
+            "reference_id": str(reference_id) if reference_id else None,
+        }
+        request_hash = _hash_json(
+            {
+                "operation": "creative_dna_build",
+                "prompt_version": CREATIVE_DNA_PROMPT_VERSION,
+                "input": input_summary,
+            }
+        )
+        model_repo = SyncAiModelRunRepository(self._session)
+        model_run = model_repo.create_running(
+            workspace_id=workspace_id,
+            processing_job_id=processing_job_id,
+            subject_type="creative_dna_version",
+            subject_id=dna_version_id,
+            capability="creative_dna_build",
+            operation="creative_dna_build",
+            analysis_mode=self._settings.ai_mode,
+            provider=self._settings.ai_provider,
+            model=model_name,
+            prompt_version=CREATIVE_DNA_PROMPT_VERSION,
+            response_schema_version=CREATIVE_DNA_SCHEMA_VERSION,
+            schema_version=CREATIVE_DNA_SCHEMA_VERSION,
+            request_hash=request_hash,
+            input_hash=request_hash,
+            input_summary=input_summary,
+            attempt_count=max(1, attempt_count),
+            endpoint_family=(
+                "responses"
+                if self._settings.ai_provider == "openai"
+                else "chat_completions"
+            ),
+            prompt_name=CREATIVE_DNA_PROMPT_NAME,
+        )
+        model_run.attempt = max(1, attempt_count)
+        self._session.commit()
+        try:
+            execution = LiveCreativeDnaProvider(self._settings).build_with_metadata(
+                workspace_id=workspace_id,
+                actor_user_id=actor_user_id,
+                asset_id=asset_id,
+                asset_version_id=asset_version_id,
+                reference_id=reference_id,
+                evidence=evidence,
+                model_run_id=model_run.id,
+                media_duration_ms=media_duration_ms,
+                product_context=(
+                    product_snapshot.product_context if product_snapshot else None
+                ),
+                product_context_version=(
+                    product_snapshot.product_context_version if product_snapshot else None
+                ),
+            )
+            dna = execution.output
+            version = self._repository.create(
+                workspace_id=workspace_id,
+                reference_id=reference_id,
+                asset_version_id=asset_version_id,
+                dna_json=dna.model_dump(mode="json"),
+                confidence=dna.overall_confidence,
+                analysis_mode=self._settings.ai_mode,
+                taxonomy_version=creative_dna_taxonomy.CREATIVE_DNA_TAXONOMY_VERSION,
+                model_version=model_name,
+                prompt_version=CREATIVE_DNA_PROMPT_VERSION,
+                dna_version_id=dna_version_id,
+                processing_job_id=processing_job_id,
+                primary_model_run_id=model_run.id,
+            )
+            model_repo.complete(
+                model_run,
+                _creative_dna_output_summary(dna),
+                http_status=execution.http_status,
+                provider_request_id=execution.provider_request_id,
+                latency_ms=execution.latency_ms,
+                usage_json=execution.usage_json,
+                repair_attempt_count=execution.repair_attempt_count,
+            )
+            self._session.commit()
+            return version
+        except AppError as exc:
+            _fail_creative_dna_model_run(model_repo, model_run, exc)
+            self._session.commit()
+            raise
+        except Exception:
+            self._session.rollback()
+            persisted_run = self._session.get(AiModelRunModel, model_run.id)
+            if persisted_run is not None:
+                model_repo.fail(
+                    persisted_run,
+                    "CREATIVE_DNA_BUILD_FAILED",
+                    "Creative DNA build failed.",
+                    safe_error_message="Creative DNA build failed.",
+                )
+                self._session.commit()
+            raise
+
+
+def _creative_dna_model_name(settings: Settings) -> str:
+    if settings.ai_provider == "openai":
+        return settings.resolve_openai_model("creative_dna_build")
+    return settings.ai_text_model or "unconfigured"
+
+
+def _creative_dna_output_summary(dna: CreativeDnaV1) -> dict[str, object]:
+    return {
+        "claim_count": len(dna.claims),
+        "complete_section_count": sum(dna.completeness.model_dump().values()),
+        "overall_confidence": dna.overall_confidence,
+        "reusable_mechanism_count": len(dna.reusable_mechanisms),
+        "risk_count": len(dna.risks),
+        "uncertainty_count": len(dna.uncertainties),
+    }
+
+
+def _fail_creative_dna_model_run(
+    repository: SyncAiModelRunRepository,
+    model_run: AiModelRunModel,
+    error: AppError,
+) -> None:
+    http_status = error.details.get("http_status")
+    provider_request_id = error.details.get("provider_request_id")
+    repair_attempt_count = error.details.get("repair_attempt_count")
+    repository.fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=http_status if isinstance(http_status, int) else None,
+        safe_error_message=error.message,
+        provider_request_id=(
+            provider_request_id if isinstance(provider_request_id, str) else None
+        ),
+        repair_attempt_count=(
+            repair_attempt_count if isinstance(repair_attempt_count, int) else None
+        ),
+    )
+
+
+def _hash_json(value: object) -> str:
+    payload = json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _build_creative_dna(

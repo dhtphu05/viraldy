@@ -1,17 +1,39 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypedDict, cast
+from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError
 
-from viraldy.modules.ai_gateway.public import OpenAICompatibleClient, extract_message_json
+from viraldy.modules.ai_gateway.providers import (
+    AiProviderError,
+    AudioTranscriptionRequest,
+    AudioTranscriptionResult,
+    InputImagePart,
+    OpenAINativeProvider,
+    StructuredGenerationResult,
+)
+from viraldy.modules.ai_gateway.public import (
+    AiOperationName,
+    OpenAICompatibleClient,
+    ViraldyOperationContextV1,
+    execute_structured_operation,
+    extract_message_json,
+    get_prompt_package,
+    provider_error_to_app_error,
+)
 from viraldy.modules.ai_gateway.schemas import ProviderResponse
 from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1
+from viraldy.modules.products.contracts import ProductContextV1
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
+
+type ProviderCallMetadata = ProviderResponse | StructuredGenerationResult | AudioTranscriptionResult
 
 
 class TranscriptSegment(BaseModel):
@@ -63,21 +85,59 @@ class LiveAnalysisProvider:
         return self.transcribe_audio_with_response(audio_path)[0]
 
     def transcribe_audio_with_response(
-        self, audio_path: Path
-    ) -> tuple[TranscriptContract, ProviderResponse | None]:
+        self,
+        audio_path: Path,
+        *,
+        request_id: str | None = None,
+        source_filename: str | None = None,
+    ) -> tuple[TranscriptContract, ProviderCallMetadata | None]:
+        if self._settings.ai_provider == "openai":
+            try:
+                result = OpenAINativeProvider(self._settings).transcribe_audio(
+                    AudioTranscriptionRequest(
+                        audio_path=audio_path,
+                        model=self._settings.openai_transcription_model,
+                        request_id=request_id or _file_hash(audio_path),
+                        input_hash=_file_hash(audio_path),
+                        response_format="verbose_json",
+                        timestamp_granularities=(
+                            self._settings.openai_transcription_timestamp_granularities
+                        ),
+                    )
+                )
+            except AiProviderError as exc:
+                raise provider_error_to_app_error(exc) from exc
+            return (
+                TranscriptContract(
+                    language=result.language or "en",
+                    segments=[
+                        TranscriptSegment(
+                            start_ms=segment.start_ms,
+                            end_ms=segment.end_ms,
+                            text=segment.text,
+                        )
+                        for segment in result.segments
+                    ],
+                    full_text=result.full_text,
+                ),
+                result,
+            )
         if self._settings.asr_provider != "openai_compatible":
             return TranscriptContract(segments=[], full_text=""), None
         if not self._settings.asr_model:
             raise AppError(
                 "AI_PROVIDER_NOT_CONFIGURED", "Live ASR requires ASR_MODEL.", status_code=503
             )
+        request_data = {
+            "model": self._settings.asr_model,
+            "response_format": "verbose_json",
+            "timestamp_granularities[]": "segment",
+        }
+        if self._settings.ai_mode == "mock" and source_filename:
+            request_data["viraldy_source_filename"] = source_filename
         response = self._client.transcribe(
             audio_path,
-            {
-                "model": self._settings.asr_model,
-                "response_format": "verbose_json",
-                "timestamp_granularities[]": "segment",
-            },
+            request_data,
         )
         payload = response.payload
         raw_segments = cast(list[dict[str, object]], payload.get("segments", []))
@@ -101,14 +161,24 @@ class LiveAnalysisProvider:
         self,
         frame_paths: list[tuple[int, Path, str]],
         product_context: dict[str, object] | None = None,
+        *,
+        source_filename: str | None = None,
     ) -> OcrContract:
-        return self.extract_ocr_with_response(frame_paths, product_context)[0]
+        return self.extract_ocr_with_response(
+            frame_paths,
+            product_context,
+            source_filename=source_filename,
+        )[0]
 
     def extract_ocr_with_response(
         self,
         frame_paths: list[tuple[int, Path, str]],
         product_context: dict[str, object] | None = None,
-    ) -> tuple[OcrContract, ProviderResponse | None]:
+        *,
+        source_filename: str | None = None,
+    ) -> tuple[OcrContract, ProviderCallMetadata | None]:
+        if self._settings.ai_provider == "openai":
+            return OcrContract(), None
         if self._settings.ocr_provider != "vision":
             return OcrContract(), None
         context_json = json.dumps(product_context or {}, sort_keys=True)
@@ -119,6 +189,7 @@ class LiveAnalysisProvider:
                 '"text":"...","confidence":0..1,"frame_storage_key":"..."}]}. '
                 "Use only visible text. Product context is supplied only to disambiguate the "
                 "mock/local scenario and must not be used to invent OCR text."
+                f"\nSource filename: {source_filename or 'unknown'}"
                 f"\nProduct context: {context_json}"
             ),
             frame_paths=frame_paths[:8],
@@ -146,23 +217,105 @@ class LiveAnalysisProvider:
         ocr: OcrContract,
         product_context: dict[str, object] | None,
         duration_ms: int,
-    ) -> tuple[MediaObservationBundleV1, ProviderResponse]:
+        *,
+        workspace_id: UUID | None = None,
+        asset_id: UUID | None = None,
+        asset_version_id: UUID | None = None,
+        source_filename: str | None = None,
+        request_id: str | None = None,
+    ) -> tuple[MediaObservationBundleV1, ProviderCallMetadata]:
+        if self._settings.ai_provider == "openai":
+            if workspace_id is None or asset_id is None or asset_version_id is None:
+                raise AppError(
+                    "OPENAI_DOMAIN_VALIDATION_FAILED",
+                    "Native media observation requires workspace and asset context.",
+                )
+            prompt = get_prompt_package(AiOperationName.MEDIA_OBSERVATION)
+            selected_frames = frame_paths[: self._settings.openai_max_frames_per_video]
+            context = ViraldyOperationContextV1(
+                operation=AiOperationName.MEDIA_OBSERVATION,
+                request_id=request_id or str(asset_version_id),
+                workspace_id=workspace_id,
+                product_context=(
+                    ProductContextV1.model_validate(product_context) if product_context else None
+                ),
+                source_artifact_ids=[asset_id],
+                source_version_ids=[asset_version_id],
+                operation_payload={
+                    "asset_id": str(asset_id),
+                    "asset_version_id": str(asset_version_id),
+                    "source_filename": source_filename,
+                    "duration_ms": duration_ms,
+                    "frames": [
+                        {
+                            "timestamp_ms": timestamp_ms,
+                            "frame_storage_key": storage_key,
+                        }
+                        for timestamp_ms, _, storage_key in selected_frames
+                    ],
+                    "transcript": _bounded_transcript(
+                        transcript,
+                        self._settings.openai_max_transcript_chars,
+                    ),
+                    "ocr": ocr.model_dump(mode="json"),
+                },
+                schema_version=prompt.output_schema_version,
+                prompt_version=prompt.prompt_version,
+            )
+            result = execute_structured_operation(
+                self._settings,
+                context,
+                MediaObservationBundleV1,
+                image_parts=[
+                    InputImagePart(
+                        media_type="image/jpeg",
+                        image_base64=_b64(path),
+                        detail=self._settings.openai_image_detail,
+                    )
+                    for _, path, _ in selected_frames
+                ],
+                output_validator=_native_media_output_validator(
+                    duration_ms,
+                    {storage_key for _, _, storage_key in selected_frames},
+                ),
+            )
+            return (
+                MediaObservationBundleV1.model_validate(result.parsed_output),
+                result,
+            )
+        prompt = get_prompt_package(AiOperationName.MEDIA_OBSERVATION)
+        compatible_context = json.dumps(
+            {
+                "operation": AiOperationName.MEDIA_OBSERVATION.value,
+                "workspace_id": str(workspace_id) if workspace_id else None,
+                "asset_id": str(asset_id) if asset_id else None,
+                "asset_version_id": str(asset_version_id) if asset_version_id else None,
+                "source_filename": source_filename,
+                "duration_ms": duration_ms,
+                "frames": [
+                    {
+                        "timestamp_ms": timestamp_ms,
+                        "frame_storage_key": storage_key,
+                    }
+                    for timestamp_ms, _, storage_key in frame_paths
+                ],
+                "transcript": _bounded_transcript(
+                    transcript,
+                    self._settings.openai_max_transcript_chars,
+                ),
+                "ocr": ocr.model_dump(mode="json"),
+                "product_context": product_context,
+                "schema_version": prompt.output_schema_version,
+                "prompt_version": prompt.prompt_version,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         payload, response = self._vision_json_with_response(
             prompt=(
-                "Analyze the creative structure from frames, transcript, OCR, metadata, and "
-                "product context. Return JSON matching MediaObservationBundleV1 exactly. "
-                "Use only supplied frames, transcript, OCR, metadata, and product context. "
-                "Return unknown when evidence is insufficient. Do not infer hidden events. "
-                "Do not create timestamps that are not supported by frame, transcript, or OCR "
-                "timing. Do not return a score or predict virality, orders, sales, or GMV. "
-                "Every observation must have a stable observation_id, confidence in 0..1, and "
-                "frame_storage_keys when frame evidence supports it. Use empty arrays when no CTA, "
-                "offer, claim, proof, hook, or product appearance is detected."
-                f"\nRequired schema_version: media_observation_v1"
-                f"\nDuration_ms: {duration_ms}"
-                f"\nTranscript: {transcript.model_dump(mode='json')}"
-                f"\nOCR: {ocr.model_dump(mode='json')}"
-                f"\nProduct context: {product_context or {}}"
+                f"{prompt.system_prompt}\n\n"
+                f"{prompt.developer_prompt}\n\n"
+                f"{compatible_context}"
             ),
             frame_paths=frame_paths[:12],
             schema_name="MediaObservationBundleV1",
@@ -171,6 +324,16 @@ class LiveAnalysisProvider:
         contract = _validate_contract(
             MediaObservationBundleV1, payload, "MEDIA_OBSERVATION_INVALID"
         )
+        try:
+            _native_media_output_validator(
+                duration_ms,
+                {storage_key for _, _, storage_key in frame_paths},
+            )(contract)
+        except ValueError as exc:
+            raise AppError(
+                "MEDIA_OBSERVATION_INVALID",
+                "Live provider returned invalid media provenance.",
+            ) from exc
         return contract, response
 
     def _vision_json(
@@ -218,6 +381,32 @@ class LiveAnalysisProvider:
         return extract_message_json(response), response
 
 
+def _native_media_output_validator(
+    expected_duration_ms: int,
+    allowed_frame_storage_keys: set[str],
+) -> Callable[[BaseModel], None]:
+    def validate(output: BaseModel) -> None:
+        observations = MediaObservationBundleV1.model_validate(output)
+        if observations.duration_ms != expected_duration_ms:
+            raise ValueError("Media duration changed.")
+        references = [
+            *observations.hooks,
+            *observations.product_appearances,
+            *observations.demo.steps,
+            *observations.proof_moments,
+            *observations.ctas,
+            *observations.offers,
+            *observations.claims,
+        ]
+        referenced_keys = {
+            storage_key for reference in references for storage_key in reference.frame_storage_keys
+        }
+        if not referenced_keys.issubset(allowed_frame_storage_keys):
+            raise ValueError("Media observations reference frames outside the request.")
+
+    return validate
+
+
 def _validate_contract[T: BaseModel](model: type[T], payload: dict[str, Any], code: str) -> T:
     try:
         return model.model_validate(payload)
@@ -231,6 +420,40 @@ def _validate_contract[T: BaseModel](model: type[T], payload: dict[str, Any], co
 
 def _b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _bounded_transcript(
+    transcript: TranscriptContract,
+    max_chars: int,
+) -> dict[str, object]:
+    payload = transcript.model_dump(mode="json")
+    full_text = transcript.full_text[:max_chars]
+    payload["full_text"] = full_text
+    used = 0
+    bounded_segments: list[dict[str, object]] = []
+    for segment in transcript.segments:
+        remaining = max_chars - used
+        if remaining <= 0:
+            break
+        text = segment.text[:remaining]
+        bounded_segments.append(
+            {
+                "start_ms": segment.start_ms,
+                "end_ms": segment.end_ms,
+                "text": text,
+            }
+        )
+        used += len(text)
+    payload["segments"] = bounded_segments
+    return payload
 
 
 def _response_format(

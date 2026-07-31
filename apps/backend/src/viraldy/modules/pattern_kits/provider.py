@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import cast
+from typing import Never, cast
 from uuid import UUID
 
-from pydantic import ValidationError
+from pydantic import BaseModel
 
 from viraldy.modules.ai_gateway.public import (
     PATTERN_KIT_PROMPT_VERSION,
+    AiOperationName,
+    EvidenceItemForModelV1,
     OpenAICompatibleClient,
+    ProviderErrorCode,
+    StructuredGenerationResult,
+    StructuredOutputIssue,
+    StructuredOutputValidationError,
+    ViraldyOperationContextV1,
+    execute_structured_operation,
     extract_message_json,
+    get_prompt_package,
 )
 from viraldy.modules.creative_dna.contracts import CreativeDnaV1
 from viraldy.modules.pattern_kits.contracts import (
@@ -61,6 +71,12 @@ class PatternSourceInput:
     evidence_by_id: dict[UUID, PatternEvidenceInput]
 
 
+@dataclass(frozen=True, slots=True)
+class PatternKitProviderExecution:
+    output: PatternKitV1
+    provider_result: StructuredGenerationResult | None
+
+
 class LivePatternKitProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -78,6 +94,75 @@ class LivePatternKitProvider:
         source_payloads: list[dict[str, object]],
         model_run_id: UUID,
     ) -> PatternKitV1:
+        return self.extract_with_metadata(
+            pattern_kit_id=pattern_kit_id,
+            workspace_id=workspace_id,
+            version=version,
+            created_by=created_by,
+            created_at=created_at,
+            request=request,
+            source_payloads=source_payloads,
+            model_run_id=model_run_id,
+        ).output
+
+    def extract_with_metadata(
+        self,
+        *,
+        pattern_kit_id: UUID,
+        workspace_id: UUID,
+        version: int,
+        created_by: UUID,
+        created_at: str,
+        request: CreatePatternKitRequest,
+        source_payloads: list[dict[str, object]],
+        model_run_id: UUID,
+        evidence_catalog: list[EvidenceItemForModelV1] | None = None,
+        source_version_ids: list[UUID] | None = None,
+    ) -> PatternKitProviderExecution:
+        prompt = get_prompt_package(AiOperationName.PATTERN_KIT_EXTRACT)
+        context = ViraldyOperationContextV1(
+            operation=AiOperationName.PATTERN_KIT_EXTRACT,
+            request_id=str(model_run_id),
+            workspace_id=workspace_id,
+            actor_user_id=created_by,
+            objective=", ".join(request.objectives) or None,
+            target_market=request.target_markets[0] if request.target_markets else None,
+            source_version_ids=source_version_ids or [],
+            evidence_catalog=evidence_catalog or [],
+            seller_constraints={
+                "primary_category": request.primary_category,
+                "target_platforms": request.target_platforms,
+                "target_markets": request.target_markets,
+            },
+            operation_payload={
+                "pattern_kit_id": str(pattern_kit_id),
+                "version": version,
+                "created_at": created_at,
+                "request": request.model_dump(mode="json"),
+                "sources": source_payloads,
+                "model_run_id": str(model_run_id),
+            },
+            schema_version=prompt.output_schema_version,
+            prompt_version=prompt.prompt_version,
+        )
+        if self._settings.ai_provider == "openai":
+            result = execute_structured_operation(
+                self._settings,
+                context,
+                PatternKitV1,
+                output_validator=_native_output_validator(
+                    pattern_kit_id,
+                    workspace_id,
+                    version,
+                    request,
+                    source_payloads,
+                ),
+            )
+            return PatternKitProviderExecution(
+                output=PatternKitV1.model_validate(result.parsed_output),
+                provider_result=result,
+            )
+
         if not self._settings.ai_base_url or not self._settings.ai_text_model:
             raise AppError(
                 "AI_PROVIDER_NOT_CONFIGURED",
@@ -94,22 +179,13 @@ class LivePatternKitProvider:
             "model": self._settings.ai_text_model,
             "messages": [
                 {
+                    "role": "system",
+                    "content": prompt.system_prompt,
+                },
+                {
                     "role": "user",
-                    "content": (
-                        "Extract a PatternKitV1 from the supplied Creative DNA only. "
-                        "Return only JSON matching PatternKitV1. Do not copy exact scripts, "
-                        "do not claim virality or performance, keep unknowns explicit, and "
-                        "only reference supplied evidence IDs.\n"
-                        f"Pattern kit ID: {pattern_kit_id}\n"
-                        f"Workspace ID: {workspace_id}\n"
-                        f"Version: {version}\n"
-                        f"Created by: {created_by}\n"
-                        f"Created at: {created_at}\n"
-                        f"Model run ID: {model_run_id}\n"
-                        f"Request: {request.model_dump(mode='json')}\n"
-                        f"Sources: {source_payloads}"
-                    ),
-                }
+                    "content": f"{prompt.developer_prompt}\n\n{context.stable_json()}",
+                },
             ],
             "response_format": _response_format(self._settings),
         }
@@ -117,13 +193,205 @@ class LivePatternKitProvider:
             payload["max_tokens"] = self._settings.ai_max_output_tokens
         raw = extract_message_json(self._client.chat_json(payload))
         try:
-            return PatternKitV1.model_validate(raw)
-        except ValidationError as exc:
+            output = PatternKitV1.model_validate(raw)
+            _native_output_validator(
+                pattern_kit_id,
+                workspace_id,
+                version,
+                request,
+                source_payloads,
+            )(output)
+            return PatternKitProviderExecution(
+                output=output,
+                provider_result=None,
+            )
+        except ValueError as exc:
             raise AppError(
                 "PATTERN_KIT_OUTPUT_INVALID",
                 "Provider returned invalid PatternKit output.",
-                details={"errors": exc.errors()},
             ) from exc
+
+
+def _native_output_validator(
+    pattern_kit_id: UUID,
+    workspace_id: UUID,
+    version: int,
+    request: CreatePatternKitRequest,
+    source_payloads: list[dict[str, object]],
+) -> Callable[[BaseModel], None]:
+    expected_source_ids = [
+        str(source["creative_dna_version_id"])
+        for source in source_payloads
+        if "creative_dna_version_id" in source
+    ]
+
+    def validate(output: BaseModel) -> None:
+        pattern = PatternKitV1.model_validate(output)
+        if (
+            pattern.id != pattern_kit_id
+            or pattern.workspace_id != workspace_id
+            or pattern.version != version
+        ):
+            _reject_pattern_output("PatternKit identity changed.")
+        if (
+            pattern.name != request.name
+            or pattern.kind != request.kind
+            or pattern.scope != request.scope
+        ):
+            _reject_pattern_output("PatternKit request metadata changed.")
+        observed_source_ids = [
+            str(source_id) for source_id in pattern.source.creative_dna_version_ids
+        ]
+        if observed_source_ids != expected_source_ids:
+            _reject_pattern_output("PatternKit source IDs changed.")
+        if pattern.status != "candidate":
+            _reject_pattern_output("New PatternKits must start as candidate.")
+        if pattern.performance_summary.evidence_status != "none":
+            _reject_pattern_output(
+                "PatternKit cannot create unsupplied performance evidence."
+            )
+        _validate_native_pattern_evidence(pattern, source_payloads)
+        _validate_native_anti_copy(pattern, source_payloads)
+
+    return validate
+
+
+def _validate_native_pattern_evidence(
+    pattern: PatternKitV1,
+    source_payloads: list[dict[str, object]],
+) -> None:
+    sources = {
+        str(source["creative_dna_version_id"]): source
+        for source in source_payloads
+        if "creative_dna_version_id" in source
+    }
+    refs = [
+        PatternEvidenceRefV1.model_validate(value)
+        for value in _walk_payload(pattern.model_dump(mode="json"))
+        if isinstance(value, dict)
+        and {"creative_dna_version_id", "evidence_id", "feature_path"}.issubset(value)
+    ]
+    if not refs:
+        _reject_pattern_output("PatternKit requires evidence references.")
+    for ref in refs:
+        source = sources.get(str(ref.creative_dna_version_id))
+        if source is None:
+            _reject_pattern_output(
+                "PatternKit references an unknown Creative DNA source."
+            )
+        if str(source.get("asset_version_id")) != str(ref.asset_version_id):
+            _reject_pattern_output("PatternKit evidence asset version changed.")
+        evidence_ids = {
+            str(item.get("evidence_id"))
+            for item in _dict_list(source.get("evidence"))
+            if item.get("evidence_id") is not None
+        }
+        if str(ref.evidence_id) not in evidence_ids:
+            _reject_pattern_output("PatternKit references evidence outside the request.")
+        dna = source.get("dna")
+        if not isinstance(dna, dict) or not _payload_path_exists(dna, ref.feature_path):
+            valid_paths = _feature_paths_for_evidence(source, ref.evidence_id)
+            guidance = (
+                f" Use one of these exact paths: {', '.join(valid_paths[:6])}."
+                if valid_paths
+                else ""
+            )
+            _reject_pattern_output(
+                f"PatternKit feature_path '{ref.feature_path}' is not a Creative DNA field."
+                f"{guidance}"
+            )
+
+
+def _validate_native_anti_copy(
+    pattern: PatternKitV1,
+    source_payloads: list[dict[str, object]],
+) -> None:
+    rendered = json.dumps(pattern.model_dump(mode="json"), sort_keys=True).casefold()
+    for source in source_payloads:
+        dna = source.get("dna")
+        if not isinstance(dna, dict):
+            continue
+        for path in ("opening.hook_text", "cta.spoken_text", "cta.overlay_text"):
+            payload = _payload_at_path(dna, path)
+            text = str(payload.get("value") or "").strip()
+            if len(text.split()) >= 8 and text.casefold() in rendered:
+                _reject_pattern_output("PatternKit copied protected source expression.")
+
+
+def _reject_pattern_output(message: str) -> Never:
+    raise StructuredOutputValidationError(
+        StructuredOutputIssue(
+            code=ProviderErrorCode.DOMAIN_VALIDATION_FAILED,
+            summary=message,
+        )
+    )
+
+
+def _feature_paths_for_evidence(
+    source_payload: dict[str, object],
+    evidence_id: UUID,
+) -> list[str]:
+    catalog = source_payload.get("evidence_feature_paths")
+    if not isinstance(catalog, dict):
+        return []
+    value = catalog.get(str(evidence_id))
+    if not isinstance(value, list):
+        return []
+    return [str(path) for path in value if isinstance(path, str)]
+
+
+def _evidence_feature_paths(dna_json: dict[str, object]) -> dict[str, list[str]]:
+    paths_by_evidence: dict[str, list[str]] = {}
+
+    def visit(value: object, path: str) -> None:
+        if not isinstance(value, dict):
+            return
+        evidence_ids = value.get("evidence_ids")
+        if path and isinstance(evidence_ids, list):
+            for evidence_id in evidence_ids:
+                key = str(evidence_id)
+                paths_by_evidence.setdefault(key, []).append(path)
+            return
+        for key, item in value.items():
+            visit(item, f"{path}.{key}" if path else key)
+
+    visit(dna_json, "")
+    return paths_by_evidence
+
+
+def _walk_payload(value: object) -> list[object]:
+    values = [value]
+    if isinstance(value, dict):
+        for item in value.values():
+            values.extend(_walk_payload(item))
+    elif isinstance(value, list):
+        for item in value:
+            values.extend(_walk_payload(item))
+    return values
+
+
+def _dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _payload_at_path(payload: dict[str, object], path: str) -> dict[str, object]:
+    current: object = payload
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(part)
+    return current if isinstance(current, dict) else {}
+
+
+def _payload_path_exists(payload: dict[str, object], path: str) -> bool:
+    current: object = payload
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return False
+        current = current[part]
+    return True
 
 
 def build_fixture_pattern_kit(

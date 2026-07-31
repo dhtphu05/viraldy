@@ -10,9 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from viraldy.modules.ai_gateway.models import AiModelRunModel
 from viraldy.modules.ai_gateway.public import (
+    PATTERN_KIT_PROMPT_NAME,
     PATTERN_KIT_PROMPT_VERSION,
     PATTERN_KIT_SCHEMA_VERSION,
     AiModelRunRepository,
+    EvidenceItemForModelV1,
+    StructuredGenerationResult,
 )
 from viraldy.modules.creative_dna.contracts import CreativeDnaV1
 from viraldy.modules.creative_dna.public import CreativeDnaRepository
@@ -25,6 +28,7 @@ from viraldy.modules.pattern_kits.provider import (
     LivePatternKitProvider,
     PatternEvidenceInput,
     PatternSourceInput,
+    _evidence_feature_paths,
     build_fixture_pattern_kit,
 )
 from viraldy.modules.pattern_kits.repository import PatternKitRepository
@@ -71,7 +75,7 @@ class PatternKitService:
             input_summary=_input_summary(data, sources),
         )
         try:
-            pattern = await self._extract_pattern(
+            pattern, provider_result = await self._extract_pattern(
                 pattern_kit_id=pattern_kit_id,
                 workspace_id=workspace_id,
                 version=1,
@@ -94,7 +98,12 @@ class PatternKitService:
                 source_rows=source_rows,
                 evidence_links=evidence_links,
             )
-            await self._complete_model_run(model_run, pattern, evidence_links)
+            await self._complete_model_run(
+                model_run,
+                pattern,
+                evidence_links,
+                provider_result,
+            )
             await self._events.record(
                 event_type="pattern_kit_created",
                 workspace_id=workspace_id,
@@ -106,12 +115,7 @@ class PatternKitService:
             await self._session.commit()
             return _detail_response(kit, version)
         except AppError as exc:
-            await AiModelRunRepository(self._session).fail(
-                model_run,
-                exc.code,
-                exc.message,
-                safe_error_message=exc.message,
-            )
+            await _fail_model_run(self._session, model_run, exc)
             await self._session.commit()
             raise
 
@@ -199,10 +203,11 @@ class PatternKitService:
         latest_pattern = _pattern_from_version(latest)
         new_version_number = kit.latest_version + 1
         model_run = None
+        provider_result = None
         if data.pattern is None:
             source_ids = latest_pattern.source.creative_dna_version_ids
             sources = await self._load_sources(workspace_id, source_ids)
-            pattern, model_run = await self._regenerate_version(
+            pattern, model_run, provider_result = await self._regenerate_version(
                 kit=kit,
                 version_number=new_version_number,
                 user_id=user_id,
@@ -244,7 +249,12 @@ class PatternKitService:
                 await self._session.commit()
             raise
         if model_run is not None:
-            await self._complete_model_run(model_run, pattern, evidence_links)
+            await self._complete_model_run(
+                model_run,
+                pattern,
+                evidence_links,
+                provider_result,
+            )
         source_rows = [
             (source.creative_dna_version_id, source.asset_version_id) for source in sources
         ]
@@ -427,6 +437,13 @@ class PatternKitService:
             request_hash=input_hash,
             input_hash=input_hash,
             input_summary=input_summary,
+            endpoint_family=(
+                "responses"
+                if self._settings.ai_mode == "live"
+                and self._settings.ai_provider == "openai"
+                else None
+            ),
+            prompt_name=PATTERN_KIT_PROMPT_NAME,
         )
 
     async def _extract_pattern(
@@ -440,19 +457,22 @@ class PatternKitService:
         data: CreatePatternKitRequest,
         sources: list[PatternSourceInput],
         model_run_id: UUID,
-    ) -> PatternKitV1:
+    ) -> tuple[PatternKitV1, StructuredGenerationResult | None]:
         if self._settings.ai_mode == "fixture":
-            return build_fixture_pattern_kit(
-                pattern_kit_id=pattern_kit_id,
-                workspace_id=workspace_id,
-                version=version,
-                created_by=user_id,
-                created_at=created_at,
-                request=data,
-                sources=sources,
-                model_run_id=model_run_id,
+            return (
+                build_fixture_pattern_kit(
+                    pattern_kit_id=pattern_kit_id,
+                    workspace_id=workspace_id,
+                    version=version,
+                    created_by=user_id,
+                    created_at=created_at,
+                    request=data,
+                    sources=sources,
+                    model_run_id=model_run_id,
+                ),
+                None,
             )
-        return LivePatternKitProvider(self._settings).extract(
+        execution = LivePatternKitProvider(self._settings).extract_with_metadata(
             pattern_kit_id=pattern_kit_id,
             workspace_id=workspace_id,
             version=version,
@@ -461,7 +481,12 @@ class PatternKitService:
             request=data,
             source_payloads=_source_payloads(sources),
             model_run_id=model_run_id,
+            evidence_catalog=_model_evidence_catalog(sources),
+            source_version_ids=list(
+                dict.fromkeys(source.asset_version_id for source in sources)
+            ),
         )
+        return execution.output, execution.provider_result
 
     async def _regenerate_version(
         self,
@@ -472,7 +497,11 @@ class PatternKitService:
         change_reason: str,
         sources: list[PatternSourceInput],
         latest_pattern: PatternKitV1,
-    ) -> tuple[PatternKitV1, AiModelRunModel]:
+    ) -> tuple[
+        PatternKitV1,
+        AiModelRunModel,
+        StructuredGenerationResult | None,
+    ]:
         request = CreatePatternKitRequest(
             name=latest_pattern.name,
             kind=latest_pattern.kind,
@@ -491,7 +520,7 @@ class PatternKitService:
             input_summary=_input_summary(request, sources),
         )
         try:
-            pattern = await self._extract_pattern(
+            pattern, provider_result = await self._extract_pattern(
                 pattern_kit_id=kit.id,
                 workspace_id=kit.workspace_id,
                 version=version_number,
@@ -501,14 +530,9 @@ class PatternKitService:
                 sources=sources,
                 model_run_id=model_run.id,
             )
-            return pattern, model_run
+            return pattern, model_run, provider_result
         except AppError as exc:
-            await AiModelRunRepository(self._session).fail(
-                model_run,
-                exc.code,
-                exc.message,
-                safe_error_message=exc.message,
-            )
+            await _fail_model_run(self._session, model_run, exc)
             await self._session.commit()
             raise
 
@@ -517,17 +541,31 @@ class PatternKitService:
         model_run: AiModelRunModel,
         pattern: PatternKitV1,
         evidence_links: list[tuple[UUID, str]],
+        provider_result: StructuredGenerationResult | None,
     ) -> None:
-        await AiModelRunRepository(self._session).complete(
+        output_summary: dict[str, object] = {
+            "sequence_count": len(pattern.sequence),
+            "evidence_link_count": len(evidence_links),
+            "overall_confidence": pattern.overall_confidence,
+        }
+        repository = AiModelRunRepository(self._session)
+        if provider_result is None:
+            await repository.complete(
+                model_run,
+                output_summary,
+                http_status=None,
+                provider_request_id=None,
+                latency_ms=None,
+            )
+            return
+        await repository.complete(
             model_run,
-            {
-                "sequence_count": len(pattern.sequence),
-                "evidence_link_count": len(evidence_links),
-                "overall_confidence": pattern.overall_confidence,
-            },
-            http_status=None,
-            provider_request_id=None,
-            latency_ms=None,
+            output_summary,
+            http_status=provider_result.http_status,
+            provider_request_id=provider_result.provider_request_id,
+            latency_ms=provider_result.latency_ms,
+            usage_json=provider_result.usage.model_dump(mode="json"),
+            repair_attempt_count=provider_result.repair_attempt_count,
         )
 
 
@@ -772,6 +810,9 @@ def _source_payloads(sources: list[PatternSourceInput]) -> list[dict[str, object
             "asset_version_id": str(source.asset_version_id),
             "taxonomy_version": source.taxonomy_version,
             "dna": source.dna.model_dump(mode="json"),
+            "evidence_feature_paths": _evidence_feature_paths(
+                source.dna.model_dump(mode="json")
+            ),
             "evidence": [
                 {
                     "evidence_id": str(evidence.id),
@@ -784,6 +825,25 @@ def _source_payloads(sources: list[PatternSourceInput]) -> list[dict[str, object
             ],
         }
         for source in sources
+    ]
+
+
+def _model_evidence_catalog(
+    sources: list[PatternSourceInput],
+) -> list[EvidenceItemForModelV1]:
+    return [
+        EvidenceItemForModelV1(
+            evidence_id=evidence.id,
+            source_version_id=evidence.asset_version_id,
+            evidence_type=evidence.evidence_type,
+            start_ms=evidence.start_ms,
+            end_ms=evidence.end_ms,
+            value=evidence.value_json,
+            confidence=evidence.confidence,
+            source=evidence.source,
+        )
+        for source in sources
+        for evidence in source.evidence_by_id.values()
     ]
 
 
@@ -812,4 +872,29 @@ def _hash_json(payload: dict[str, object]) -> str:
 def _model_name(settings: Settings) -> str:
     if settings.ai_mode == "fixture":
         return "fixture_pattern_kit_v1"
+    if settings.ai_provider == "openai":
+        return settings.resolve_openai_model("pattern_kit_extract")
     return settings.ai_text_model or "unconfigured"
+
+
+async def _fail_model_run(
+    session: AsyncSession,
+    model_run: AiModelRunModel,
+    error: AppError,
+) -> None:
+    http_status = error.details.get("http_status")
+    provider_request_id = error.details.get("provider_request_id")
+    repair_attempt_count = error.details.get("repair_attempt_count")
+    await AiModelRunRepository(session).fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=http_status if isinstance(http_status, int) else None,
+        safe_error_message=error.message,
+        provider_request_id=(
+            provider_request_id if isinstance(provider_request_id, str) else None
+        ),
+        repair_attempt_count=(
+            repair_attempt_count if isinstance(repair_attempt_count, int) else None
+        ),
+    )

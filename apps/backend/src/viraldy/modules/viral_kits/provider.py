@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import ValidationError
+from pydantic import BaseModel
 
 from viraldy.modules.ai_gateway.public import (
     VIRAL_KIT_PROMPT_VERSION,
+    AiOperationName,
     OpenAICompatibleClient,
+    StructuredGenerationResult,
+    ViraldyOperationContextV1,
+    execute_structured_operation,
     extract_message_json,
+    get_prompt_package,
 )
 from viraldy.modules.creative_domain.schema_versions import ADAPTATION_SCHEMA_VERSION
 from viraldy.modules.pattern_kits.contracts import PatternEvidenceRefV1
@@ -48,6 +55,12 @@ from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
 
+@dataclass(frozen=True, slots=True)
+class ViralKitProviderExecution:
+    output: ViralKitV1
+    provider_result: StructuredGenerationResult | None
+
+
 class LiveViralKitProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -67,6 +80,92 @@ class LiveViralKitProvider:
         pattern_matches: list[dict[str, object]],
         model_run_id: UUID,
     ) -> ViralKitV1:
+        return self.compose_with_metadata(
+            viral_kit_id=viral_kit_id,
+            workspace_id=workspace_id,
+            version=version,
+            created_by=created_by,
+            created_at=created_at,
+            request=request,
+            product_snapshot=product_snapshot,
+            pattern_payloads=pattern_payloads,
+            pattern_matches=pattern_matches,
+            model_run_id=model_run_id,
+        ).output
+
+    def compose_with_metadata(
+        self,
+        *,
+        viral_kit_id: UUID,
+        workspace_id: UUID,
+        version: int,
+        created_by: UUID,
+        created_at: str,
+        request: CreateViralKitRequest,
+        product_snapshot: dict[str, object],
+        pattern_payloads: list[dict[str, object]],
+        pattern_matches: list[dict[str, object]],
+        model_run_id: UUID,
+    ) -> ViralKitProviderExecution:
+        prompt = get_prompt_package(AiOperationName.VIRAL_KIT_COMPOSE)
+        product_context = ProductContextV1.model_validate(
+            product_snapshot["product_context"]
+        )
+        pattern_version_ids = [
+            UUID(str(payload["pattern_kit_version_id"]))
+            for payload in pattern_payloads
+        ]
+        context = ViraldyOperationContextV1(
+            operation=AiOperationName.VIRAL_KIT_COMPOSE,
+            request_id=str(model_run_id),
+            workspace_id=workspace_id,
+            actor_user_id=created_by,
+            product_context=product_context,
+            product_context_version=request.expected_product_context_version,
+            objective=request.objective,
+            target_market=request.target_market,
+            source_version_ids=pattern_version_ids,
+            seller_constraints={
+                "creator": request.creator_constraints.model_dump(mode="json"),
+                "production": request.production_constraints.model_dump(
+                    mode="json"
+                ),
+                "commercial": request.commercial_constraints.model_dump(
+                    mode="json"
+                ),
+            },
+            operation_payload={
+                "viral_kit_id": str(viral_kit_id),
+                "version": version,
+                "created_at": created_at,
+                "request": request.model_dump(mode="json"),
+                "product_snapshot": product_snapshot,
+                "pattern_matches": pattern_matches,
+                "pattern_payloads": pattern_payloads,
+                "model_run_id": str(model_run_id),
+            },
+            schema_version=prompt.output_schema_version,
+            prompt_version=prompt.prompt_version,
+        )
+        if self._settings.ai_provider == "openai":
+            result = execute_structured_operation(
+                self._settings,
+                context,
+                ViralKitV1,
+                output_validator=_native_output_validator(
+                    viral_kit_id,
+                    workspace_id,
+                    version,
+                    request,
+                    product_snapshot,
+                    pattern_version_ids,
+                ),
+            )
+            return ViralKitProviderExecution(
+                output=ViralKitV1.model_validate(result.parsed_output),
+                provider_result=result,
+            )
+
         if not self._settings.ai_base_url or not self._settings.ai_text_model:
             raise AppError(
                 "AI_PROVIDER_NOT_CONFIGURED",
@@ -83,26 +182,13 @@ class LiveViralKitProvider:
             "model": self._settings.ai_text_model,
             "messages": [
                 {
+                    "role": "system",
+                    "content": prompt.system_prompt,
+                },
+                {
                     "role": "user",
-                    "content": (
-                        "Compose a ViralKitV1 from the supplied product snapshot and "
-                        "PatternKit versions only. Return only JSON matching ViralKitV1. "
-                        "Create exactly three diverse concepts. Do not promise virality, "
-                        "GMV, ROAS, or sales. Preserve prohibited claims, required "
-                        "disclosures, product facts, fulfillment constraints, and evidence "
-                        "provenance.\n"
-                        f"Viral kit ID: {viral_kit_id}\n"
-                        f"Workspace ID: {workspace_id}\n"
-                        f"Version: {version}\n"
-                        f"Created by: {created_by}\n"
-                        f"Created at: {created_at}\n"
-                        f"Model run ID: {model_run_id}\n"
-                        f"Request: {request.model_dump(mode='json')}\n"
-                        f"Product snapshot: {product_snapshot}\n"
-                        f"Pattern matches: {pattern_matches}\n"
-                        f"Pattern payloads: {pattern_payloads}"
-                    ),
-                }
+                    "content": f"{prompt.developer_prompt}\n\n{context.stable_json()}",
+                },
             ],
             "response_format": _response_format(self._settings),
         }
@@ -110,13 +196,142 @@ class LiveViralKitProvider:
             payload["max_tokens"] = self._settings.ai_max_output_tokens
         raw = extract_message_json(self._client.chat_json(payload))
         try:
-            return ViralKitV1.model_validate(raw)
-        except ValidationError as exc:
+            output = ViralKitV1.model_validate(raw)
+            _native_output_validator(
+                viral_kit_id,
+                workspace_id,
+                version,
+                request,
+                product_snapshot,
+                pattern_version_ids,
+            )(output)
+            return ViralKitProviderExecution(
+                output=output,
+                provider_result=None,
+            )
+        except ValueError as exc:
             raise AppError(
                 "VIRAL_KIT_OUTPUT_INVALID",
                 "Provider returned invalid ViralKit output.",
-                details={"errors": exc.errors()},
             ) from exc
+
+
+def _native_output_validator(
+    viral_kit_id: UUID,
+    workspace_id: UUID,
+    version: int,
+    request: CreateViralKitRequest,
+    product_snapshot: dict[str, object],
+    pattern_version_ids: list[UUID],
+) -> Callable[[BaseModel], None]:
+    expected_product_id = UUID(str(product_snapshot["product_id"]))
+
+    def validate(output: BaseModel) -> None:
+        viral_kit = ViralKitV1.model_validate(output)
+        if (
+            viral_kit.id != viral_kit_id
+            or viral_kit.workspace_id != workspace_id
+            or viral_kit.version != version
+        ):
+            raise ValueError("ViralKit identity changed.")
+        if viral_kit.product.product_id != expected_product_id:
+            raise ValueError("ViralKit product identity changed.")
+        if viral_kit.objective != request.objective:
+            raise ValueError("ViralKit objective changed.")
+        if len(viral_kit.concepts) != 3:
+            raise ValueError("ViralKit must contain exactly three concepts.")
+        if viral_kit.provenance.pattern_kit_version_ids != pattern_version_ids:
+            raise ValueError("ViralKit PatternKit source IDs changed.")
+        _validate_native_viral_kit_business_rules(
+            viral_kit,
+            request,
+            product_snapshot,
+            pattern_version_ids,
+        )
+
+    return validate
+
+
+def _validate_native_viral_kit_business_rules(
+    viral_kit: ViralKitV1,
+    request: CreateViralKitRequest,
+    product_snapshot: dict[str, object],
+    pattern_version_ids: list[UUID],
+) -> None:
+    product_context = ProductContextV1.model_validate(product_snapshot["product_context"])
+    if viral_kit.status != "ready_for_review":
+        raise ValueError("New ViralKits must start ready for review.")
+    if (
+        viral_kit.product.product_context_version
+        != request.expected_product_context_version
+        or viral_kit.product.snapshot_json != product_context
+    ):
+        raise ValueError("ViralKit changed the locked Product Context snapshot.")
+    if (
+        viral_kit.platform != request.platform
+        or viral_kit.target_market != request.target_market
+    ):
+        raise ValueError("ViralKit changed platform or target market.")
+    if viral_kit.constraints.creator != request.creator_constraints:
+        raise ValueError("ViralKit changed creator constraints.")
+    if viral_kit.constraints.production != request.production_constraints:
+        raise ValueError("ViralKit changed production constraints.")
+    if viral_kit.constraints.commercial != request.commercial_constraints:
+        raise ValueError("ViralKit changed commercial constraints.")
+
+    governance = viral_kit.constraints.governance
+    required_prohibited_claims = {
+        claim.text
+        for claim in product_context.governance.claims
+        if claim.rule_type == "prohibited"
+    }
+    required_prohibited = required_prohibited_claims.union(
+        product_context.governance.prohibited_content
+    )
+    required_disclosures = set(product_context.governance.required_disclosures)
+    if not required_prohibited_claims.issubset(governance.prohibited_claims):
+        raise ValueError("ViralKit dropped prohibited product claims.")
+    if not required_disclosures.issubset(governance.required_disclosures):
+        raise ValueError("ViralKit dropped required product disclosures.")
+    if not set(product_context.governance.prohibited_content).issubset(
+        governance.prohibited_content
+    ):
+        raise ValueError("ViralKit dropped prohibited product content.")
+    if not set(product_context.governance.rights_notes).issubset(governance.rights_notes):
+        raise ValueError("ViralKit dropped product rights notes.")
+
+    allowed_pattern_ids = set(pattern_version_ids)
+    match_ids = [match.pattern_kit_version_id for match in viral_kit.pattern_matches]
+    if set(match_ids) != allowed_pattern_ids or len(match_ids) != len(set(match_ids)):
+        raise ValueError("ViralKit pattern matches changed source provenance.")
+    decisions = (
+        viral_kit.adaptation_plan.keep
+        + viral_kit.adaptation_plan.change
+        + viral_kit.adaptation_plan.avoid
+    )
+    if any(
+        not set(decision.source_pattern_kit_version_ids).issubset(allowed_pattern_ids)
+        for decision in decisions
+    ):
+        raise ValueError("ViralKit adaptation references an unknown PatternKit.")
+    for concept in viral_kit.concepts:
+        if not set(concept.source_pattern_kit_version_ids).issubset(
+            allowed_pattern_ids
+        ):
+            raise ValueError("ViralKit concept references an unknown PatternKit.")
+        if required_prohibited and not required_prohibited.issubset(
+            concept.claims_to_avoid
+        ):
+            raise ValueError("ViralKit concept dropped prohibited claims.")
+        if required_disclosures and not required_disclosures.issubset(
+            concept.required_disclosures
+        ):
+            raise ValueError("ViralKit concept dropped required disclosures.")
+        if request.commercial_constraints.product_tag_required and not any(
+            requirement.requirement_type == "product_tag_presence"
+            for requirement in concept.must_show
+        ):
+            raise ValueError("ViralKit concept dropped the product-tag requirement.")
 
 
 def build_fixture_viral_kit(

@@ -5,25 +5,36 @@ import json
 import shutil
 import subprocess  # nosec B404
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
 from uuid import UUID
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from viraldy.modules.ai_gateway.public import (
+    MEDIA_OBSERVATION_PROMPT_NAME,
+    MEDIA_OBSERVATION_PROMPT_VERSION,
+    AiModelRunModel,
+)
 from viraldy.modules.ai_gateway.repository import SyncAiModelRunRepository
-from viraldy.modules.ai_gateway.schemas import ProviderResponse
+from viraldy.modules.ai_gateway.usage import ProviderUsage
 from viraldy.modules.assets.public import AssetVersionModel, AssetVersionSnapshot
-from viraldy.modules.creative_domain.schema_versions import EVIDENCE_SCHEMA_VERSION
+from viraldy.modules.creative_domain.schema_versions import (
+    EVIDENCE_SCHEMA_VERSION,
+    MEDIA_OBSERVATION_SCHEMA_VERSION,
+)
 from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1, TimeRangeV1
 from viraldy.modules.media_analysis.fixtures import fixture_media_contract, is_known_fixture
 from viraldy.modules.media_analysis.models import EvidenceItemModel
 from viraldy.modules.media_analysis.provider import (
     LiveAnalysisProvider,
     OcrContract,
+    ProviderCallMetadata,
     SceneContract,
     TranscriptContract,
 )
@@ -40,6 +51,7 @@ MEDIA_ANALYSIS_SCHEMA_VERSION = "media_analysis_schema_v1"
 SUPPORTED_CONTAINERS = {"mov,mp4,m4a,3gp,3g2,mj2", "mp4", "mov"}
 SUBPROCESS_TIMEOUT_SECONDS = 120
 T = TypeVar("T")
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -48,9 +60,46 @@ class MediaEvidencePipelineResult:
     primary_model_run_id: UUID | None
 
 
+@contextmanager
+def _cleanup_uploaded_objects_on_failure(
+    storage: StoragePort,
+) -> Iterator[list[str]]:
+    uploaded_keys: list[str] = []
+    try:
+        yield uploaded_keys
+    except Exception:
+        for object_key in reversed(uploaded_keys):
+            try:
+                storage.delete_object(object_key)
+            except Exception:
+                logger.exception(
+                    "media_artifact_failure_cleanup_failed",
+                    storage_key=object_key,
+                )
+        raise
+
+
 def validate_live_ai_settings(settings: Settings) -> None:
     if settings.ai_mode != "live":
         return
+    if settings.ai_provider == "openai":
+        missing = []
+        if not settings.openai_api_key:
+            missing.append("OPENAI_API_KEY")
+        if not settings.openai_text_model:
+            missing.append("OPENAI_TEXT_MODEL")
+        if not settings.openai_vision_model:
+            missing.append("OPENAI_VISION_MODEL")
+        if not settings.openai_transcription_model:
+            missing.append("OPENAI_TRANSCRIPTION_MODEL")
+        if missing:
+            raise AppError(
+                "AI_PROVIDER_NOT_CONFIGURED",
+                f"Live OpenAI mode requires: {', '.join(missing)}.",
+                status_code=503,
+            )
+        return
+
     missing = []
     if not settings.ai_base_url:
         missing.append("AI_BASE_URL")
@@ -137,8 +186,12 @@ class SyncMediaEvidencePipeline:
     def _process_live(
         self, snapshot: AssetVersionSnapshot, run_type: str, processing_job_id: UUID | None
     ) -> MediaEvidencePipelineResult:
-        provider_name = "openai_compatible"
-        model_version = self._settings.ai_vision_model or self._settings.ai_text_model or "live"
+        provider_name = self._settings.ai_provider
+        model_version = (
+            self._settings.resolve_openai_model("media_observation", vision=True)
+            if provider_name == "openai"
+            else self._settings.ai_vision_model or self._settings.ai_text_model or "live"
+        )
         reusable = self._repository.list_reusable_evidence(
             snapshot.workspace_id,
             snapshot.asset_version_id,
@@ -198,95 +251,130 @@ class SyncMediaEvidencePipeline:
             )
             thumbnail_key = f"{base_key}/thumbnail.jpg"
             audio_key = f"{base_key}/audio.wav" if has_audio else None
-            self._storage.upload_file(str(thumbnail_path), thumbnail_key, "image/jpeg")
-            if has_audio and audio_key is not None:
-                self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
-            uploaded_frames: list[tuple[int, Path, str]] = []
-            for timestamp_ms, path, storage_key in frame_paths:
-                self._storage.upload_file(str(path), storage_key, "image/jpeg")
-                uploaded_frames.append((timestamp_ms, path, storage_key))
+            with _cleanup_uploaded_objects_on_failure(self._storage) as uploaded_keys:
+                uploaded_keys.append(thumbnail_key)
+                self._storage.upload_file(str(thumbnail_path), thumbnail_key, "image/jpeg")
+                if has_audio and audio_key is not None:
+                    uploaded_keys.append(audio_key)
+                    self._storage.upload_file(str(audio_path), audio_key, "audio/wav")
+                uploaded_frames: list[tuple[int, Path, str]] = []
+                for timestamp_ms, path, storage_key in frame_paths:
+                    uploaded_keys.append(storage_key)
+                    self._storage.upload_file(str(path), storage_key, "image/jpeg")
+                    uploaded_frames.append((timestamp_ms, path, storage_key))
 
-            provider = LiveAnalysisProvider(self._settings)
-            if has_audio:
-                transcript, transcript_run_id = self._tracked_provider_call(
+                provider = LiveAnalysisProvider(self._settings)
+                if has_audio:
+                    transcript, transcript_run_id = self._tracked_provider_call(
+                        snapshot,
+                        processing_job_id,
+                        "audio_transcription",
+                        (
+                            self._settings.openai_transcription_model
+                            if self._settings.ai_provider == "openai"
+                            else self._settings.asr_model or "asr"
+                        ),
+                        {
+                            "asset_version_id": str(snapshot.asset_version_id),
+                            "audio_artifact": "audio.wav",
+                            "run_type": run_type,
+                        },
+                        lambda: provider.transcribe_audio_with_response(
+                            audio_path,
+                            request_id=str(processing_job_id or snapshot.asset_version_id),
+                            source_filename=snapshot.original_filename,
+                        ),
+                    )
+                else:
+                    transcript = TranscriptContract(segments=[], full_text="")
+                    transcript_run_id = None
+                if (
+                    self._settings.ocr_provider == "vision"
+                    and self._settings.ai_provider != "openai"
+                ):
+                    product_context = self._product_context_json(snapshot)
+                    ocr, ocr_run_id = self._tracked_provider_call(
+                        snapshot,
+                        processing_job_id,
+                        "visual_ocr",
+                        self._settings.ai_vision_model or "vision",
+                        {
+                            "asset_version_id": str(snapshot.asset_version_id),
+                            "frame_count": len(uploaded_frames[:8]),
+                            "run_type": run_type,
+                        },
+                        lambda: provider.extract_ocr_with_response(
+                            uploaded_frames,
+                            product_context,
+                            source_filename=snapshot.original_filename,
+                        ),
+                    )
+                else:
+                    ocr = provider.extract_ocr(
+                        uploaded_frames,
+                        self._product_context_json(snapshot),
+                        source_filename=snapshot.original_filename,
+                    )
+                    ocr_run_id = None
+                scenes = _detect_scenes(int(cast(int, metadata["duration_ms"])))
+                observations, vision_run_id = self._tracked_provider_call(
                     snapshot,
                     processing_job_id,
-                    "audio_transcription",
-                    self._settings.asr_model or "asr",
+                    "visual_observations",
+                    (
+                        self._settings.resolve_openai_model(
+                            "media_observation",
+                            vision=True,
+                        )
+                        if self._settings.ai_provider == "openai"
+                        else self._settings.ai_vision_model or "vision"
+                    ),
                     {
                         "asset_version_id": str(snapshot.asset_version_id),
-                        "audio_artifact": "audio.wav",
+                        "frame_count": len(uploaded_frames[:12]),
+                        "transcript_segments": len(transcript.segments),
+                        "ocr_segments": len(ocr.segments),
                         "run_type": run_type,
                     },
-                    lambda: provider.transcribe_audio_with_response(audio_path),
+                    lambda: provider.extract_visual_observations_with_response(
+                        uploaded_frames,
+                        transcript,
+                        ocr,
+                        self._product_context_json(snapshot),
+                        int(cast(int, metadata["duration_ms"])),
+                        workspace_id=snapshot.workspace_id,
+                        asset_id=snapshot.asset_id,
+                        asset_version_id=snapshot.asset_version_id,
+                        source_filename=snapshot.original_filename,
+                        request_id=str(processing_job_id or snapshot.asset_version_id),
+                    ),
                 )
-            else:
-                transcript = TranscriptContract(segments=[], full_text="")
-                transcript_run_id = None
-            if self._settings.ocr_provider == "vision":
-                product_context = self._product_context_json(snapshot)
-                ocr, ocr_run_id = self._tracked_provider_call(
-                    snapshot,
-                    processing_job_id,
-                    "visual_ocr",
-                    self._settings.ai_vision_model or "vision",
-                    {
-                        "asset_version_id": str(snapshot.asset_version_id),
-                        "frame_count": len(uploaded_frames[:8]),
-                        "run_type": run_type,
-                    },
-                    lambda: provider.extract_ocr_with_response(uploaded_frames, product_context),
-                )
-            else:
-                ocr = provider.extract_ocr(uploaded_frames, self._product_context_json(snapshot))
-                ocr_run_id = None
-            scenes = _detect_scenes(int(cast(int, metadata["duration_ms"])))
-            observations, vision_run_id = self._tracked_provider_call(
-                snapshot,
-                processing_job_id,
-                "visual_observations",
-                self._settings.ai_vision_model or "vision",
-                {
-                    "asset_version_id": str(snapshot.asset_version_id),
-                    "frame_count": len(uploaded_frames[:12]),
-                    "transcript_segments": len(transcript.segments),
-                    "ocr_segments": len(ocr.segments),
-                    "run_type": run_type,
-                },
-                lambda: provider.extract_visual_observations_with_response(
+                contract = _live_contract(
+                    metadata,
+                    thumbnail_key,
+                    audio_key,
                     uploaded_frames,
                     transcript,
                     ocr,
-                    self._product_context_json(snapshot),
-                    int(cast(int, metadata["duration_ms"])),
-                ),
-            )
-            contract = _live_contract(
-                metadata,
-                thumbnail_key,
-                audio_key,
-                uploaded_frames,
-                transcript,
-                ocr,
-                scenes,
-                observations,
-                self._settings,
-            )
-            artifacts = self._artifact_rows(
-                snapshot.workspace_id, snapshot.asset_version_id, contract
-            )
-            evidence = self._evidence_rows(snapshot.asset_version_id, run_type, contract)
-            persisted = self._repository.replace_artifacts_and_evidence(
-                snapshot.workspace_id,
-                snapshot.asset_version_id,
-                processing_job_id,
-                MEDIA_PIPELINE_VERSION,
-                artifacts,
-                evidence,
-            )
-            return MediaEvidencePipelineResult(
-                persisted, vision_run_id or ocr_run_id or transcript_run_id
-            )
+                    scenes,
+                    observations,
+                    self._settings,
+                )
+                artifacts = self._artifact_rows(
+                    snapshot.workspace_id, snapshot.asset_version_id, contract
+                )
+                evidence = self._evidence_rows(snapshot.asset_version_id, run_type, contract)
+                persisted = self._repository.replace_artifacts_and_evidence(
+                    snapshot.workspace_id,
+                    snapshot.asset_version_id,
+                    processing_job_id,
+                    MEDIA_PIPELINE_VERSION,
+                    artifacts,
+                    evidence,
+                )
+                return MediaEvidencePipelineResult(
+                    persisted, vision_run_id or ocr_run_id or transcript_run_id
+                )
 
     def _tracked_provider_call(
         self,
@@ -295,36 +383,55 @@ class SyncMediaEvidencePipeline:
         capability: str,
         model: str,
         input_summary: dict[str, object],
-        call: Callable[[], tuple[T, ProviderResponse | None]],
+        call: Callable[[], tuple[T, ProviderCallMetadata | None]],
     ) -> tuple[T, UUID | None]:
+        operation, prompt_name, prompt_version, schema_version, endpoint_family = (
+            _tracked_operation_metadata(
+                capability,
+                native_openai=self._settings.ai_provider == "openai",
+            )
+        )
         model_run = SyncAiModelRunRepository(self._session).create_running(
-            snapshot.workspace_id,
-            processing_job_id,
-            "asset_version",
-            snapshot.asset_version_id,
-            capability,
-            self._settings.ai_mode,
-            "openai_compatible",
-            model,
-            MEDIA_ANALYSIS_PROMPT_VERSION,
-            MEDIA_ANALYSIS_SCHEMA_VERSION,
-            _hash_json({"capability": capability, "input_summary": input_summary}),
-            input_summary,
+            workspace_id=snapshot.workspace_id,
+            processing_job_id=processing_job_id,
+            subject_type="asset_version",
+            subject_id=snapshot.asset_version_id,
+            capability=capability,
+            operation=operation,
+            analysis_mode=self._settings.ai_mode,
+            provider=self._settings.ai_provider,
+            model=model,
+            prompt_version=prompt_version,
+            response_schema_version=schema_version,
+            schema_version=schema_version,
+            request_hash=_hash_json({"capability": capability, "input_summary": input_summary}),
+            input_hash=_hash_json({"capability": capability, "input_summary": input_summary}),
+            input_summary=input_summary,
+            endpoint_family=endpoint_family,
+            prompt_name=prompt_name,
         )
         try:
             result, response = call()
         except AppError as exc:
-            SyncAiModelRunRepository(self._session).fail(model_run, exc.code, exc.message)
+            _fail_tracked_model_run(self._session, model_run, exc)
             raise
         if response is None:
             SyncAiModelRunRepository(self._session).complete(model_run, {}, None, None, None)
         else:
+            usage = getattr(response, "usage", None)
+            repair_attempt_count = getattr(response, "repair_attempt_count", 0)
             SyncAiModelRunRepository(self._session).complete(
                 model_run,
                 _provider_output_summary(result),
                 response.http_status,
                 response.provider_request_id,
                 response.latency_ms,
+                usage_json=(
+                    usage.model_dump(mode="json") if isinstance(usage, ProviderUsage) else None
+                ),
+                repair_attempt_count=(
+                    repair_attempt_count if isinstance(repair_attempt_count, int) else 0
+                ),
             )
         return result, model_run.id
 
@@ -490,6 +597,31 @@ class SyncMediaEvidencePipeline:
                         "end_ms": int(segment["end_ms"]),
                         "frame_storage_key": segment.get("frame_storage_key"),
                         "confidence": segment.get("confidence"),
+                    },
+                )
+            )
+        for text_observation in observations.on_screen_text:
+            rows.append(
+                _row(
+                    asset_version_id,
+                    run_type,
+                    "on_screen_text",
+                    "vision",
+                    provider,
+                    model_version,
+                    {
+                        "schema_version": EVIDENCE_SCHEMA_VERSION,
+                        "evidence_type": "on_screen_text",
+                        "observation_id": text_observation.observation_id,
+                        "text": text_observation.text,
+                        "text_role": text_observation.text_role,
+                        "confidence": text_observation.confidence,
+                        **_time_fields(text_observation.time_range),
+                        "frame_storage_key": (
+                            text_observation.frame_storage_keys[0]
+                            if text_observation.frame_storage_keys
+                            else None
+                        ),
                     },
                 )
             )
@@ -921,8 +1053,12 @@ def _live_contract(
 ) -> dict[str, Any]:
     return {
         "analysis_mode": "live",
-        "provider": "openai_compatible",
-        "model_version": settings.ai_vision_model or settings.ai_text_model or "live",
+        "provider": settings.ai_provider,
+        "model_version": (
+            settings.resolve_openai_model("media_observation", vision=True)
+            if settings.ai_provider == "openai"
+            else settings.ai_vision_model or settings.ai_text_model or "live"
+        ),
         "metadata": metadata,
         "transcript": transcript.model_dump(mode="json"),
         "ocr": ocr.model_dump(mode="json"),
@@ -956,6 +1092,65 @@ def _artifact_stage(artifact_type: str) -> str:
 def _hash_json(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def _tracked_operation_metadata(
+    capability: str,
+    *,
+    native_openai: bool,
+) -> tuple[str, str | None, str | None, str, str | None]:
+    if native_openai and capability == "visual_observations":
+        return (
+            "media_observation",
+            MEDIA_OBSERVATION_PROMPT_NAME,
+            MEDIA_OBSERVATION_PROMPT_VERSION,
+            MEDIA_OBSERVATION_SCHEMA_VERSION,
+            "responses",
+        )
+    if native_openai and capability == "audio_transcription":
+        return (
+            "audio_transcription",
+            "audio_transcription",
+            "audio_transcription_v1",
+            "transcript_v1",
+            "audio_transcriptions",
+        )
+    if native_openai:
+        return (
+            capability,
+            capability,
+            f"{capability}_v1",
+            f"{capability}_v1",
+            "responses",
+        )
+    return (
+        capability,
+        capability,
+        MEDIA_ANALYSIS_PROMPT_VERSION,
+        MEDIA_ANALYSIS_SCHEMA_VERSION,
+        ("audio_transcriptions" if capability == "audio_transcription" else "chat_completions"),
+    )
+
+
+def _fail_tracked_model_run(
+    session: Session,
+    model_run: AiModelRunModel,
+    error: AppError,
+) -> None:
+    http_status = error.details.get("http_status")
+    provider_request_id = error.details.get("provider_request_id")
+    repair_attempt_count = error.details.get("repair_attempt_count")
+    SyncAiModelRunRepository(session).fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=http_status if isinstance(http_status, int) else None,
+        safe_error_message=error.message,
+        provider_request_id=(provider_request_id if isinstance(provider_request_id, str) else None),
+        repair_attempt_count=(
+            repair_attempt_count if isinstance(repair_attempt_count, int) else None
+        ),
+    )
 
 
 def _provider_output_summary(result: object) -> dict[str, object]:

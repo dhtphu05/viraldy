@@ -7,9 +7,11 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
+from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from viraldy.modules.ai_gateway.public import StructuredOutputValidationError
 from viraldy.modules.creative_dna.contracts import CreativeDnaV1
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
 from viraldy.modules.creative_dna.service import _build_creative_dna, _evidence_by_type
@@ -31,6 +33,7 @@ from viraldy.modules.pattern_kits.performance import validate_supported_performa
 from viraldy.modules.pattern_kits.provider import (
     PatternEvidenceInput,
     PatternSourceInput,
+    _native_output_validator,
     build_fixture_pattern_kit,
 )
 from viraldy.modules.pattern_kits.schemas import (
@@ -39,10 +42,27 @@ from viraldy.modules.pattern_kits.schemas import (
     CreatePatternKitVersionRequest,
     PatternKitActionRequest,
 )
-from viraldy.modules.pattern_kits.service import PatternKitService
+from viraldy.modules.pattern_kits.service import PatternKitService, _source_payloads
 from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError, ConflictError
+
+
+def test_pattern_kit_openai_schema_uses_items_for_reveal_window() -> None:
+    schema = to_strict_json_schema(PatternKitV1)
+
+    reveal_window = schema["$defs"]["ProductRevealPatternV1"]["properties"][
+        "first_appearance_window_ms"
+    ]
+
+    assert reveal_window["type"] == "array"
+    assert reveal_window["minItems"] == 2
+    assert reveal_window["maxItems"] == 2
+    assert reveal_window["items"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "null"},
+    ]
+    assert "prefixItems" not in reveal_window
 
 
 @dataclass(slots=True)
@@ -106,6 +126,78 @@ class FakeAiModelRunRepository:
     ) -> FakeModelRun:
         self.failed.append((run.id, code))
         return run
+
+
+def test_native_pattern_validator_rejects_evidence_outside_catalog() -> None:
+    workspace_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+    source = _source_input(dna, evidence)
+    request = _create_request([dna.id], kind="single_asset_abstraction")
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=uuid4(),
+        created_at=utc_now(),
+        request=request,
+        sources=[source],
+        model_run_id=uuid4(),
+    )
+    payload = pattern.model_dump(mode="json")
+    payload["opening"]["evidence_refs"][0]["evidence_id"] = str(uuid4())  # type: ignore[index]
+    invalid = PatternKitV1.model_validate(payload)
+    validator = _native_output_validator(
+        pattern.id,
+        workspace_id,
+        1,
+        request,
+        _source_payloads([source]),
+    )
+
+    with pytest.raises(ValueError, match="outside the request"):
+        validator(invalid)
+
+
+def test_native_pattern_validator_returns_a_safe_repair_reason() -> None:
+    workspace_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+    source = _source_input(dna, evidence)
+    request = _create_request([dna.id], kind="single_asset_abstraction")
+    pattern = build_fixture_pattern_kit(
+        pattern_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=uuid4(),
+        created_at=utc_now(),
+        request=request,
+        sources=[source],
+        model_run_id=uuid4(),
+    )
+    invalid = pattern.model_copy(update={"status": "reviewed"})
+    validator = _native_output_validator(
+        pattern.id,
+        workspace_id,
+        1,
+        request,
+        _source_payloads([source]),
+    )
+
+    with pytest.raises(StructuredOutputValidationError) as exc_info:
+        validator(invalid)
+
+    assert exc_info.value.issue.summary == "New PatternKits must start as candidate."
+
+
+def test_pattern_source_payload_catalogs_exact_paths_by_evidence_id() -> None:
+    workspace_id = uuid4()
+    dna, evidence = _dna_model(workspace_id)
+
+    payload = _source_payloads([_source_input(dna, evidence)])[0]
+    feature_paths = cast(dict[str, list[str]], payload["evidence_feature_paths"])
+
+    assert "opening.primary_hook_type" in feature_paths[str(evidence[0].id)]
+    assert "product.first_appearance_ms" in feature_paths[str(evidence[1].id)]
+    assert "demo.demo_type" in feature_paths[str(evidence[2].id)]
 
 
 class FakeCreativeDnaRepository:

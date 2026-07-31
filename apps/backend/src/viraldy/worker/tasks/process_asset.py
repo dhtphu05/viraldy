@@ -248,6 +248,9 @@ def _process_media(
     pipeline_result = SyncMediaEvidencePipeline(session, get_settings()).process_with_metadata(
         loaded, run_type, job.id
     )
+    refreshed = asset_queries.load_asset_version(asset_id, version_id)
+    if refreshed is not None:
+        loaded = refreshed
     repo.update_progress(job, 60, "extracting_visual_evidence")
     session.commit()
     return loaded, pipeline_result.evidence, pipeline_result.primary_model_run_id
@@ -259,16 +262,25 @@ def _analyze_reference(
     asset_queries: SyncAssetQueries,
     session: Session,
 ) -> dict[str, object]:
-    loaded, evidence, primary_model_run_id = _process_media(
+    loaded, evidence, _ = _process_media(
         job, repo, asset_queries, session, "creative_dna_build"
     )
     reference_id = UUID(str(job.input_json["reference_id"]))
     repo.update_progress(job, 72, "building_creative_dna")
-    dna = SyncCreativeDnaBuilder(session).build(
-        job.workspace_id, loaded.asset_version_id, reference_id, evidence, get_settings().ai_mode
+    settings = get_settings()
+    dna = SyncCreativeDnaBuilder(session, settings).build(
+        job.workspace_id,
+        loaded.asset_version_id,
+        reference_id,
+        evidence,
+        settings.ai_mode,
+        asset_id=loaded.asset_id,
+        processing_job_id=job.id,
+        actor_user_id=_actor_user_id(job),
+        product_id=loaded.product_id,
+        media_duration_ms=_media_duration_ms(loaded.metadata_json),
+        attempt_count=job.attempt_count,
     )
-    dna.processing_job_id = job.id
-    dna.primary_model_run_id = primary_model_run_id
     reference = SyncReferenceRepository(session).get(job.workspace_id, reference_id)
     if reference is not None:
         reference.status = "analyzed"
@@ -294,6 +306,9 @@ def _analyze_reference(
         "asset_version_id": str(loaded.asset_version_id),
         "evidence_count": len(evidence),
         "analysis_mode": dna.analysis_mode,
+        "primary_model_run_id": (
+            str(dna.primary_model_run_id) if dna.primary_model_run_id else None
+        ),
     }
 
 
@@ -308,8 +323,19 @@ def _score_tiktok_asset(
     )
     score_run_id = UUID(str(job.input_json["score_run_id"]))
     repo.update_progress(job, 70, "calculating_score")
-    dna = SyncCreativeDnaBuilder(session).build(
-        job.workspace_id, loaded.asset_version_id, None, evidence, get_settings().ai_mode
+    settings = get_settings()
+    dna = SyncCreativeDnaBuilder(session, settings).build(
+        job.workspace_id,
+        loaded.asset_version_id,
+        None,
+        evidence,
+        settings.ai_mode,
+        asset_id=loaded.asset_id,
+        processing_job_id=job.id,
+        actor_user_id=_actor_user_id(job),
+        product_id=loaded.product_id,
+        media_duration_ms=_media_duration_ms(loaded.metadata_json),
+        attempt_count=job.attempt_count,
     )
     result = score_tiktok_structure(
         evidence,
@@ -324,7 +350,6 @@ def _score_tiktok_asset(
     )
     run.processing_job_id = job.id
     run.primary_model_run_id = primary_model_run_id
-    dna.primary_model_run_id = primary_model_run_id
     _record_recommendation(
         session,
         job.workspace_id,
@@ -483,6 +508,11 @@ def _media_duration_ms(metadata_json: dict[str, object]) -> int | None:
         return None
     duration = media.get("duration_ms")
     return int(duration) if isinstance(duration, int | float) else None
+
+
+def _actor_user_id(job: ProcessingJobModel) -> UUID | None:
+    actor_user_id = job.input_json.get("actor_user_id")
+    return UUID(str(actor_user_id)) if actor_user_id else None
 
 
 def _product_context_schema_version(product_snapshot_json: dict[str, object] | None) -> str | None:

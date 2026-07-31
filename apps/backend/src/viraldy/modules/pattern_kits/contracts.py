@@ -99,7 +99,7 @@ class OpeningPatternV1(PatternKitContractBase):
 
 
 class ProductRevealPatternV1(PatternKitContractBase):
-    first_appearance_window_ms: tuple[int | None, int | None]
+    first_appearance_window_ms: list[int | None] = Field(min_length=2, max_length=2)
     preferred_shot_types: list[str] = Field(default_factory=list)
     close_up_expectation: str
     usage_visibility_expectation: str
