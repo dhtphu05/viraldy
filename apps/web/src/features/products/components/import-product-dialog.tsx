@@ -64,10 +64,7 @@ export function ImportProductDialog({
             if (!workspaceId || !preview || !form) {
                 throw new Error("Analyze a product link before saving.");
             }
-            return createProduct(
-                workspaceId,
-                createInputFromForm(preview.product_draft, form),
-            );
+            return createProduct(workspaceId, createInputFromForm(preview.product_draft, form));
         },
         onSuccess: (product) => {
             queryClient.setQueryData<Product[]>(
@@ -125,8 +122,8 @@ export function ImportProductDialog({
                 <DialogHeader>
                     <DialogTitle>Import product from link</DialogTitle>
                     <DialogDescription>
-                        Paste a public product URL, review the observed fields, then save it
-                        to this workspace.
+                        Paste a public product URL, review the observed fields, then save it to this
+                        workspace.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -349,10 +346,7 @@ function Field({
     value: string;
     onChange: (value: string) => void;
     className?: string;
-} & Pick<
-    ComponentProps<typeof Input>,
-    "placeholder" | "required" | "inputMode"
->) {
+} & Pick<ComponentProps<typeof Input>, "placeholder" | "required" | "inputMode">) {
     return (
         <div className={`space-y-2 ${className ?? ""}`}>
             <Label htmlFor={id}>{label}</Label>

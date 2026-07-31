@@ -41,9 +41,7 @@ export function mergeCatalogProducts(
     backendProducts: Product[],
 ): CatalogProduct[] {
     const importedSeedIds = new Set(
-        backendProducts
-            .map(importedSeedId)
-            .filter((value): value is string => Boolean(value)),
+        backendProducts.map(importedSeedId).filter((value): value is string => Boolean(value)),
     );
     const demos = seedProducts
         .filter((product) => !importedSeedIds.has(product.id))
@@ -52,9 +50,7 @@ export function mergeCatalogProducts(
     return [...demos, ...backend];
 }
 
-export function productionRunSearchForProduct(
-    product: CatalogProduct,
-): ProductProductionSearch {
+export function productionRunSearchForProduct(product: CatalogProduct): ProductProductionSearch {
     const base = {
         entryType: "product-first" as const,
         objective: "tiktok_shop_affiliate_test" as const,
@@ -88,8 +84,7 @@ function mapSeedProduct(product: SeedProduct): CatalogProduct {
 function mapBackendProduct(product: Product): CatalogProduct {
     const identity = product.product_context.identity;
     const metadata = product.metadata_json;
-    const market =
-        observedText(identity.market) || observedText(product.market) || "Unknown";
+    const market = observedText(identity.market) || observedText(product.market) || "Unknown";
     return {
         id: product.id,
         origin: "backend",
@@ -101,16 +96,12 @@ function mapBackendProduct(product: Product): CatalogProduct {
         market,
         currency: observedText(identity.currency),
         price: numberValue(product.product_context.commercial.price),
-        compareAtPrice: numberValue(
-            product.product_context.commercial.compare_at_price,
-        ),
+        compareAtPrice: numberValue(product.product_context.commercial.compare_at_price),
         readiness: readinessValue(metadata.readiness),
         fulfillmentRisk: riskValue(metadata.fulfillment_risk),
         colorSeed: colorForId(product.id),
         imageUrl:
-            observedText(metadata.image_url) ||
-            firstString(metadata.screenshots) ||
-            undefined,
+            observedText(metadata.image_url) || firstString(metadata.screenshots) || undefined,
         imageAlt: `${product.name} product image`,
         sourceUrl: observedText(metadata.source_url),
         sourceType: observedText(product.external_source),
@@ -138,25 +129,19 @@ function uniqueById(products: Product[]): Product[] {
 }
 
 function readinessValue(value: unknown): CatalogReadiness {
-    return value === "Ready" ||
-        value === "Setup needed" ||
-        value === "Out of stock"
+    return value === "Ready" || value === "Setup needed" || value === "Out of stock"
         ? value
         : "Unknown";
 }
 
 function riskValue(value: unknown): CatalogRisk {
-    return value === "Low" || value === "Medium" || value === "High"
-        ? value
-        : "Unknown";
+    return value === "Low" || value === "Medium" || value === "High" ? value : "Unknown";
 }
 
 function observedText(value: unknown): string {
     if (typeof value !== "string") return "";
     const text = value.trim();
-    return text.toLowerCase() === "unknown" || text.toLowerCase() === "n/a"
-        ? ""
-        : text;
+    return text.toLowerCase() === "unknown" || text.toLowerCase() === "n/a" ? "" : text;
 }
 
 function numberValue(value: unknown): number | null {

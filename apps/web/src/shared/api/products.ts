@@ -84,10 +84,9 @@ export function listProducts(workspaceId: string) {
 }
 
 export function crawlProductPreview(workspaceId: string, url: string) {
-    return apiPost<ProductCrawlPreview>(
-        `/workspaces/${workspaceId}/products/crawl-preview`,
-        { url },
-    );
+    return apiPost<ProductCrawlPreview>(`/workspaces/${workspaceId}/products/crawl-preview`, {
+        url,
+    });
 }
 
 export function createProduct(workspaceId: string, input: CreateProductInput) {

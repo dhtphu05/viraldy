@@ -14,11 +14,7 @@ import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 import { MetricStrip } from "@/shared/ui/metric-strip";
 import { hasConfiguredApiBaseUrl } from "@/shared/api/client";
 import { queryKeys } from "@/shared/api/query-keys";
-import {
-    listProducts,
-    listProductWorkspaces,
-    type Product,
-} from "@/shared/api/products";
+import { listProducts, listProductWorkspaces, type Product } from "@/shared/api/products";
 import { seedProducts } from "@/features/products/data/products";
 import { ImportProductDialog } from "@/features/products/components/import-product-dialog";
 import {
@@ -154,9 +150,8 @@ function ProductsPage() {
                             <Button
                                 onClick={() => {
                                     const firstReady =
-                                        catalog.find(
-                                            (product) => product.readiness === "Ready",
-                                        ) ?? catalog[0];
+                                        catalog.find((product) => product.readiness === "Ready") ??
+                                        catalog[0];
                                     if (firstReady) startProductionRun(firstReady);
                                 }}
                                 disabled={catalog.length === 0}
@@ -405,9 +400,9 @@ function ProductDrawer({
               ? "Validate fulfillment timing before sample allocation."
               : product.readiness === "Unknown"
                 ? "Review the imported product context before briefing creators."
-              : creatives.length > 0
-                ? "Start a Production Run from linked creative references."
-                : "Import or link reference creatives before launch.";
+                : creatives.length > 0
+                  ? "Start a Production Run from linked creative references."
+                  : "Import or link reference creatives before launch.";
 
     return (
         <RightDrawer
@@ -450,8 +445,7 @@ function ProductDrawer({
                     <SurfaceCard padding="sm" className="space-y-2 bg-surface-soft">
                         {product.brand ? (
                             <p className="text-sm text-text-primary">
-                                <span className="text-text-tertiary">Brand:</span>{" "}
-                                {product.brand}
+                                <span className="text-text-tertiary">Brand:</span> {product.brand}
                             </p>
                         ) : null}
                         {product.description ? (

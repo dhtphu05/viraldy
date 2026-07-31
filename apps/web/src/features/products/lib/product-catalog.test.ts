@@ -62,10 +62,10 @@ describe("product catalog", () => {
             metadata_json: { frontend_seed_id: demo.id },
         });
 
-        const catalog = mergeCatalogProducts([demo], [
-            importedDemo,
-            backendProduct({ id: "product-crawled" }),
-        ]);
+        const catalog = mergeCatalogProducts(
+            [demo],
+            [importedDemo, backendProduct({ id: "product-crawled" })],
+        );
 
         expect(catalog).toHaveLength(2);
         expect(catalog.some((product) => product.origin === "demo")).toBe(false);
