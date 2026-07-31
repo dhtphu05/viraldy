@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from viraldy.api.dependencies.auth import (
     CurrentUserDep,
@@ -13,6 +14,9 @@ from viraldy.api.dependencies.auth import (
 from viraldy.api.dependencies.request import get_request_id
 from viraldy.api.responses.envelope import Envelope, success
 from viraldy.modules.deletion.public import DeletionResourceType, DeletionService
+from viraldy.modules.product_import.schemas import ProductCrawlRequest
+from viraldy.modules.product_import.security import validate_public_http_url
+from viraldy.modules.product_import.service import create_product_import_preview
 from viraldy.modules.products.schemas import CreateProductRequest, UpdateProductRequest
 from viraldy.modules.products.service import ProductService
 from viraldy.platform.auth.policy import Permission
@@ -48,6 +52,22 @@ async def list_products(
     await require_workspace_permission(workspace_id, Permission.PRODUCT_READ, current_user, db)
     products = await ProductService(db).list_products(workspace_id)
     return success([product.model_dump(mode="json") for product in products], request_id)
+
+
+@router.post("/crawl-preview", response_model=Envelope)
+async def crawl_product_preview(
+    workspace_id: UUID,
+    payload: ProductCrawlRequest,
+    current_user: CurrentUserDep,
+    db: DbSession,
+    request_id: str = Depends(get_request_id),
+) -> Envelope:
+    await require_workspace_permission(
+        workspace_id, Permission.PRODUCT_WRITE, current_user, db
+    )
+    safe_url = await run_in_threadpool(validate_public_http_url, payload.url)
+    preview = await run_in_threadpool(create_product_import_preview, safe_url)
+    return success(preview.model_dump(mode="json"), request_id)
 
 
 @router.get("/{product_id}", response_model=Envelope)
