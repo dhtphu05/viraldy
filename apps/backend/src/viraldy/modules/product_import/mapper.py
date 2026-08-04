@@ -49,6 +49,7 @@ def build_product_import_preview(
     current_price_text = (
         _observed_text(crawl.get("salePrice"))
         or _markdown_price(markdown, "Discounted/Current Price")
+        or _markdown_value(markdown, "Price")
         or original_price_text
     )
     current_price, currency = _parse_money(current_price_text)

@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viraldy.local/schemas/DomainExpertPolicyPackV1.schema.json",
+  "title": "DomainExpertPolicyPackV1",
+  "type": "object",
+  "required": [
+    "meta",
+    "domain_expert_policy_catalog",
+    "creative_pattern_catalog",
+    "real_world_mistake_taxonomy",
+    "seller_workflow_and_ux_findings",
+    "disagreements_and_uncertainties",
+    "implementation_mapping",
+    "source_registry"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object"
+    },
+    "domain_expert_policy_catalog": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/policy"
+      }
+    },
+    "creative_pattern_catalog": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pattern"
+      }
+    },
+    "real_world_mistake_taxonomy": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mistake"
+      }
+    },
+    "seller_workflow_and_ux_findings": {
+      "type": "object"
+    },
+    "disagreements_and_uncertainties": {
+      "type": "array"
+    },
+    "implementation_mapping": {
+      "type": "object"
+    },
+    "source_registry": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "publisher",
+        "url",
+        "type",
+        "strength"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "type": {
+          "type": "string"
+        },
+        "strength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "title",
+        "publisher",
+        "url",
+        "source_type",
+        "evidence_strength"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "code",
+        "domain",
+        "title",
+        "rule_type",
+        "severity",
+        "applicability",
+        "required_conditions",
+        "expected_behavior",
+        "prohibited_behavior",
+        "unknown_behavior",
+        "exceptions",
+        "common_failure_modes",
+        "seller_facing_explanation",
+        "creator_facing_correction",
+        "expert_review_trigger",
+        "sources"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "rule_type": {
+          "enum": [
+            "official_hard_rule",
+            "operational_hard_constraint",
+            "established_best_practice",
+            "contextual_guideline",
+            "directional_pattern",
+            "expert_opinion",
+            "seller_anecdote",
+            "unresolved_disagreement"
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          }
+        }
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "required": [
+        "code",
+        "name",
+        "finding_classification",
+        "message_angle",
+        "creative_mechanic",
+        "hook_tactic",
+        "psychological_trigger",
+        "visual_format",
+        "narrative_structure",
+        "demo_mechanism",
+        "proof_mechanism",
+        "offer_framing",
+        "cta_strategy",
+        "suitable_product_traits",
+        "unsuitable_product_traits",
+        "suitable_buyer_contexts",
+        "common_misuse",
+        "copycat_risk",
+        "evidence_required",
+        "adaptation_guidance",
+        "expected_learning",
+        "performance_evidence_status",
+        "sources"
+      ]
+    },
+    "mistake": {
+      "type": "object",
+      "required": [
+        "code",
+        "category",
+        "title",
+        "severity",
+        "editable_or_reshoot",
+        "expected_example",
+        "observed_example",
+        "seller_message",
+        "creator_message",
+        "escalation_behavior",
+        "detection_signals",
+        "related_policy_codes",
+        "sources"
+      ]
+    }
+  }
+}

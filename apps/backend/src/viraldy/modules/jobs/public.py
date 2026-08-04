@@ -14,6 +14,7 @@ __all__ = [
     "JobResponse",
     "JobType",
     "get_existing_idempotent_job",
+    "get_processing_job",
     "request_mvp_job",
     "request_process_asset",
 ]
@@ -28,6 +29,17 @@ async def get_existing_idempotent_job(
     job = await JobRepository(session).get_existing_idempotent(
         workspace_id, job_type, idempotency_key
     )
+    if job is None:
+        return None
+    return JobResponse.model_validate(job)
+
+
+async def get_processing_job(
+    session: AsyncSession,
+    workspace_id: UUID,
+    processing_job_id: UUID,
+) -> JobResponse | None:
+    job = await JobRepository(session).get_job(workspace_id, processing_job_id)
     if job is None:
         return None
     return JobResponse.model_validate(job)

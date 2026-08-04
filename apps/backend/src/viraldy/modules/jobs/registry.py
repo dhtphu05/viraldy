@@ -14,6 +14,7 @@ class JobType(StrEnum):
     CAMPAIGN_PACK_GENERATE = "campaign_pack_generate"
     STORYBOARD_GENERATE = "storyboard_generate"
     CONCEPT_VIDEO_GENERATE = "concept_video_generate"
+    UGC_REVIEW = "ugc_review_v1"
     RETENTION_CLEANUP = "retention_cleanup"
 
 
@@ -54,10 +55,18 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         job_type=JobType.TIKTOK_SCORE_RUN,
         queue="default",
         max_attempts=3,
-        soft_timeout_seconds=300,
-        hard_timeout_seconds=360,
-        required_stages=("loading_asset", "probing_media", "calculating_score"),
-        optional_stages=("extracting_visual_evidence",),
+        soft_timeout_seconds=2340,
+        hard_timeout_seconds=2400,
+        required_stages=(
+            "extracting_media",
+            "building_evidence",
+            "building_scene_inventory",
+            "scoring",
+            "compiling_fixes",
+            "validating_output",
+            "persisting",
+        ),
+        optional_stages=("enriching_direction",),
         result_subject_type="tiktok_score_run",
     ),
     JobType.PREFLIGHT_RUN.value: JobDefinition(
@@ -100,6 +109,17 @@ def _workflow_definition(
 
 JOB_DEFINITIONS.update(
     {
+        JobType.UGC_REVIEW.value: _workflow_definition(
+            JobType.UGC_REVIEW,
+            required_stages=(
+                "loading_asset",
+                "probing_media",
+                "selecting_policies",
+                "evaluating_review",
+                "persisting_results",
+            ),
+            result_subject_type="ugc_review",
+        ),
         JobType.PATTERN_KIT_EXTRACT.value: _workflow_definition(
             JobType.PATTERN_KIT_EXTRACT,
             result_subject_type="pattern_kit_version",

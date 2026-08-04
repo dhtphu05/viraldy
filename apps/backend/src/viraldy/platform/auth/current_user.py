@@ -11,3 +11,4 @@ class CurrentUser:
     email: str
     display_name: str | None
     status: str
+    phone_number: str | None = None

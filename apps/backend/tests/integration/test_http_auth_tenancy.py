@@ -71,11 +71,13 @@ class MappingTokenVerifier:
                 external_auth_id="integration-alpha",
                 email="alpha@example.com",
                 display_name="Alpha",
+                phone_number="+84901234561",
             ),
             "beta-token": VerifiedToken(
                 external_auth_id="integration-beta",
                 email="beta@example.com",
                 display_name="Beta",
+                phone_number="+84901234562",
             ),
         }
 
@@ -542,6 +544,8 @@ async def test_http_auth_rbac_and_tenant_isolation(
             ]
             beta = (await client.get("/api/v1/me", headers=_auth("beta-token"))).json()["data"]
             assert repeated_alpha["id"] == alpha["id"]
+            assert alpha["phone_number"] == "+84901234561"
+            assert beta["phone_number"] == "+84901234562"
 
             workspace_alpha = (
                 await client.post(
@@ -1014,6 +1018,12 @@ async def test_http_auth_rbac_and_tenant_isolation(
                 .where(UserModel.external_auth_id.in_(["integration-alpha", "integration-beta"]))
             )
             assert provisioned_count == 2
+            alpha_phone_number = await session.scalar(
+                select(UserModel.phone_number).where(
+                    UserModel.external_auth_id == "integration-alpha"
+                )
+            )
+            assert alpha_phone_number == "+84901234561"
     finally:
         app.dependency_overrides.clear()
         await engine.dispose()
@@ -1030,6 +1040,7 @@ async def test_concurrent_user_provisioning_is_idempotent(
         external_auth_id=external_auth_id,
         email="concurrent@example.com",
         display_name="Concurrent User",
+        phone_number="+84901234563",
     )
 
     async def provision() -> UUID:

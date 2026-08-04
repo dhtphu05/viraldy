@@ -20,6 +20,7 @@ from viraldy.modules.ai_gateway.prompt_content import (
     SYSTEM_PROMPT_NAME,
     SYSTEM_PROMPT_V2,
     SYSTEM_PROMPT_VERSION,
+    UGC_EXECUTION_BRIEF_DEVELOPER_PROMPT_V1,
     VIRAL_KIT_DEVELOPER_PROMPT_V2,
 )
 from viraldy.modules.ai_gateway.prompt_content.examples import ALL_FEW_SHOT_EXAMPLE_IDS
@@ -31,6 +32,7 @@ from viraldy.modules.creative_domain.schema_versions import (
     PATTERN_KIT_SCHEMA_VERSION,
     REVISION_MESSAGE_SCHEMA_VERSION,
     STORYBOARD_IMAGE_SCHEMA_VERSION,
+    UGC_EXECUTION_BRIEF_SCHEMA_VERSION,
     VIDEO_PREVIEW_SCHEMA_VERSION,
     VIRAL_KIT_SCHEMA_VERSION,
 )
@@ -42,6 +44,7 @@ VIRAL_KIT_OPERATION = "viral_kit_compose"
 ADAPTATION_OPERATION = "adaptation_generate"
 CAMPAIGN_PACK_OPERATION = "campaign_pack_generate"
 REVISION_MESSAGE_OPERATION = "revision_message_generate"
+UGC_EXECUTION_BRIEF_OPERATION = "ugc_execution_brief_synthesis"
 STORYBOARD_IMAGE_OPERATION = "storyboard_image_generate"
 CONCEPT_VIDEO_PREVIEW_OPERATION = "concept_video_preview_generate"
 DECISION_SUMMARY_OPERATION = "seller_decision_summary"
@@ -54,6 +57,7 @@ type PromptOperation = Literal[
     "adaptation_generate",
     "campaign_pack_generate",
     "revision_message_generate",
+    "ugc_execution_brief_synthesis",
     "storyboard_image_generate",
     "concept_video_preview_generate",
     "seller_decision_summary",
@@ -80,6 +84,8 @@ CAMPAIGN_PACK_PROMPT_NAME = "campaign_pack_generation"
 CAMPAIGN_PACK_PROMPT_VERSION = "campaign_pack_generation_v2_few_shot_v1"
 REVISION_MESSAGE_PROMPT_NAME = "revision_message"
 REVISION_MESSAGE_PROMPT_VERSION = "revision_message_v2_few_shot_v1"
+UGC_EXECUTION_BRIEF_PROMPT_NAME = "ugc_execution_brief"
+UGC_EXECUTION_BRIEF_PROMPT_VERSION = "ugc_execution_brief_v1_few_shot_v1"
 STORYBOARD_IMAGE_PROMPT_NAME = "storyboard_image_generation"
 STORYBOARD_IMAGE_PROMPT_VERSION = "storyboard_image_generation_v1_few_shot_v1"
 CONCEPT_VIDEO_PREVIEW_PROMPT_NAME = "concept_video_preview_generation"
@@ -184,6 +190,17 @@ _PROMPT_PACKAGES = (
         default_max_output_tokens=2_000,
     ),
     PromptPackage(
+        operation=UGC_EXECUTION_BRIEF_OPERATION,
+        prompt_name=UGC_EXECUTION_BRIEF_PROMPT_NAME,
+        prompt_version=UGC_EXECUTION_BRIEF_PROMPT_VERSION,
+        system_prompt=SYSTEM_PROMPT_V2,
+        developer_prompt=UGC_EXECUTION_BRIEF_DEVELOPER_PROMPT_V1,
+        example_ids=ALL_FEW_SHOT_EXAMPLE_IDS,
+        output_schema_version=UGC_EXECUTION_BRIEF_SCHEMA_VERSION,
+        default_reasoning_effort="low",
+        default_max_output_tokens=2_000,
+    ),
+    PromptPackage(
         operation=STORYBOARD_IMAGE_OPERATION,
         prompt_name=STORYBOARD_IMAGE_PROMPT_NAME,
         prompt_version=STORYBOARD_IMAGE_PROMPT_VERSION,
@@ -268,6 +285,9 @@ __all__ = [
     "SYSTEM_PROMPT_NAME",
     "SYSTEM_PROMPT_V2",
     "SYSTEM_PROMPT_VERSION",
+    "UGC_EXECUTION_BRIEF_OPERATION",
+    "UGC_EXECUTION_BRIEF_PROMPT_NAME",
+    "UGC_EXECUTION_BRIEF_PROMPT_VERSION",
     "VIRAL_KIT_PROMPT_NAME",
     "VIRAL_KIT_PROMPT_VERSION",
     "get_prompt_package",

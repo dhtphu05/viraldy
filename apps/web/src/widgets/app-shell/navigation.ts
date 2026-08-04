@@ -5,6 +5,7 @@ import {
     Megaphone,
     Package,
     Settings,
+    ScanSearch,
     Video,
     Workflow,
 } from "lucide-react";
@@ -33,6 +34,7 @@ export const navigationGroups: ShellNavGroup[] = [
         label: "Create & Operate",
         items: [
             { to: "/creative-library", label: "Creative Library", icon: Images },
+            { to: "/tiktok-scorer", label: "TikTok Scorer", icon: ScanSearch },
             { to: "/campaigns", label: "Campaigns", icon: Megaphone },
         ],
     },

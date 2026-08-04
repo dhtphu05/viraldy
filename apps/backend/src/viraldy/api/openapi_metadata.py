@@ -192,6 +192,23 @@ TAG_DEFINITIONS = [
         ),
     },
     {
+        "name": "domain-intelligence",
+        "display_name": "Domain Intelligence",
+        "description": (
+            "Đọc trạng thái policy pack nghiên cứu đã được kiểm chứng, số lượng record và "
+            "các rule đang bật cho UGC Review. Registry này là nguồn chẩn đoán vận hành, "
+            "không phải giao diện quản trị policy."
+        ),
+    },
+    {
+        "name": "ugc-reviews",
+        "display_name": "UGC Reviews",
+        "description": (
+            "Review UGC theo hướng recommendation-first: giữ điểm mạnh, sửa phần quan trọng, "
+            "xác nhận unknown, lưu seller action và so sánh revision từ evidence thực tế."
+        ),
+    },
+    {
         "name": "reference-boards",
         "display_name": "Reference Boards",
         "description": (
@@ -281,6 +298,7 @@ PARAMETER_DESCRIPTIONS = {
     "asset_id": "UUID của media asset trong cùng workspace; không dùng asset_version_id.",
     "asset_version_id": "UUID của revision cụ thể của asset được trả từ upload session.",
     "job_id": "UUID của background job cần poll để cập nhật trạng thái và tiến độ.",
+    "review_id": "UUID của UGC Review, đồng thời là processing job ID của lần review.",
     "model_run_id": "UUID của AI model run cần tra cứu provenance và usage.",
     "recommendation_id": "UUID của recommendation cần đọc hoặc ghi nhận action.",
     "reference_id": "UUID của creative reference trong cùng workspace.",
@@ -333,6 +351,7 @@ PARAMETER_EXAMPLES: dict[str, Any] = {
     "asset_id": "33333333-3333-4333-8333-333333333333",
     "asset_version_id": "34343434-3434-4343-8343-343434343434",
     "job_id": "44444444-4444-4444-8444-444444444444",
+    "review_id": "47474747-4747-4474-8474-474747474747",
     "model_run_id": "45454545-4545-4454-8454-454545454545",
     "recommendation_id": "46464646-4646-4464-8464-464646464646",
     "reference_id": "55555555-5555-4555-8555-555555555555",

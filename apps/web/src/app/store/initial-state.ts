@@ -7,13 +7,6 @@ import {
     seedReports,
     seedPatterns,
 } from "@/features/performance/mocks/performanceSeed";
-import {
-    seedUgcActivity,
-    seedUgcAnalyses,
-    seedUgcAssets,
-    seedUgcIssues,
-    seedUgcRights,
-} from "@/features/ugc-review/mocks/ugcSeed";
 import { workspaces } from "@/shared/mocks/workspaces";
 import type { Campaign } from "@/shared/types";
 import type { SeedCampaign } from "@/features/campaigns/mocks/campaigns";
@@ -32,13 +25,7 @@ import type {
     SavedView,
     WinningPattern,
 } from "@/features/performance/types/performance";
-import type {
-    UgcActivityEvent,
-    UgcAnalysis,
-    UgcAsset,
-    UgcIssue,
-    UgcRights,
-} from "@/features/ugc-review/types/ugc";
+import type { UgcAsset } from "@/features/ugc-review/types/ugc";
 import type { AdaptationHandoff, DemoImport } from "./store-types";
 
 export const initialAppState = {
@@ -60,12 +47,8 @@ export const initialAppState = {
     campaignActivity: [] as ActivityEvent[],
     packAutosaveAt: {} as Record<string, string>,
     campaignDraft: {} as CampaignDraft,
-    ugcAssets: seedUgcAssets as UgcAsset[],
-    ugcAnalyses: seedUgcAnalyses as Record<string, UgcAnalysis>,
-    ugcIssues: seedUgcIssues as Record<string, UgcIssue[]>,
-    ugcRights: seedUgcRights as Record<string, UgcRights>,
-    ugcActivity: seedUgcActivity,
-    ugcJobs: {} as Record<string, { step: number; total: number; startedAt: number }>,
+    // Live UGC Review data is loaded through workspace-scoped APIs, never seeded predictions.
+    ugcAssets: [] as UgcAsset[],
     perfRecommendations: seedRecommendations as PerfRecommendation[],
     perfAcceptedRecs: [] as string[],
     perfDismissedRecs: {} as Record<string, string>,

@@ -1,8 +1,10 @@
 # Viraldy Web
 
-TanStack Start + Vite frontend prototype for Viraldy. Most legacy feature screens still use
-seeded mock data, while `/mvp` is wired to the backend MVP APIs for fixture/live Creative
-Intelligence flows.
+TanStack Start + Vite frontend for Viraldy. `/ugc-review` is wired end to end to
+the workspace-scoped UGC Review API, including immutable upload/revision,
+processing progress, recommendation actions, evidence seeking, and Draft 1 →
+Draft 2 comparison. Some unrelated legacy feature screens still use seeded mock
+data.
 
 ## Commands
 
@@ -10,6 +12,8 @@ Intelligence flows.
 pnpm install
 pnpm dev
 pnpm lint
+pnpm exec tsc --noEmit
+pnpm test
 pnpm build
 ```
 
@@ -17,8 +21,15 @@ Local API configuration:
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8000/api/v1
-VITE_LOCAL_AUTH_TOKEN=local-test
 ```
+
+The browser never receives a configured development bearer token. In local-test mode, use the
+button on `/login`; the TanStack server route creates an HttpOnly session cookie. Production uses
+OIDC Authorization Code + PKCE with `/api/auth/callback` as the callback URL. Configure the public
+OIDC endpoints and client ID on the backend with the `OIDC_*` variables in the root `.env.example`.
+The provider must issue `email`, `name`, and E.164 `phone_number` claims, plus boolean
+`email_verified=true` and `phone_number_verified=true`. Include `offline_access` so the provider
+can issue a refresh token for a durable session.
 
 Root shortcuts:
 
@@ -40,5 +51,24 @@ make web-build
 ## Deployment Baseline
 
 - Build toolchain is direct Vite/TanStack Start configuration in `vite.config.ts`.
-- Production build emits Nitro Cloudflare module output.
+- Production build emits Nitro Vercel output.
 - Platform-specific sandbox bridge plugins and editor-owned error hooks are not part of this app.
+
+## Vercel
+
+Configure the Vercel project with:
+
+```bash
+Root Directory: apps/web
+Install Command: pnpm install
+Build Command: pnpm build
+Output Directory: leave empty (Nitro emits .vercel/output)
+```
+
+Required production environment:
+
+```bash
+VITE_API_BASE_URL=https://<backend-domain>/api/v1
+```
+
+The backend must also allow the deployed Vercel origin in `BACKEND_CORS_ORIGINS`.

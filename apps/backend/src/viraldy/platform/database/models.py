@@ -11,6 +11,15 @@ from viraldy.modules.deletion.models import (
     DeletionAuditRecordModel,
     StorageDeletionBatchModel,
 )
+from viraldy.modules.domain_intelligence.models import (
+    DomainCreativePatternModel,
+    DomainMistakeDefinitionModel,
+    DomainPolicyPackModel,
+    DomainPolicyRuleModel,
+    DomainPolicyRuleSourceModel,
+    DomainPolicySourceModel,
+    DomainUncertaintyModel,
+)
 from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.generation.models import GenerationArtifactModel, GenerationRunModel
 from viraldy.modules.identity.models import UserModel
@@ -32,7 +41,22 @@ from viraldy.modules.recommendations.models import (
 )
 from viraldy.modules.reference_boards.models import ReferenceBoardModel
 from viraldy.modules.references.models import ReferenceModel
-from viraldy.modules.tiktok_scorer.models import TikTokScoreRunModel
+from viraldy.modules.tiktok_scorer.models import (
+    TikTokFixActionEventModel,
+    TikTokFixActionModel,
+    TikTokScoreComparisonModel,
+    TikTokScoreDimensionModel,
+    TikTokScoreFindingModel,
+    TikTokScoreProfileModel,
+    TikTokScoreRunModel,
+)
+from viraldy.modules.ugc_review.models import (
+    UGCReviewComparisonModel,
+    UGCReviewFindingModel,
+    UGCReviewRecommendationEventModel,
+    UGCReviewResultModel,
+    UGCReviewRevisionModel,
+)
 from viraldy.modules.viral_kits.models import (
     ViralKitCampaignPackLinkModel,
     ViralKitConceptActionModel,
@@ -51,6 +75,13 @@ __all__ = [
     "CampaignPackVersionModel",
     "CreativeDnaVersionModel",
     "DeletionAuditRecordModel",
+    "DomainCreativePatternModel",
+    "DomainMistakeDefinitionModel",
+    "DomainPolicyPackModel",
+    "DomainPolicyRuleModel",
+    "DomainPolicyRuleSourceModel",
+    "DomainPolicySourceModel",
+    "DomainUncertaintyModel",
     "EvidenceItemModel",
     "FeedbackItemModel",
     "GenerationArtifactModel",
@@ -71,7 +102,18 @@ __all__ = [
     "RecommendationActionModel",
     "RecommendationModel",
     "StorageDeletionBatchModel",
+    "TikTokFixActionEventModel",
+    "TikTokFixActionModel",
+    "TikTokScoreComparisonModel",
+    "TikTokScoreDimensionModel",
+    "TikTokScoreFindingModel",
+    "TikTokScoreProfileModel",
     "TikTokScoreRunModel",
+    "UGCReviewComparisonModel",
+    "UGCReviewFindingModel",
+    "UGCReviewRecommendationEventModel",
+    "UGCReviewResultModel",
+    "UGCReviewRevisionModel",
     "ViralKitCampaignPackLinkModel",
     "ViralKitConceptActionModel",
     "ViralKitModel",

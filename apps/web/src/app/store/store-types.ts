@@ -12,15 +12,7 @@ import type {
     CampaignPack,
     CampaignPackStatus,
 } from "@/features/campaigns/types/campaign";
-import type {
-    UgcActivityEvent,
-    UgcAnalysis,
-    UgcAsset,
-    UgcDecision,
-    UgcIssue,
-    UgcReviewState,
-    UgcRights,
-} from "@/features/ugc-review/types/ugc";
+import type { UgcAsset } from "@/features/ugc-review/types/ugc";
 import type {
     ImportBatch,
     PatternVariant,
@@ -123,35 +115,6 @@ export type AppState = {
 
     // UGC Review
     ugcAssets: UgcAsset[];
-    ugcAnalyses: Record<string, UgcAnalysis>;
-    ugcIssues: Record<string, UgcIssue[]>;
-    ugcRights: Record<string, UgcRights>;
-    ugcActivity: UgcActivityEvent[];
-    ugcJobs: Record<string, { step: number; total: number; startedAt: number }>;
-
-    uploadUgc: (
-        input: Omit<UgcAsset, "id" | "submittedAt" | "reviewState" | "decision" | "rightsStatus"> &
-            Partial<Pick<UgcAsset, "reviewState" | "decision" | "rightsStatus">>,
-    ) => string;
-    startUgcAnalysis: (assetId: string, totalSteps: number) => void;
-    advanceUgcJob: (assetId: string) => void;
-    completeUgcAnalysis: (assetId: string) => void;
-    failUgcAnalysis: (assetId: string, reason?: string) => void;
-    retryUgcAnalysis: (assetId: string) => void;
-    setUgcDecision: (assetId: string, decision: UgcDecision) => void;
-    setUgcReviewState: (assetId: string, reviewState: UgcReviewState) => void;
-    toggleIssueInRevision: (assetId: string, issueId: string) => void;
-    reviewIssue: (assetId: string, issueId: string) => void;
-    dismissIssue: (assetId: string, issueId: string, dismissed: boolean) => void;
-    setRevisionMessage: (assetId: string, message: string) => void;
-    markRevisionRequested: (assetId: string) => void;
-    approveUgcOrganic: (assetId: string, note?: string) => void;
-    markUgcSparkReady: (assetId: string) => { ok: true } | { ok: false; blockers: string[] };
-    rejectUgc: (assetId: string) => void;
-    updateUgcRights: (assetId: string, patch: Partial<UgcRights>) => void;
-    archiveUgc: (assetId: string) => void;
-    deleteLocalUgc: (assetId: string) => void;
-    addUgcActivity: (event: Omit<UgcActivityEvent, "id" | "at">) => void;
 
     // Performance
     perfRecommendations: PerfRecommendation[];

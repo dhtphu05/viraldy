@@ -25,6 +25,12 @@ class ProductEventModel(Base):
             "'campaign_pack_created', 'campaign_pack_exported', 'ugc_uploaded', "
             "'preflight_viewed', 'recommendation_accepted', "
             "'recommendation_rejected', 'recommendation_applied', 'revision_uploaded'"
+            ", 'tiktok_scorer_opened', 'tiktok_score_started', "
+            "'tiktok_score_completed', 'tiktok_score_failed', 'tiktok_finding_viewed', "
+            "'tiktok_evidence_opened', 'tiktok_fix_accepted', 'tiktok_fix_rejected', "
+            "'tiktok_fix_sent_to_creator', 'tiktok_fix_sent_to_editor', "
+            "'tiktok_fix_marked_completed', 'tiktok_revision_uploaded', "
+            "'tiktok_comparison_viewed', 'tiktok_action_verified_after_revision'"
             ")",
             name="ck_product_events_event_type",
         ),

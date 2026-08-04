@@ -54,6 +54,24 @@ GET  /api/v1/workspaces/{workspace_id}/assets/{asset_id}/versions
 The initial upload must complete before a revision can be created. Completing
 older revisions never moves `current_version_id` backward.
 
+Domain Intelligence and recommendation-first UGC Review are documented in
+[`docs/implementation/domain-intelligence-ugc-review-v1.md`](../../docs/implementation/domain-intelligence-ugc-review-v1.md).
+After migrations, validate and activate the bundled policy pack with:
+
+```bash
+uv run python -m viraldy.scripts.import_domain_policy_pack \
+  --pack resources/domain_intelligence/v1/DomainExpertPolicyPackV1.json \
+  --schema resources/domain_intelligence/v1/DomainExpertPolicyPackV1.schema.json \
+  --sources resources/domain_intelligence/v1/source_registry_v1.csv \
+  --validate-only
+
+uv run python -m viraldy.scripts.import_domain_policy_pack \
+  --pack resources/domain_intelligence/v1/DomainExpertPolicyPackV1.json \
+  --schema resources/domain_intelligence/v1/DomainExpertPolicyPackV1.schema.json \
+  --sources resources/domain_intelligence/v1/source_registry_v1.csv \
+  --activate-mvp
+```
+
 Campaign Pack export endpoint:
 
 ```text

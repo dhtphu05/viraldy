@@ -12,4 +12,5 @@ class LocalTestTokenVerifier:
             external_auth_id="local-test-user",
             email="local@viraldy.example.com",
             display_name="Local Viraldy User",
+            phone_number="+84901234567",
         )

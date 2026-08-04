@@ -371,6 +371,11 @@ def test_every_ai_operation_has_a_deterministic_contract_valid_fixture() -> None
             "preflight_run_id": uuid4(),
             "blocker_codes": ["PRODUCT_NOT_VISIBLE"],
         },
+        AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS: {
+            "workspace_id": workspace_id,
+            "review_id": "review-1",
+            "recommendation_ids": ["rec-1"],
+        },
         AiOperationName.STORYBOARD_IMAGE_GENERATE: {
             "workspace_id": workspace_id,
             "viral_kit_version_id": version_id,

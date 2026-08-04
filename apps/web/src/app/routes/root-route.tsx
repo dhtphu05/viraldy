@@ -4,6 +4,7 @@ import {
     Link,
     createRootRouteWithContext,
     useRouter,
+    redirect,
     HeadContent,
     Scripts,
 } from "@tanstack/react-router";
@@ -13,6 +14,8 @@ import appCss from "../styles.css?url";
 import { reportClientError } from "@/shared/lib/error-reporting";
 import { Toaster } from "@/shared/ui/sonner";
 import { AnalysisJobsRunner } from "@/features/creative-library/components/analysis-jobs-runner";
+import { getAuthSnapshot } from "@/features/auth/auth-session";
+import { isPublicAuthPath, loginRedirectFor } from "@/features/auth/lib/auth-routing";
 
 function NotFoundComponent() {
     return (
@@ -73,6 +76,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+    beforeLoad: async ({ location }) => {
+        const auth = await getAuthSnapshot();
+        if (!auth.authenticated && !isPublicAuthPath(location.pathname)) {
+            throw redirect(loginRedirectFor(location.href));
+        }
+        return { auth };
+    },
     head: () => ({
         meta: [
             { charSet: "utf-8" },

@@ -1,0 +1,1584 @@
+{
+  "meta": {
+    "pack_name": "Viraldy Domain, Creative and Workflow Research Pack",
+    "version": "1.0.0-research-2026-07-31",
+    "access_date": "2026-07-31",
+    "scope": [
+      "TikTok Shop US creative operations",
+      "POD and personalization commerce",
+      "dropshipping/supplier/fulfillment/demo risk",
+      "UGC briefs/revisions/rights/Spark",
+      "performance creative experimentation",
+      "claims/disclosures/compliance/governance",
+      "seller workflows/pain/WTP"
+    ],
+    "non_claims": [
+      "No universal timing rule",
+      "No performance guarantee",
+      "No GMV prediction",
+      "No assumption that popularity causes sales",
+      "No direct Viraldy WTP validation"
+    ],
+    "evidence_scale": {
+      "5": "Official platform/regulator/government rule or current operational documentation; strongest source for a hard rule.",
+      "4": "Official guidance, established provider documentation, or primary research/preprint; strong but context may limit transfer.",
+      "3": "Established product documentation, vendor first-party report, conference/expert interview; useful best practice or directional evidence.",
+      "2": "Seller/creator community anecdote; pain evidence only, never prevalence or causality.",
+      "1": "Unverified opinion; excluded from deterministic rules."
+    },
+    "internal_alignment": [
+      {
+        "file": "VIRALDY — FULL PRODUCT & BUSINESS BLUEPRINT.pdf",
+        "principle": "Decision system spanning creative research, product adaptation, UGC quality gate, creator/sample, rights/Spark, performance and next action."
+      },
+      {
+        "file": "Viraldy_Full_Product_Business_Technical_Blueprint.pdf",
+        "principle": "Manual-first/API-later architecture; structured objects, stable IDs, provenance and outcome graph."
+      },
+      {
+        "file": "Pipeline và model lưu trữ.txt",
+        "principle": "CreativeDNA is observed asset truth; PatternKit is reusable knowledge; ViralKit is product/campaign-specific compiled hypothesis; models extract/match/score rather than store knowledge."
+      },
+      {
+        "file": "Vòng đời creative Viraldy.txt",
+        "principle": "Every feature follows input → evidence → diagnosis → action → outcome; P0 creative loop before integrations."
+      },
+      {
+        "file": "ViralScore Current-State Audit.txt",
+        "principle": "Product-grounded, evidence-grounded, decision-grounded and learning-grounded outputs; unknowns must not be invented."
+      },
+      {
+        "file": "viraldy_vidmob_report_planning.docx",
+        "principle": "Creative intelligence and element-level analysis patterns adapted to Viraldy niche."
+      },
+      {
+        "file": "viraldy_alison_report_planning.docx",
+        "principle": "AI-assisted creative analytics, iteration and domain adaptation research."
+      },
+      {
+        "file": "viraldy_foreplay_report_planning.docx",
+        "principle": "Research-to-brief workflow, swipe/reference memory and creative operations."
+      },
+      {
+        "file": "viraldy_pencil_report_planning_final.docx",
+        "principle": "Generation/testing workflow and adaptation into product-aware creative decisions."
+      }
+    ]
+  },
+  "golden_cases": [
+    {
+      "case_id": "GC-TTS-DEMO-001",
+      "title": "TikTok Shop US product demo — CounterSpace Expandable Counter Rack",
+      "case_type": "synthetic_golden_fixture",
+      "fixture_integrity": {
+        "statement": "All product, cost and creative facts are verified only inside this synthetic fixture manifest and physical-sample evidence. They are not real-market claims or performance predictions.",
+        "manifest_version": "gc-tts-demo-001:v1",
+        "evidence_assets": [
+          {
+            "id": "E-PROD-001",
+            "type": "fixture_manifest",
+            "description": "SKU, dimensions, included items and fixture economics."
+          },
+          {
+            "id": "E-PROD-002",
+            "type": "physical_sample_stills",
+            "description": "Exact white single rack and continuous expansion/setup."
+          },
+          {
+            "id": "E-PROD-003",
+            "type": "seller_confirmation",
+            "description": "No universal-fit, weight, antimicrobial or fast-delivery claim approved."
+          }
+        ]
+      },
+      "verified_product_context": {
+        "product_id": "PROD-CSR-001",
+        "sku": "CSR-WHT-01",
+        "product_name": "CounterSpace Expandable Counter Rack",
+        "commerce_model": "seller-stocked TikTok Shop US fixture",
+        "market": "US",
+        "variant": "white, single rack",
+        "fixture_price_usd": 24.99,
+        "fixture_cogs_usd": 8.4,
+        "fixture_outbound_shipping_usd": 4.1,
+        "fixture_platform_fees_usd": 2.0,
+        "fixture_commission_percent": 15,
+        "verified_dimensions": "adjusts from 16 to 22 inches in the fixture; buyer must measure intended surface",
+        "included_items": [
+          "one rack",
+          "two removable rails",
+          "instruction card"
+        ],
+        "mechanism": "two halves slide to widen the elevated organizing surface",
+        "approved_benefits": [
+          "adds an elevated organizing surface",
+          "adjusts within verified fixture range",
+          "visible organization result"
+        ],
+        "claims_not_approved": [
+          "fits every sink/counter",
+          "specific load capacity",
+          "antimicrobial benefit",
+          "arrives in two days",
+          "guaranteed organization result"
+        ],
+        "physical_sample_status": "verified_in_fixture",
+        "listing_snapshot_status": "verified_in_fixture",
+        "unknowns": [
+          "real stock",
+          "real return rate",
+          "live listing/offer",
+          "actual fulfillment metrics",
+          "real fees/commission"
+        ]
+      },
+      "source_creative_observations": {
+        "reference_asset_id": "REF-KITCHEN-PSR-001",
+        "source_status": "synthetic reference; no performance evidence",
+        "observations": [
+          {
+            "time": "0:00–0:01.8",
+            "observation": "Messy counter problem before narration."
+          },
+          {
+            "time": "0:01.8–0:04.0",
+            "observation": "Product enters and expands in one continuous shot."
+          },
+          {
+            "time": "0:04.0–0:10.5",
+            "observation": "Same items move to the rack in same camera position."
+          },
+          {
+            "time": "0:10.5–0:14.0",
+            "observation": "Before/result; no offer, disclosure, product-tag or performance evidence."
+          }
+        ],
+        "performance_evidence_status": "none; do not call winning",
+        "copycat_note": "Study structure only; script, objects, creator, framing and scene execution must be original."
+      },
+      "creative_dna": {
+        "dna_id": "DNA-REF-KITCHEN-001:v1",
+        "hook_type": "visual_problem",
+        "message_angle": "small-space organization",
+        "creator_persona": "hands-only home organizer",
+        "format": "locked-camera before/process/result",
+        "narrative": [
+          "problem",
+          "product reveal",
+          "continuous setup",
+          "result"
+        ],
+        "demo_type": "physical transformation",
+        "proof_type": "matched before/result",
+        "offer": "absent",
+        "cta": "absent",
+        "first_product_appearance_second": 1.8,
+        "risks": [
+          "exact product match not externally verified",
+          "no disclosure context",
+          "no performance evidence"
+        ],
+        "confidence": "high for observed structure; none for commercial performance"
+      },
+      "patternkit_candidate": {
+        "pattern_kit_id": "PK-HOME-PROBLEM-TRANSFORM-001:v1",
+        "status": "candidate",
+        "name": "Problem visual → exact product reveal → continuous transformation",
+        "classification": "established_best_practice",
+        "keep": [
+          "real problem state",
+          "early product role",
+          "continuous mechanism",
+          "matched result"
+        ],
+        "contraindications": [
+          "no visible product change",
+          "deceptive editing required",
+          "fit cannot be verified",
+          "health/safety outcome"
+        ],
+        "applicability": [
+          "home organization",
+          "visual utility product"
+        ],
+        "performance_evidence_status": "no linked performance; test required",
+        "source_assets": [
+          "REF-KITCHEN-PSR-001"
+        ]
+      },
+      "viral_kit_concepts": [
+        {
+          "viral_kit_id": "VK-CSR-A:v1",
+          "name": "The counter-space reset",
+          "angle": "small-apartment crowded counter",
+          "hook": "“I needed another level, not another cabinet.” over the real problem scene",
+          "mechanic": "continuous expand-and-organize",
+          "proof": "same-area before/result",
+          "creator_fit": "small-space/home organizer",
+          "hypothesis": "problem recognition plus mechanism may improve qualified product clicks",
+          "evidence_status": "untested"
+        },
+        {
+          "viral_kit_id": "VK-CSR-B:v1",
+          "name": "Measure first, then expand",
+          "angle": "fit-objection resolution",
+          "hook": "Tape measure and “Will it fit your space?”",
+          "mechanic": "measure, expand within verified range, show limitation",
+          "proof": "visible measurement",
+          "creator_fit": "practical home/DIY reviewer",
+          "hypothesis": "fit education may improve qualified clicks and reduce mismatch",
+          "evidence_status": "untested; compatibility-sensitive"
+        },
+        {
+          "viral_kit_id": "VK-CSR-C:v1",
+          "name": "One-minute kitchen reset",
+          "angle": "routine convenience",
+          "hook": "real cooking cleanup moment",
+          "mechanic": "insert product into existing routine",
+          "proof": "same surface and items; no universal time-saving claim",
+          "creator_fit": "home-cooking creator",
+          "hypothesis": "routine relevance may outperform standalone demo for cooking audience",
+          "evidence_status": "untested"
+        }
+      ],
+      "creative_campaign_pack": {
+        "campaign_id": "CAMP-CSR-001",
+        "selected_viral_kit": "VK-CSR-A:v1",
+        "objective": "TikTok Shop affiliate organic test; paid only after rights/economics review",
+        "target_buyer": "US small-space renter/household with crowded counter",
+        "core_angle": "add an elevated organizing surface without universal-fit claim",
+        "creator_brief": "Film an original natural counter reset with the exact white single-rack sample.",
+        "deliverables": [
+          "one 20–28 second vertical post",
+          "one clean base edit",
+          "two alternate hooks only if contracted"
+        ],
+        "must_show": [
+          "exact white variant",
+          "real crowded surface",
+          "continuous expansion",
+          "same items before/result",
+          "measurement/fit limitation",
+          "seller-approved CTA",
+          "correct product tag at publish"
+        ],
+        "must_not_show_or_say": [
+          "fits every sink/counter",
+          "weight capacity",
+          "health benefit",
+          "two-day delivery",
+          "guaranteed result",
+          "reference script/footage"
+        ],
+        "disclosure": "commercial-content setting plus clear material-connection disclosure when gifted/paid/commissioned",
+        "creator_flexible_zones": [
+          "natural wording",
+          "home setting",
+          "safe objects",
+          "editing rhythm after clear mechanism"
+        ],
+        "rights_request": {
+          "organic_post": true,
+          "Spark_paid_use": "requested_not_granted",
+          "raw_footage": "only if contracted",
+          "editing": "contract-specific",
+          "duration": "seller_confirmation_required"
+        },
+        "revision_scope": "Fixture assumes one in-scope edit and one reshoot only for missed must-show/material mismatch; not a universal contract rule."
+      },
+      "compiled_requirements": [
+        {
+          "id": "R1",
+          "requirement": "Exact SKU/variant",
+          "source": "TT-CONTENT-001",
+          "severity": "blocker",
+          "verification": "visual match to E-PROD-002"
+        },
+        {
+          "id": "R2",
+          "requirement": "Product in opening beat by 2.5s for this selected concept",
+          "source": "Campaign Pack, not universal TikTok rule",
+          "severity": "high",
+          "verification": "first_product_appearance_second <= 2.5"
+        },
+        {
+          "id": "R3",
+          "requirement": "Continuous expansion/setup",
+          "source": "selected demo mechanism",
+          "severity": "high",
+          "verification": "unbroken expand action"
+        },
+        {
+          "id": "R4",
+          "requirement": "No universal-fit/unapproved capacity claim",
+          "source": "TT-CLAIM-001 + fixture",
+          "severity": "blocker",
+          "verification": "ASR/OCR scan"
+        },
+        {
+          "id": "R5",
+          "requirement": "Matched before/result",
+          "source": "PatternKit proof",
+          "severity": "medium",
+          "verification": "same area/object continuity"
+        },
+        {
+          "id": "R6",
+          "requirement": "Disclosure complete",
+          "source": "DISC-001",
+          "severity": "blocker",
+          "verification": "creative + platform metadata"
+        },
+        {
+          "id": "R7",
+          "requirement": "Correct product tag at publish",
+          "source": "SAMPLE-001 / content match",
+          "severity": "blocker_at_publish",
+          "verification": "post metadata"
+        },
+        {
+          "id": "R8",
+          "requirement": "Paid rights, Spark authorization and cleared audio",
+          "source": "UGC-RIGHTS-001 / SPARK-001 / UGC-MUSIC-001",
+          "severity": "blocker_for_paid",
+          "verification": "rights card"
+        }
+      ],
+      "first_draft_ugc_observations": {
+        "asset_id": "UGC-CSR-D1",
+        "duration_seconds": 24.0,
+        "observations": [
+          {
+            "time": "0:00–0:05.9",
+            "observed": "Talking-head “kitchen hack”; no relevant problem or product."
+          },
+          {
+            "time": "0:06.2",
+            "observed": "Exact white rack first appears."
+          },
+          {
+            "time": "0:06.2–0:10.0",
+            "observed": "Jump cuts omit expansion mechanism."
+          },
+          {
+            "time": "0:10.4",
+            "observed": "“It fits every sink.”"
+          },
+          {
+            "time": "0:13.0–0:18.0",
+            "observed": "Result from different angle; continuity weak."
+          },
+          {
+            "time": "0:19.5–0:23.0",
+            "observed": "Generic CTA; no visible disclosure."
+          }
+        ],
+        "publish_metadata_unknown": [
+          "platform disclosure",
+          "correct product tag",
+          "audio license"
+        ],
+        "rights_unknown": [
+          "paid duration",
+          "Spark authorization",
+          "editing/raw footage"
+        ]
+      },
+      "preflight_expected_vs_observed": [
+        {
+          "requirement_id": "R1",
+          "expected": "Exact white single rack",
+          "observed": "Exact sample at 0:06.2",
+          "status": "pass",
+          "severity": "blocker",
+          "editability": "n/a"
+        },
+        {
+          "requirement_id": "R2",
+          "expected": "Product by 0:02.5 for this concept",
+          "observed": "0:06.2",
+          "status": "fail",
+          "severity": "high",
+          "editability": "edit if earlier clip exists; otherwise reshoot"
+        },
+        {
+          "requirement_id": "R3",
+          "expected": "Continuous expansion/setup",
+          "observed": "Jump cuts hide action",
+          "status": "fail",
+          "severity": "high",
+          "editability": "reshoot"
+        },
+        {
+          "requirement_id": "R4",
+          "expected": "No universal-fit claim",
+          "observed": "“fits every sink”",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "remove/replace audio-overlay or reshoot line"
+        },
+        {
+          "requirement_id": "R5",
+          "expected": "Matched before/result",
+          "observed": "Different angle",
+          "status": "fail",
+          "severity": "medium",
+          "editability": "reshoot preferred"
+        },
+        {
+          "requirement_id": "R6",
+          "expected": "Clear disclosure",
+          "observed": "Absent in file; setting unknown",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "edit plus publish metadata"
+        },
+        {
+          "requirement_id": "R7",
+          "expected": "Correct product tag",
+          "observed": "Cannot verify from draft",
+          "status": "unknown",
+          "severity": "blocker_at_publish",
+          "editability": "publish check"
+        },
+        {
+          "requirement_id": "R8",
+          "expected": "Rights/Spark/audio complete",
+          "observed": "Not provided",
+          "status": "unknown",
+          "severity": "blocker_for_paid",
+          "editability": "non-creative fix"
+        }
+      ],
+      "preflight_decision": {
+        "structural_score_fixture_only": 61,
+        "score_type": "deterministic structural fixture; not a performance prediction",
+        "confidence": "high for observed blockers",
+        "action_label": "reshoot_required_before_post",
+        "hard_blockers": [
+          "universal-fit claim",
+          "missing disclosure",
+          "unclear mechanism"
+        ],
+        "optional": [
+          "stronger matched result",
+          "CTA wording"
+        ]
+      },
+      "seller_action_plan": [
+        {
+          "priority": 1,
+          "owner": "seller",
+          "action": "Confirm fit wording, disclosure, exact product tag and revised due date."
+        },
+        {
+          "priority": 2,
+          "owner": "creator",
+          "action": "Reshoot opening and continuous expansion; remove universal-fit claim."
+        },
+        {
+          "priority": 3,
+          "owner": "seller/creator",
+          "action": "Add disclosure and enable platform setting at publish."
+        },
+        {
+          "priority": 4,
+          "owner": "seller",
+          "action": "Verify exact product tag on published post."
+        },
+        {
+          "priority": 5,
+          "owner": "rights owner",
+          "action": "Collect paid rights, clean audio and Spark authorization before paid use."
+        },
+        {
+          "priority": 6,
+          "owner": "operator",
+          "action": "Keep paid test blocked until real economics, stock and fulfillment health are complete."
+        }
+      ],
+      "creator_revision_message": "The exact product looks correct and the counter-reset idea is usable. Please reshoot the opening/setup so the crowded surface and white rack appear within the first 2.5 seconds for this concept, and show the rack expanding in one continuous shot. Remove “fits every sink” and use the seller-approved line: “Measure your space; this sample adjusts from 16 to 22 inches.” Keep the camera angle consistent for before/result, add the approved commercial disclosure, and send a clean-audio cut. The seller will verify the product tag and Spark rights separately.",
+      "revised_draft": {
+        "asset_id": "UGC-CSR-D2",
+        "duration_seconds": 23.4,
+        "changes": [
+          {
+            "time": "0:00–0:01.2",
+            "change": "Crowded surface and disclosure."
+          },
+          {
+            "time": "0:01.3",
+            "change": "Exact rack enters."
+          },
+          {
+            "time": "0:01.3–0:07.8",
+            "change": "Continuous expansion/setup."
+          },
+          {
+            "time": "0:08.0–0:13.5",
+            "change": "Same-angle before/result."
+          },
+          {
+            "time": "0:13.6",
+            "change": "Verified measurement line."
+          },
+          {
+            "time": "0:19.0–0:22.5",
+            "change": "Approved CTA; clean audio."
+          }
+        ],
+        "remaining_unknown": [
+          "platform disclosure metadata",
+          "published product tag",
+          "paid rights",
+          "Spark authorization",
+          "live economics/fulfillment"
+        ]
+      },
+      "final_decision": {
+        "organic": "approve_after_publish_checks",
+        "paid_or_spark": "blocked_pending_rights_economics_authorization",
+        "reason": "Creative blockers fixed; platform metadata and paid-use inputs remain unknown.",
+        "confidence": "high structural; none for sales performance"
+      },
+      "missing_economic_or_rights_inputs": [
+        "live offer/inventory",
+        "actual fees/commission/returns",
+        "account fulfillment metrics",
+        "paid use channels/duration",
+        "Spark method/code/expiry",
+        "publish disclosure/tag proof"
+      ],
+      "expected_learning": [
+        "Compare problem-first against product-first while keeping offer/page/audience stable where practical.",
+        "Use product clicks/orders and complete economics for commerce learning; views are diagnostic only.",
+        "Track fit questions/returns.",
+        "Do not promote PatternKit beyond candidate until linked evidence is sufficient."
+      ],
+      "expert_labels": [
+        "official_hard_rule: product, claim, disclosure, tag and rights gates",
+        "established_best_practice: continuous mechanism and matched proof",
+        "contextual_guideline: 2.5-second reveal is campaign-specific",
+        "directional_pattern: small-space persona",
+        "insufficient_evidence: no performance/profit conclusion"
+      ],
+      "seller_usefulness_criteria": [
+        "revision message is sendable",
+        "edit versus reshoot is clear",
+        "organic and Spark readiness are separate",
+        "no universal timing/fit/GMV promise",
+        "each blocker links to evidence and requirement"
+      ]
+    },
+    {
+      "case_id": "GC-POD-PERS-001",
+      "title": "POD personalized product — Pet-name embroidered cap",
+      "case_type": "synthetic_golden_fixture",
+      "fixture_integrity": {
+        "statement": "All product, personalization, production, cost and sample facts are synthetic fixture facts verified against the fixture manifest, approved preview and physical-sample evidence.",
+        "manifest_version": "gc-pod-pers-001:v1",
+        "evidence_assets": [
+          {
+            "id": "POD-E-001",
+            "type": "fixture_manifest",
+            "description": "Navy cap, cream thread, template and fixture economics."
+          },
+          {
+            "id": "POD-E-002",
+            "type": "approved_preview",
+            "description": "Name “Milo”, font F-02, center-front placement, template v3."
+          },
+          {
+            "id": "POD-E-003",
+            "type": "physical_sample",
+            "description": "Exact navy cap embroidered “Milo” in cream thread."
+          },
+          {
+            "id": "POD-E-004",
+            "type": "seller_confirmation",
+            "description": "No any-font/symbol, handmade, fixed-cutoff or guaranteed-reaction claim approved."
+          }
+        ]
+      },
+      "verified_product_context": {
+        "product_id": "PROD-POD-CAP-001",
+        "sku": "POD-CAP-NAVY-EMB-01",
+        "product_name": "Personalized Pet-Name Embroidered Cap",
+        "commerce_model": "POD made-to-order fixture",
+        "market": "US",
+        "variant": "navy adult cap, cream thread, font F-02",
+        "fixture_price_usd": 29.95,
+        "fixture_provider_base_cost_usd": 13.6,
+        "fixture_provider_shipping_usd": 5.2,
+        "fixture_personalization_labor_usd": 1.4,
+        "fixture_platform_fees_usd": 2.4,
+        "personalization_fields": {
+          "name_text": "1–12 Latin letters and spaces in this fixture",
+          "font": "F-02 only",
+          "thread_color": "cream only",
+          "preview_required": true
+        },
+        "sample_personalization": "Milo",
+        "physical_sample_status": "verified_in_fixture",
+        "approved_benefits": [
+          "visible personalized name",
+          "gift/identity relevance",
+          "seller review before production"
+        ],
+        "claims_not_approved": [
+          "any name/font/symbol",
+          "exact screen-to-thread color match",
+          "handmade by seller/creator",
+          "guaranteed emotional reaction",
+          "guaranteed occasion delivery"
+        ],
+        "ip_status": "generic name and seller-owned layout in fixture; real designs still require clearance",
+        "unknowns": [
+          "real provider SLA",
+          "reprint/defect rate",
+          "live order cutoff",
+          "real returns/cancellations",
+          "creator rights"
+        ]
+      },
+      "source_creative_observations": {
+        "reference_asset_id": "REF-POD-REVEAL-001",
+        "source_status": "synthetic reference; no performance evidence",
+        "observations": [
+          {
+            "time": "0:00–0:02.0",
+            "observation": "Pet-owner context establishes recipient identity."
+          },
+          {
+            "time": "0:02.0–0:05.0",
+            "observation": "Generic/base product before personalization."
+          },
+          {
+            "time": "0:05.0–0:10.0",
+            "observation": "Name reveal and embroidery close-up."
+          },
+          {
+            "time": "0:10.0–0:15.0",
+            "observation": "Gift handoff/reaction; product detail becomes less visible."
+          }
+        ],
+        "performance_evidence_status": "none",
+        "copycat_note": "Use personalization-reveal mechanism only; do not copy slogan, design, recipient, reaction or scene order."
+      },
+      "creative_dna": {
+        "dna_id": "DNA-REF-POD-001:v1",
+        "hook_type": "recipient_identity",
+        "message_angle": "personalized pet-owner gift",
+        "creator_persona": "pet owner / gift giver",
+        "format": "identity setup → reveal → detail → reaction",
+        "narrative": [
+          "recipient context",
+          "customization reveal",
+          "physical detail",
+          "reaction"
+        ],
+        "demo_type": "personalization reveal",
+        "proof_type": "physical close-up",
+        "psychology": [
+          "identity",
+          "recognition",
+          "gift anticipation"
+        ],
+        "risks": [
+          "reaction may overwhelm product detail",
+          "example personalization may be unclear",
+          "no performance evidence"
+        ],
+        "confidence": "high for observed structure; none for performance"
+      },
+      "patternkit_candidate": {
+        "pattern_kit_id": "PK-POD-PERSONALIZATION-REVEAL-001:v1",
+        "status": "candidate",
+        "name": "Recipient context → personalization process/reveal → physical detail",
+        "classification": "established_best_practice",
+        "keep": [
+          "recipient specificity",
+          "input-to-output transformation",
+          "physical close-up",
+          "example labeling"
+        ],
+        "contraindications": [
+          "mockup-only proof",
+          "checkout cannot support shown option",
+          "IP-dependent design",
+          "unverified occasion cutoff"
+        ],
+        "applicability": [
+          "name/photo/date customization",
+          "giftable visible personalization"
+        ],
+        "performance_evidence_status": "no linked product outcome; test required"
+      },
+      "viral_kit_concepts": [
+        {
+          "viral_kit_id": "VK-POD-CAP-A:v1",
+          "name": "From one name to their cap",
+          "angle": "maker/process transparency",
+          "hook": "Show the approved name input and ask “How does this become the final cap?”",
+          "mechanic": "screen preview → embroidery process → exact physical reveal",
+          "proof": "preview and sample match",
+          "creator_fit": "maker/process or small-business creator",
+          "hypothesis": "process transparency may increase confidence and reduce personalization questions",
+          "evidence_status": "untested"
+        },
+        {
+          "viral_kit_id": "VK-POD-CAP-B:v1",
+          "name": "The pet-owner identity reveal",
+          "angle": "identity/recognition",
+          "hook": "“For the person whose pet is part of every outfit.”",
+          "mechanic": "day-in-life context then close-up name reveal",
+          "proof": "physical cap and real creator context",
+          "creator_fit": "genuine pet-owner lifestyle creator",
+          "hypothesis": "identity fit may improve qualified personalization starts",
+          "evidence_status": "untested"
+        },
+        {
+          "viral_kit_id": "VK-POD-CAP-C:v1",
+          "name": "Gift handoff plus product detail",
+          "angle": "recipient reaction",
+          "hook": "anticipation before the personalized name is visible",
+          "mechanic": "handoff, recognition, then deliberate detail insert",
+          "proof": "real recipient consent/reaction plus exact sample",
+          "creator_fit": "real relationship/occasion creator",
+          "hypothesis": "reaction may improve attention while detail insert protects product comprehension",
+          "evidence_status": "untested; emotion may not translate to orders"
+        }
+      ],
+      "creative_campaign_pack": {
+        "campaign_id": "CAMP-POD-CAP-001",
+        "selected_viral_kit": "VK-POD-CAP-A:v1",
+        "objective": "Organic affiliate/UGC concept test; paid only after physical proof, rights and MTO economics",
+        "target_buyer": "US pet owner or gift buyer seeking visible personalization",
+        "core_angle": "show how an approved name becomes the exact embroidered cap",
+        "creator_brief": "Film the real navy “Milo” sample and seller-approved input/preview process. The displayed name is an example.",
+        "deliverables": [
+          "one 22–32 second vertical post",
+          "one clean physical-product close-up",
+          "one screen-to-product transition",
+          "clean-audio cut if paid use requested"
+        ],
+        "must_show": [
+          "exact navy cap and cream thread",
+          "example name “Milo” labeled as example",
+          "approved F-02 font only",
+          "input/preview step",
+          "physical sample close-up",
+          "seller review before production",
+          "commercial disclosure/product tag at publish"
+        ],
+        "must_not_show_or_say": [
+          "any font or symbol",
+          "perfect color on every screen/product",
+          "handmade by seller if outsourced",
+          "guaranteed reaction",
+          "unverified occasion arrival",
+          "AI mockup as physical proof"
+        ],
+        "creator_flexible_zones": [
+          "natural pet-owner context",
+          "personal story if truthful",
+          "camera style after product details remain clear"
+        ],
+        "rights_request": {
+          "organic_post": true,
+          "paid_use": "requested_not_granted",
+          "raw_footage": "close-up/process clips if contracted",
+          "editing": "contract-specific",
+          "audio": "clean version requested"
+        },
+        "revision_scope": "Misspelled/mismatched personalization or mockup-only proof requires corrected product/reshoot; optional emotional angle changes are new scope."
+      },
+      "compiled_requirements": [
+        {
+          "id": "P1",
+          "requirement": "Exact preview, template, name, font, thread and physical output match",
+          "source": "POD-PERS-001",
+          "severity": "blocker",
+          "verification": "OCR/visual against POD-E-002/003"
+        },
+        {
+          "id": "P2",
+          "requirement": "Physical sample used for color/texture/quality proof",
+          "source": "POD-MOCK-001 / POD-SAMPLE-001",
+          "severity": "blocker_for_proof",
+          "verification": "physical sample evidence"
+        },
+        {
+          "id": "P3",
+          "requirement": "Example personalization clearly labeled and ordering limits accurate",
+          "source": "POD-PERS-002",
+          "severity": "high",
+          "verification": "ASR/OCR plus checkout fixture"
+        },
+        {
+          "id": "P4",
+          "requirement": "No any-font/symbol or handmade claim",
+          "source": "TT-CLAIM-001 / fixture",
+          "severity": "blocker",
+          "verification": "ASR/OCR"
+        },
+        {
+          "id": "P5",
+          "requirement": "MTO handling/shipping language only if verified",
+          "source": "TT-FULFILL-002 / FTC-SHIP-001",
+          "severity": "blocker_if_claimed",
+          "verification": "seller SLA evidence"
+        },
+        {
+          "id": "P6",
+          "requirement": "IP clearance for design/asset",
+          "source": "POD-IP-001",
+          "severity": "blocker",
+          "verification": "clearance record"
+        },
+        {
+          "id": "P7",
+          "requirement": "Disclosure and exact product tag",
+          "source": "DISC-001 / TT content match",
+          "severity": "blocker_at_publish",
+          "verification": "post metadata"
+        },
+        {
+          "id": "P8",
+          "requirement": "Paid rights/audio/Spark complete",
+          "source": "UGC-RIGHTS-001 / UGC-MUSIC-001 / SPARK-001",
+          "severity": "blocker_for_paid",
+          "verification": "rights card"
+        }
+      ],
+      "first_draft_ugc_observations": {
+        "asset_id": "UGC-POD-CAP-D1",
+        "duration_seconds": 27.8,
+        "observations": [
+          {
+            "time": "0:00–0:05.5",
+            "observed": "AI mockup-only cap in black with gold thread; exact campaign sample is navy/cream."
+          },
+          {
+            "time": "0:05.8",
+            "observed": "Creator says “choose any name, any font, any symbol.”"
+          },
+          {
+            "time": "0:07.0–0:12.0",
+            "observed": "Checkout/personalization flow is not shown."
+          },
+          {
+            "time": "0:12.5–0:18.0",
+            "observed": "Very brief physical cap shot; thread and name unreadable."
+          },
+          {
+            "time": "0:18.5",
+            "observed": "Overlay: “Handmade just for you.” Seller uses outsourced POD provider."
+          },
+          {
+            "time": "0:22.0–0:27.0",
+            "observed": "Generic gift reaction and “order now for next week”; no evidence/disclosure."
+          }
+        ],
+        "metadata_unknown": [
+          "product tag",
+          "disclosure setting"
+        ],
+        "rights_unknown": [
+          "paid duration",
+          "editing/raw footage",
+          "audio"
+        ]
+      },
+      "preflight_expected_vs_observed": [
+        {
+          "requirement_id": "P1",
+          "expected": "Navy/cream F-02 “Milo” sample",
+          "observed": "Opening black/gold mockup; physical detail unreadable",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "reshoot with exact sample"
+        },
+        {
+          "requirement_id": "P2",
+          "expected": "Physical sample carries proof",
+          "observed": "Mockup carries primary quality/color proof",
+          "status": "fail",
+          "severity": "blocker_for_proof",
+          "editability": "reshoot"
+        },
+        {
+          "requirement_id": "P3",
+          "expected": "Example label and accurate limits",
+          "observed": "“Any name/font/symbol”; no flow",
+          "status": "fail",
+          "severity": "high",
+          "editability": "remove line plus reshoot process"
+        },
+        {
+          "requirement_id": "P4",
+          "expected": "No unsupported handmade claim",
+          "observed": "“Handmade just for you”",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "remove/replace line"
+        },
+        {
+          "requirement_id": "P5",
+          "expected": "No unverified delivery promise",
+          "observed": "“Order now for next week”",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "remove line"
+        },
+        {
+          "requirement_id": "P6",
+          "expected": "IP fixture clear",
+          "observed": "Generic name/layout only",
+          "status": "pass",
+          "severity": "blocker",
+          "editability": "n/a"
+        },
+        {
+          "requirement_id": "P7",
+          "expected": "Disclosure/tag",
+          "observed": "Absent/unknown",
+          "status": "fail_or_unknown",
+          "severity": "blocker_at_publish",
+          "editability": "edit and publish check"
+        },
+        {
+          "requirement_id": "P8",
+          "expected": "Paid rights/audio/Spark complete",
+          "observed": "Not provided",
+          "status": "unknown",
+          "severity": "blocker_for_paid",
+          "editability": "non-creative fix"
+        }
+      ],
+      "preflight_decision": {
+        "structural_score_fixture_only": 48,
+        "score_type": "deterministic structural fixture; not performance prediction",
+        "confidence": "high for product/personalization mismatch",
+        "action_label": "reshoot_required",
+        "hard_blockers": [
+          "mockup/sample mismatch",
+          "unsupported personalization options",
+          "false handmade claim",
+          "unverified delivery",
+          "missing disclosure"
+        ]
+      },
+      "seller_action_plan": [
+        {
+          "priority": 1,
+          "owner": "seller/POD operator",
+          "action": "Confirm exact template, allowed characters, provider role and MTO handling statement."
+        },
+        {
+          "priority": 2,
+          "owner": "creator",
+          "action": "Reshoot with navy/cream physical sample and readable “Milo” close-up."
+        },
+        {
+          "priority": 3,
+          "owner": "creator",
+          "action": "Show approved input/preview and label “Milo” as example; remove any-font/symbol claim."
+        },
+        {
+          "priority": 4,
+          "owner": "seller",
+          "action": "Replace handmade and delivery language; provide disclosure/CTA."
+        },
+        {
+          "priority": 5,
+          "owner": "rights owner",
+          "action": "Complete paid rights and clean audio before amplification."
+        },
+        {
+          "priority": 6,
+          "owner": "operator",
+          "action": "Keep paid/occasion campaign blocked until real provider SLA, defect/reprint rate and contribution economics are known."
+        }
+      ],
+      "creator_revision_message": "The pet-owner idea is relevant, but this draft needs a reshoot because the opening mockup does not match the exact product. Please use only the navy cap with cream “Milo” embroidery, show the seller-approved name input and preview, and add a readable physical close-up. Label “Milo” as an example. Remove “any font, any symbol,” “handmade,” and “order now for next week.” Add the approved commercial disclosure and send a clean-audio cut. The seller will verify the product tag and paid-use rights separately.",
+      "revised_draft": {
+        "asset_id": "UGC-POD-CAP-D2",
+        "duration_seconds": 29.1,
+        "changes": [
+          {
+            "time": "0:00–0:02.2",
+            "change": "Real navy sample and pet-owner context; disclosure visible."
+          },
+          {
+            "time": "0:02.3–0:07.5",
+            "change": "Seller-approved input/preview; “Example: Milo” label."
+          },
+          {
+            "time": "0:07.6–0:14.0",
+            "change": "Process transition without claiming seller handmade production."
+          },
+          {
+            "time": "0:14.1–0:20.5",
+            "change": "Readable cream embroidery close-up; exact sample."
+          },
+          {
+            "time": "0:20.6–0:27.5",
+            "change": "Gift/identity context and accurate customization CTA; no shipping promise."
+          }
+        ],
+        "remaining_unknown": [
+          "platform tag/disclosure metadata",
+          "real provider SLA and defect rate",
+          "paid rights/Spark",
+          "actual economics"
+        ]
+      },
+      "final_decision": {
+        "organic": "approve_after_publish_checks",
+        "paid_or_spark": "blocked_pending_rights_audio_economics",
+        "reason": "Physical/personalization truth fixed; paid and operational inputs remain unknown.",
+        "confidence": "high structural; no performance guarantee"
+      },
+      "missing_economic_or_rights_inputs": [
+        "real provider production/handling range",
+        "reprint/defect/cancellation cost",
+        "actual platform/commission/return inputs",
+        "rights channels/duration/editing",
+        "Spark authorization",
+        "publish metadata"
+      ],
+      "expected_learning": [
+        "Compare process transparency with recipient-reaction and identity variants.",
+        "Track personalization-start/order completion and support questions, not views alone.",
+        "Monitor spelling/customization error and cancellation outcomes.",
+        "Do not infer a universal gifting winner from one occasion/creator."
+      ],
+      "expert_labels": [
+        "official_hard_rule: product accuracy, claims, disclosure, IP and fulfillment",
+        "operational_hard_constraint: personalization approval and rights",
+        "established_best_practice: physical sample/process proof",
+        "contextual_guideline: recipient emotion and reveal pacing",
+        "insufficient_evidence: no performance or WTP claim"
+      ],
+      "seller_usefulness_criteria": [
+        "prevents mockup-only paid proof",
+        "protects exact personalization",
+        "separates creative reshoot from provider/economics tasks",
+        "produces sendable creator message",
+        "leaves unknown fulfillment/rights explicit"
+      ]
+    },
+    {
+      "case_id": "GC-DROP-DEMO-001",
+      "title": "Dropshipping visual-demo product — FurLift Reusable Pet Hair Roller",
+      "case_type": "synthetic_golden_fixture",
+      "fixture_integrity": {
+        "statement": "All product, supplier, cost, shipping and demo facts are synthetic fixture facts. They are verified only against the fixture supplier record, exact sample and controlled demonstration.",
+        "manifest_version": "gc-drop-demo-001:v1",
+        "evidence_assets": [
+          {
+            "id": "DROP-E-001",
+            "type": "supplier_fixture",
+            "description": "Supplier SKU FLR-GR-02, green roller, package contents and fixture landed cost."
+          },
+          {
+            "id": "DROP-E-002",
+            "type": "exact_sample",
+            "description": "Green roller and customer-equivalent package."
+          },
+          {
+            "id": "DROP-E-003",
+            "type": "controlled_demo",
+            "description": "Visible loose pet hair pickup on one tested polyester couch section."
+          },
+          {
+            "id": "DROP-E-004",
+            "type": "seller_confirmation",
+            "description": "No every-fabric, 100%, one-swipe, allergy, or two-day-delivery claim approved."
+          }
+        ]
+      },
+      "verified_product_context": {
+        "product_id": "PROD-FLR-001",
+        "sku": "FLR-GR-02",
+        "supplier_sku": "SUP-FLR-GR-02",
+        "product_name": "FurLift Reusable Pet Hair Roller",
+        "commerce_model": "dropshipping fixture",
+        "market": "US",
+        "variant": "green manual roller with collection chamber",
+        "fixture_price_usd": 19.99,
+        "fixture_supplier_unit_cost_usd": 4.8,
+        "fixture_supplier_shipping_usd": 5.7,
+        "fixture_platform_fees_usd": 1.6,
+        "fixture_commission_percent": 15,
+        "mechanism": "manual back-and-forth roller lifts visible loose hair into a collection chamber",
+        "tested_context": "fixture polyester couch with visible loose pet hair",
+        "approved_benefits": [
+          "picked up visible loose pet hair in the fixture test",
+          "reusable manual mechanism",
+          "collection chamber can be shown"
+        ],
+        "claims_not_approved": [
+          "removes 100%",
+          "works on every fabric",
+          "one swipe",
+          "helps allergies",
+          "no lint/hair remains",
+          "two-day delivery",
+          "lifetime durability"
+        ],
+        "exact_sample_status": "verified_in_fixture",
+        "customer_route_status": "unverified",
+        "supplier_snapshot_status": "fixture_only",
+        "unknowns": [
+          "real stock/price freshness",
+          "real delivery route",
+          "defect/wrong-item rate",
+          "return rate",
+          "actual paid economics",
+          "creator rights"
+        ]
+      },
+      "source_creative_observations": {
+        "reference_asset_id": "REF-PET-ROLLER-001",
+        "source_status": "synthetic supplier-style reference; no performance evidence",
+        "observations": [
+          {
+            "time": "0:00–0:01.0",
+            "observation": "Macro product mechanism opens the video."
+          },
+          {
+            "time": "0:01.0–0:06.0",
+            "observation": "One-pass couch demonstration with several cuts."
+          },
+          {
+            "time": "0:06.0–0:09.0",
+            "observation": "Collection chamber reveal."
+          },
+          {
+            "time": "0:09.0–0:12.0",
+            "observation": "“Works everywhere” overlay and generic CTA."
+          }
+        ],
+        "performance_evidence_status": "none",
+        "copycat_note": "Supplier footage and wording cannot be reused as proof. Film the seller’s exact sample and original test."
+      },
+      "creative_dna": {
+        "dna_id": "DNA-REF-DROP-001:v1",
+        "hook_type": "product_first_mechanism",
+        "message_angle": "fast pet-hair cleanup",
+        "creator_persona": "hands-only product demo",
+        "format": "macro mechanism → surface demo → chamber proof",
+        "narrative": [
+          "mechanism",
+          "demo",
+          "proof",
+          "CTA"
+        ],
+        "demo_type": "visual utility",
+        "proof_type": "surface result plus chamber close-up",
+        "risks": [
+          "supplier model unknown",
+          "cuts may hide test",
+          "universal claim",
+          "no shipping/economics/rights evidence"
+        ],
+        "confidence": "high observation; zero commercial proof"
+      },
+      "patternkit_candidate": {
+        "pattern_kit_id": "PK-DROP-MECHANISM-PROOF-001:v1",
+        "status": "candidate",
+        "name": "Exact product mechanism → controlled surface demo → chamber/result proof",
+        "classification": "established_best_practice",
+        "keep": [
+          "immediate mechanism",
+          "same-surface controlled use",
+          "collection chamber proof",
+          "limitation language"
+        ],
+        "contraindications": [
+          "exact supplier SKU unavailable",
+          "surface compatibility unknown",
+          "safety/health claim",
+          "customer route unverified"
+        ],
+        "applicability": [
+          "visual cleaning utility",
+          "mechanical gadget",
+          "short feedback loop"
+        ],
+        "performance_evidence_status": "no linked performance; online test required"
+      },
+      "viral_kit_concepts": [
+        {
+          "viral_kit_id": "VK-FLR-A:v1",
+          "name": "One couch section, one continuous test",
+          "angle": "mechanism proof",
+          "hook": "Macro roller enters a clearly marked couch section",
+          "mechanic": "continuous back-and-forth use on same section",
+          "proof": "before/process/result plus chamber close-up",
+          "creator_fit": "pet-owner product demonstrator",
+          "hypothesis": "controlled continuity may improve trust and product clicks",
+          "evidence_status": "untested"
+        },
+        {
+          "viral_kit_id": "VK-FLR-B:v1",
+          "name": "Reusable versus disposable routine",
+          "angle": "workflow comparison",
+          "hook": "Show recurring disposable lint-roll sheet use, then exact reusable roller",
+          "mechanic": "comparable couch sections and documented steps",
+          "proof": "same task; no unsupported lifetime cost claim",
+          "creator_fit": "practical home/pet reviewer",
+          "hypothesis": "workflow contrast may improve value understanding",
+          "evidence_status": "untested; comparator conditions required"
+        },
+        {
+          "viral_kit_id": "VK-FLR-C:v1",
+          "name": "Pet-owner reset before guests",
+          "angle": "routine/occasion",
+          "hook": "Real visible hair before a guest-arrival cleanup",
+          "mechanic": "insert exact roller into routine and empty chamber",
+          "proof": "same surface and realistic result",
+          "creator_fit": "pet-owner lifestyle creator",
+          "hypothesis": "specific routine may improve relevance without universal claim",
+          "evidence_status": "untested"
+        }
+      ],
+      "creative_campaign_pack": {
+        "campaign_id": "CAMP-FLR-001",
+        "selected_viral_kit": "VK-FLR-A:v1",
+        "objective": "Organic TikTok Shop product demo; paid small test only after supplier/economics/rights completion",
+        "target_buyer": "US pet owner with loose visible hair on tested upholstery",
+        "core_angle": "show exact reusable mechanism honestly on one verified surface",
+        "creator_brief": "Use the exact green FLR-GR-02 sample. Film an original continuous test on a clearly identified safe upholstery surface.",
+        "deliverables": [
+          "one 18–25 second vertical post",
+          "one clean continuous demo clip",
+          "one clean-audio cut",
+          "optional second tested-context clip only if contracted"
+        ],
+        "must_show": [
+          "exact green model/package",
+          "surface before use",
+          "continuous demo on same area",
+          "collection chamber",
+          "truthful limitation: result shown on this couch",
+          "commercial disclosure and correct tag at publish"
+        ],
+        "must_not_show_or_say": [
+          "100%",
+          "every fabric",
+          "one swipe",
+          "allergy benefit",
+          "two-day delivery",
+          "supplier/reference footage",
+          "different blue model",
+          "unverified price/discount"
+        ],
+        "creator_flexible_zones": [
+          "natural pet-owner context",
+          "opening wording",
+          "safe filming style while continuity remains visible"
+        ],
+        "rights_request": {
+          "organic_post": true,
+          "paid_use": "requested_not_granted",
+          "Spark": "requested_not_authorized",
+          "raw_footage": "continuous demo requested if contracted",
+          "audio": "clean cut required"
+        },
+        "revision_scope": "Material model/surface/proof mismatch requires reshoot; removing a text/offer line is editable."
+      },
+      "compiled_requirements": [
+        {
+          "id": "D1",
+          "requirement": "Exact supplier SKU/model and customer-equivalent package",
+          "source": "DROP-SUP-002 / TT-CONTENT-001",
+          "severity": "blocker",
+          "verification": "visual/model match to DROP-E-001/002"
+        },
+        {
+          "id": "D2",
+          "requirement": "Continuous mechanism on identified tested surface",
+          "source": "selected PatternKit",
+          "severity": "high",
+          "verification": "unbroken same-area use"
+        },
+        {
+          "id": "D3",
+          "requirement": "No universal/absolute or health claim",
+          "source": "TT-CLAIM-001 / FTC-CLAIM-001",
+          "severity": "blocker",
+          "verification": "ASR/OCR"
+        },
+        {
+          "id": "D4",
+          "requirement": "Shipping statement uses actual customer route or is omitted",
+          "source": "DROP-SHIP-001 / FTC-SHIP-001",
+          "severity": "blocker_if_claimed",
+          "verification": "route evidence"
+        },
+        {
+          "id": "D5",
+          "requirement": "Offer/price matches current listing",
+          "source": "TT-OFFER-001",
+          "severity": "blocker_if_claimed",
+          "verification": "offer snapshot"
+        },
+        {
+          "id": "D6",
+          "requirement": "Disclosure and exact product tag",
+          "source": "DISC-001 / content match",
+          "severity": "blocker_at_publish",
+          "verification": "post metadata"
+        },
+        {
+          "id": "D7",
+          "requirement": "Current supplier stock/cost/economics before paid scale",
+          "source": "DROP-STOCK-001 / ECON-001",
+          "severity": "blocker_for_paid_scale",
+          "verification": "fresh snapshot and economics"
+        },
+        {
+          "id": "D8",
+          "requirement": "Rights/Spark/audio complete",
+          "source": "UGC-RIGHTS-001 / SPARK-001 / UGC-MUSIC-001",
+          "severity": "blocker_for_paid",
+          "verification": "rights card"
+        }
+      ],
+      "first_draft_ugc_observations": {
+        "asset_id": "UGC-FLR-D1",
+        "duration_seconds": 21.6,
+        "observations": [
+          {
+            "time": "0:00–0:04.0",
+            "observed": "Supplier clip shows a blue model; campaign SKU is green FLR-GR-02."
+          },
+          {
+            "time": "0:04.2",
+            "observed": "Overlay: “100% of hair in one swipe.”"
+          },
+          {
+            "time": "0:05.0–0:10.0",
+            "observed": "Rapid cuts prevent continuity; fabric not identified."
+          },
+          {
+            "time": "0:10.5",
+            "observed": "Creator says “works on every fabric.”"
+          },
+          {
+            "time": "0:13.0",
+            "observed": "Creator says “mine arrived in two days”; sample was sent express, customer route unknown."
+          },
+          {
+            "time": "0:16.0",
+            "observed": "Price overlay $14.99; fixture listing is $19.99."
+          },
+          {
+            "time": "0:18.0–0:21.0",
+            "observed": "No disclosure; tag/audio/rights unknown."
+          }
+        ],
+        "metadata_unknown": [
+          "disclosure",
+          "product tag",
+          "audio"
+        ],
+        "rights_unknown": [
+          "paid use",
+          "Spark",
+          "editing/raw"
+        ],
+        "supplier_unknown": [
+          "current stock/cost",
+          "customer route"
+        ]
+      },
+      "preflight_expected_vs_observed": [
+        {
+          "requirement_id": "D1",
+          "expected": "Exact green FLR-GR-02",
+          "observed": "Blue supplier model in opening",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "remove supplier clip and reshoot exact model"
+        },
+        {
+          "requirement_id": "D2",
+          "expected": "Continuous same-area demo",
+          "observed": "Rapid cuts; surface unidentified",
+          "status": "fail",
+          "severity": "high",
+          "editability": "reshoot"
+        },
+        {
+          "requirement_id": "D3",
+          "expected": "No 100%/every-fabric/one-swipe claim",
+          "observed": "All three appear",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "remove lines plus reshoot truthful demo"
+        },
+        {
+          "requirement_id": "D4",
+          "expected": "No shipping claim without customer route",
+          "observed": "Two-day claim based on express creator sample",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "remove line"
+        },
+        {
+          "requirement_id": "D5",
+          "expected": "Current verified price",
+          "observed": "$14.99 versus $19.99 fixture",
+          "status": "fail",
+          "severity": "blocker",
+          "editability": "replace/remove overlay"
+        },
+        {
+          "requirement_id": "D6",
+          "expected": "Disclosure/tag",
+          "observed": "Absent/unknown",
+          "status": "fail_or_unknown",
+          "severity": "blocker_at_publish",
+          "editability": "edit and publish check"
+        },
+        {
+          "requirement_id": "D7",
+          "expected": "Fresh supplier/economics for paid scale",
+          "observed": "Not provided",
+          "status": "unknown",
+          "severity": "blocker_for_paid_scale",
+          "editability": "operational fix"
+        },
+        {
+          "requirement_id": "D8",
+          "expected": "Rights/Spark/audio complete",
+          "observed": "Not provided",
+          "status": "unknown",
+          "severity": "blocker_for_paid",
+          "editability": "non-creative fix"
+        }
+      ],
+      "preflight_decision": {
+        "structural_score_fixture_only": 36,
+        "score_type": "deterministic structural fixture; not performance prediction",
+        "confidence": "high for mismatch/claims",
+        "action_label": "reject_current_draft_and_reshoot",
+        "hard_blockers": [
+          "wrong model",
+          "unsupported absolute/compatibility claims",
+          "unverified shipping",
+          "offer mismatch",
+          "missing disclosure"
+        ]
+      },
+      "seller_action_plan": [
+        {
+          "priority": 1,
+          "owner": "seller/sourcing",
+          "action": "Confirm exact supplier SKU, customer-equivalent package, current stock/cost and customer shipping route."
+        },
+        {
+          "priority": 2,
+          "owner": "creator",
+          "action": "Discard supplier clip and reshoot exact green sample in one continuous same-area test."
+        },
+        {
+          "priority": 3,
+          "owner": "creator",
+          "action": "Use truthful observed wording: “It picked up visible loose hair on this couch.” Remove 100%, every-fabric and one-swipe claims."
+        },
+        {
+          "priority": 4,
+          "owner": "seller",
+          "action": "Remove two-day statement and replace/remove price from current offer snapshot."
+        },
+        {
+          "priority": 5,
+          "owner": "seller/creator",
+          "action": "Complete disclosure and exact product tag at publish."
+        },
+        {
+          "priority": 6,
+          "owner": "rights/economics owner",
+          "action": "Complete rights, Spark, audio and contribution economics before paid test."
+        }
+      ],
+      "creator_revision_message": "Please do not use the blue supplier clip; it is not the seller’s exact product. Reshoot the green FLR-GR-02 sample on one clearly identified couch section and keep the mechanism continuous. Remove “100%,” “one swipe,” “every fabric,” and the two-day delivery statement. Use the seller-approved observation: “It picked up visible loose hair on this couch.” Remove or update the price from the seller’s current offer, add the approved commercial disclosure, and send a clean-audio cut. Product tag and Spark rights will be verified separately.",
+      "revised_draft": {
+        "asset_id": "UGC-FLR-D2",
+        "duration_seconds": 22.2,
+        "changes": [
+          {
+            "time": "0:00–0:00.8",
+            "change": "Exact green sample and disclosure visible."
+          },
+          {
+            "time": "0:00.8–0:03.0",
+            "change": "Marked polyester couch section before state."
+          },
+          {
+            "time": "0:03.0–0:10.2",
+            "change": "Continuous back-and-forth mechanism."
+          },
+          {
+            "time": "0:10.3–0:14.5",
+            "change": "Same-area result and collection chamber."
+          },
+          {
+            "time": "0:14.6",
+            "change": "Truthful context line; no universal claim."
+          },
+          {
+            "time": "0:18.0–0:21.5",
+            "change": "Approved CTA; no price or shipping promise; clean audio."
+          }
+        ],
+        "remaining_unknown": [
+          "live product tag/disclosure metadata",
+          "fresh supplier stock/cost/route",
+          "paid rights/Spark",
+          "complete economics"
+        ]
+      },
+      "final_decision": {
+        "organic": "approve_small_organic_test_after_publish_checks",
+        "paid_or_spark": "blocked_pending_supplier_economics_rights",
+        "reason": "Exact-product and claim blockers corrected; operational and paid-use inputs remain unknown.",
+        "confidence": "high structural; no GMV/profit prediction"
+      },
+      "missing_economic_or_rights_inputs": [
+        "fresh supplier stock/price/shipping destination",
+        "wrong-item/defect/return history",
+        "actual fees/commission/returns",
+        "paid channels/duration/editing",
+        "Spark authorization",
+        "publish metadata"
+      ],
+      "expected_learning": [
+        "Compare exact mechanism-first against fair reusable-versus-disposable workflow while controlling other variables.",
+        "Use product clicks/orders, contribution and return/compatibility complaints; do not judge from views alone.",
+        "Track whether context limitation reduces incompatible-surface complaints.",
+        "Do not call supplier-style mechanism a winner without linked product evidence."
+      ],
+      "expert_labels": [
+        "official_hard_rule: product/offer/claim/disclosure consistency",
+        "operational_hard_constraint: supplier route/stock/economics/rights",
+        "established_best_practice: exact sample and continuous demo",
+        "contextual_guideline: pet-owner routine",
+        "seller_anecdote: stock/wrong-item/shipping pain",
+        "insufficient_evidence: performance unknown"
+      ],
+      "seller_usefulness_criteria": [
+        "stops wrong-model supplier footage",
+        "removes unsupported absolute and shipping claims",
+        "separates reshoot from sourcing/economics tasks",
+        "keeps organic and paid decisions distinct",
+        "defines a testable learning question"
+      ]
+    }
+  ]
+}

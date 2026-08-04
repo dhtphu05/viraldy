@@ -22,8 +22,36 @@ export const queryKeys = {
             ["jobs", workspaceId, jobId] as const,
     },
     tiktokScores: {
+        list: (workspaceId: string | undefined) => ["tiktok-scores", workspaceId, "list"] as const,
         detail: (workspaceId: string | undefined, scoreRunId: string | null) =>
             ["tiktok-scores", workspaceId, scoreRunId] as const,
+        fixes: (workspaceId: string | undefined, scoreRunId: string | null) =>
+            ["tiktok-scores", workspaceId, scoreRunId, "fixes"] as const,
+        comparison: (
+            workspaceId: string | undefined,
+            scoreRunId: string | null,
+            comparisonId: string | null,
+        ) => ["tiktok-scores", workspaceId, scoreRunId, "comparisons", comparisonId] as const,
+        profiles: (workspaceId: string | undefined) =>
+            ["tiktok-score-profiles", workspaceId] as const,
+        playback: (
+            workspaceId: string | undefined,
+            assetId: string | null,
+            assetVersionId: string | null,
+        ) => ["asset-playback", workspaceId, assetId, assetVersionId] as const,
+    },
+    ugcReviews: {
+        status: (workspaceId: string | undefined, reviewId: string | null) =>
+            ["ugc-reviews", workspaceId, reviewId, "status"] as const,
+        detail: (workspaceId: string | undefined, reviewId: string | null) =>
+            ["ugc-reviews", workspaceId, reviewId] as const,
+        comparison: (workspaceId: string | undefined, reviewId: string | null) =>
+            ["ugc-reviews", workspaceId, reviewId, "comparisons", "latest"] as const,
+        playback: (
+            workspaceId: string | undefined,
+            assetId: string | null,
+            assetVersionId: string | null,
+        ) => ["ugc-review-playback", workspaceId, assetId, assetVersionId] as const,
     },
     creativeDna: {
         detail: (workspaceId: string | undefined, dnaVersionId: string | null) =>

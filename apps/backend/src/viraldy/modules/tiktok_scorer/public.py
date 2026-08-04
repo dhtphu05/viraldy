@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from viraldy.modules.media_analysis.models import EvidenceItemModel
+from viraldy.modules.media_analysis.public import EvidenceItemModel
 from viraldy.modules.tiktok_scorer.contracts import TikTokScoreResultV2
+from viraldy.modules.tiktok_scorer.repository import (
+    RUBRIC_VERSION,
+    RULE_VERSION,
+    SyncTikTokScoreRepository,
+    TikTokScoreRepository,
+)
 from viraldy.modules.tiktok_scorer.scorer import score_tiktok_structure
 
 
@@ -18,4 +24,11 @@ def score_from_creative_dna(
     return score_from_evidence_bundle(evidence)
 
 
-__all__ = ["score_from_creative_dna", "score_from_evidence_bundle"]
+__all__ = [
+    "RUBRIC_VERSION",
+    "RULE_VERSION",
+    "SyncTikTokScoreRepository",
+    "TikTokScoreRepository",
+    "score_from_creative_dna",
+    "score_from_evidence_bundle",
+]

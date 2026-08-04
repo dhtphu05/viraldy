@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     oidc_jwks_url: AnyUrl | None = None
     oidc_allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
     oidc_jwks_cache_seconds: int = 300
+    oidc_authorization_url: AnyUrl | None = None
+    oidc_token_url: AnyUrl | None = None
+    oidc_client_id: str | None = None
+    oidc_scopes: list[str] = Field(
+        default_factory=lambda: ["openid", "profile", "email", "phone", "offline_access"]
+    )
+    oidc_registration_url: AnyUrl | None = None
+    oidc_end_session_url: AnyUrl | None = None
 
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
@@ -121,6 +129,7 @@ class Settings(BaseSettings):
     openai_model_campaign_pack: str | None = None
     openai_model_decision_summary: str | None = None
     openai_model_revision_message: str | None = None
+    openai_model_ugc_execution_brief: str | None = None
 
     image_generation_enabled: bool = False
     video_generation_enabled: bool = False
@@ -142,6 +151,7 @@ class Settings(BaseSettings):
         "backend_cors_origins",
         "allowed_upload_mime_types",
         "oidc_allowed_algorithms",
+        "oidc_scopes",
         "openai_transcription_timestamp_granularities",
         mode="before",
     )
@@ -156,6 +166,30 @@ class Settings(BaseSettings):
     def normalize_empty_openai_key(cls, value: Any) -> Any:
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("oidc_client_id", mode="before")
+    @classmethod
+    def normalize_oidc_client_id(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator(
+        "oidc_authorization_url",
+        "oidc_token_url",
+        "oidc_registration_url",
+        "oidc_end_session_url",
+    )
+    @classmethod
+    def validate_public_oidc_url(cls, value: AnyUrl | None) -> AnyUrl | None:
+        if value is None:
+            return None
+        parsed = urlsplit(str(value))
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("Public OIDC URLs must use HTTP(S).")
+        if parsed.username or parsed.password:
+            raise ValueError("Public OIDC URLs must not contain credentials.")
         return value
 
     @field_validator("openai_base_url")
@@ -175,13 +209,9 @@ class Settings(BaseSettings):
         normalized = value.rstrip("/")
         parsed = urlsplit(normalized)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError(
-                "PRODUCT_CRAWL_PUBLIC_BASE_URL must be an absolute HTTP(S) URL."
-            )
+            raise ValueError("PRODUCT_CRAWL_PUBLIC_BASE_URL must be an absolute HTTP(S) URL.")
         if parsed.username or parsed.password:
-            raise ValueError(
-                "PRODUCT_CRAWL_PUBLIC_BASE_URL must not contain credentials."
-            )
+            raise ValueError("PRODUCT_CRAWL_PUBLIC_BASE_URL must not contain credentials.")
         return normalized
 
     @field_validator(
@@ -204,6 +234,7 @@ class Settings(BaseSettings):
         "openai_model_campaign_pack",
         "openai_model_decision_summary",
         "openai_model_revision_message",
+        "openai_model_ugc_execution_brief",
         mode="before",
     )
     @classmethod
@@ -245,6 +276,39 @@ class Settings(BaseSettings):
             ]
             if missing:
                 raise ValueError(f"Missing OIDC settings: {', '.join(missing)}")
+        if is_prod_like and self.auth_mode is AuthMode.OIDC:
+            missing_browser_settings = [
+                name
+                for name, value in {
+                    "OIDC_AUTHORIZATION_URL": self.oidc_authorization_url,
+                    "OIDC_TOKEN_URL": self.oidc_token_url,
+                    "OIDC_CLIENT_ID": self.oidc_client_id,
+                }.items()
+                if not value
+            ]
+            if missing_browser_settings:
+                raise ValueError(
+                    f"Missing OIDC browser-flow settings: {', '.join(missing_browser_settings)}"
+                )
+            insecure_browser_settings = [
+                name
+                for name, value in {
+                    "OIDC_AUTHORIZATION_URL": self.oidc_authorization_url,
+                    "OIDC_TOKEN_URL": self.oidc_token_url,
+                    "OIDC_REGISTRATION_URL": self.oidc_registration_url,
+                    "OIDC_END_SESSION_URL": self.oidc_end_session_url,
+                }.items()
+                if value is not None and urlsplit(str(value)).scheme != "https"
+            ]
+            if insecure_browser_settings:
+                raise ValueError(
+                    "OIDC browser-flow settings must use HTTPS outside local/test: "
+                    f"{', '.join(insecure_browser_settings)}"
+                )
+            required_scopes = {"openid", "profile", "email", "phone", "offline_access"}
+            missing_scopes = sorted(required_scopes.difference(self.oidc_scopes))
+            if missing_scopes:
+                raise ValueError(f"OIDC_SCOPES must include: {', '.join(missing_scopes)}")
         if self.ai_mode == "live" and self.ai_provider == "openai" and not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY is required when AI_MODE=live and AI_PROVIDER=openai.")
         if (
@@ -274,6 +338,7 @@ class Settings(BaseSettings):
             "campaign_pack_generate": self.openai_model_campaign_pack,
             "seller_decision_summary": self.openai_model_decision_summary,
             "revision_message_generate": self.openai_model_revision_message,
+            "ugc_execution_brief_synthesis": self.openai_model_ugc_execution_brief,
         }
         uses_vision_model = vision or operation == "media_observation"
         return operation_models.get(operation) or (

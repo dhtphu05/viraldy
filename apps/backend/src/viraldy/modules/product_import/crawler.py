@@ -513,6 +513,7 @@ async def _scrape_url(req: CrawlRequest):
                 md_content = generate_app_markdown(parsed_data)
                 title = parsed_data.get('title', 'app_store_app')
                 description = parsed_data.get('description', '')
+                rating = parsed_data.get('rating', 'N/A')
                 screenshots = parsed_data.get('screenshots', [])
                 videos = parsed_data.get('videos', [])
                 icon = parsed_data.get('icon', '')
@@ -742,10 +743,11 @@ async def _scrape_url(req: CrawlRequest):
             coupon_context = extract_coupon_context(md_content, result.html)
             if isinstance(parsed_data, dict):
                 price_info = parsed_data.get('price') or {}
-                if not coupon_context.get('original_price'):
-                    coupon_context['original_price'] = price_info.get('original', '')
-                if not coupon_context.get('sale_price'):
-                    coupon_context['sale_price'] = price_info.get('discounted', '')
+                if isinstance(price_info, dict):
+                    if not coupon_context.get('original_price'):
+                        coupon_context['original_price'] = price_info.get('original', '')
+                    if not coupon_context.get('sale_price'):
+                        coupon_context['sale_price'] = price_info.get('discounted', '')
 
 
             resp_data = {
@@ -759,7 +761,11 @@ async def _scrape_url(req: CrawlRequest):
                 "confidence": confidence,
                 "reviews": reviews_list,
                 "rating": rating,
-                "reviews_count": (parsed_data or {}).get('ratings', {}).get('reviews_count', 'N/A') if isinstance(parsed_data, dict) else 'N/A',
+                "reviews_count": (
+                    (parsed_data or {}).get('ratings', {}).get('reviews_count', 'N/A')
+                    if is_amazon
+                    else (parsed_data or {}).get('reviews_count', 'N/A')
+                ) if isinstance(parsed_data, dict) else 'N/A',
                 "parent_asin": (parsed_data or {}).get('parent_asin', '') if isinstance(parsed_data, dict) else '',
                 "review_videos": review_videos,
                 "buyer_images": buyer_images,
@@ -832,8 +838,9 @@ async def _scrape_url(req: CrawlRequest):
 
 
 def crawl_product_url(url: str) -> dict[str, object]:
+    safe_url = validate_public_http_url(url)
     with _scrape_semaphore:
-        result = asyncio.run(_scrape_url(CrawlRequest(url=url)))
+        result = asyncio.run(_scrape_url(CrawlRequest(url=safe_url)))
     if not isinstance(result, dict):
         raise AppError(
             "PRODUCT_CRAWL_FAILED",

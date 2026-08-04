@@ -10,33 +10,56 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UgcReviewRouteImport } from './routes/ugc-review'
+import { Route as TiktokScorerRouteImport } from './routes/tiktok-scorer'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as PerformanceRouteImport } from './routes/performance'
 import { Route as MvpRouteImport } from './routes/mvp'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CreativeLibraryRouteImport } from './routes/creative-library'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as UgcReviewIndexRouteImport } from './routes/ugc-review.index'
+import { Route as TiktokScorerIndexRouteImport } from './routes/tiktok-scorer.index'
 import { Route as PerformanceIndexRouteImport } from './routes/performance.index'
 import { Route as CreativeLibraryIndexRouteImport } from './routes/creative-library.index'
 import { Route as CampaignsIndexRouteImport } from './routes/campaigns.index'
 import { Route as UgcReviewAssetIdRouteImport } from './routes/ugc-review.$assetId'
+import { Route as TiktokScorerNewRouteImport } from './routes/tiktok-scorer.new'
+import { Route as TiktokScorerScoreIdRouteImport } from './routes/tiktok-scorer.$scoreId'
 import { Route as PerformanceCampaignIdRouteImport } from './routes/performance.$campaignId'
 import { Route as CreativeLibraryCreativeIdRouteImport } from './routes/creative-library.$creativeId'
 import { Route as CampaignsNewRouteImport } from './routes/campaigns.new'
 import { Route as CampaignsCampaignIdRouteImport } from './routes/campaigns.$campaignId'
+import { Route as ApiBackendSplatRouteImport } from './routes/api.backend.$'
+import { Route as ApiAuthRefreshRouteImport } from './routes/api.auth.refresh'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api.auth.logout'
+import { Route as ApiAuthLoginRouteImport } from './routes/api.auth.login'
+import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
+import { Route as TiktokScorerScoreIdCompareComparisonIdRouteImport } from './routes/tiktok-scorer.$scoreId.compare.$comparisonId'
 
 const UgcReviewRoute = UgcReviewRouteImport.update({
   id: '/ugc-review',
   path: '/ugc-review',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TiktokScorerRoute = TiktokScorerRouteImport.update({
+  id: '/tiktok-scorer',
+  path: '/tiktok-scorer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -59,6 +82,11 @@ const MvpRoute = MvpRouteImport.update({
   path: '/mvp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -74,6 +102,11 @@ const CampaignsRoute = CampaignsRouteImport.update({
   path: '/campaigns',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -83,6 +116,11 @@ const UgcReviewIndexRoute = UgcReviewIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => UgcReviewRoute,
+} as any)
+const TiktokScorerIndexRoute = TiktokScorerIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TiktokScorerRoute,
 } as any)
 const PerformanceIndexRoute = PerformanceIndexRouteImport.update({
   id: '/',
@@ -103,6 +141,16 @@ const UgcReviewAssetIdRoute = UgcReviewAssetIdRouteImport.update({
   id: '/$assetId',
   path: '/$assetId',
   getParentRoute: () => UgcReviewRoute,
+} as any)
+const TiktokScorerNewRoute = TiktokScorerNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => TiktokScorerRoute,
+} as any)
+const TiktokScorerScoreIdRoute = TiktokScorerScoreIdRouteImport.update({
+  id: '/$scoreId',
+  path: '/$scoreId',
+  getParentRoute: () => TiktokScorerRoute,
 } as any)
 const PerformanceCampaignIdRoute = PerformanceCampaignIdRouteImport.update({
   id: '/$campaignId',
@@ -125,140 +173,256 @@ const CampaignsCampaignIdRoute = CampaignsCampaignIdRouteImport.update({
   path: '/$campaignId',
   getParentRoute: () => CampaignsRoute,
 } as any)
+const ApiBackendSplatRoute = ApiBackendSplatRouteImport.update({
+  id: '/api/backend/$',
+  path: '/api/backend/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthRefreshRoute = ApiAuthRefreshRouteImport.update({
+  id: '/api/auth/refresh',
+  path: '/api/auth/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
+  id: '/api/auth/logout',
+  path: '/api/auth/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
+  id: '/api/auth/callback',
+  path: '/api/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TiktokScorerScoreIdCompareComparisonIdRoute =
+  TiktokScorerScoreIdCompareComparisonIdRouteImport.update({
+    id: '/compare/$comparisonId',
+    path: '/compare/$comparisonId',
+    getParentRoute: () => TiktokScorerScoreIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/campaigns': typeof CampaignsRouteWithChildren
   '/creative-library': typeof CreativeLibraryRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
   '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
   '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
+  '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
+  '/tiktok-scorer': typeof TiktokScorerRouteWithChildren
   '/ugc-review': typeof UgcReviewRouteWithChildren
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
+  '/tiktok-scorer/$scoreId': typeof TiktokScorerScoreIdRouteWithChildren
+  '/tiktok-scorer/new': typeof TiktokScorerNewRoute
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
   '/campaigns/': typeof CampaignsIndexRoute
   '/creative-library/': typeof CreativeLibraryIndexRoute
   '/performance/': typeof PerformanceIndexRoute
+  '/tiktok-scorer/': typeof TiktokScorerIndexRoute
   '/ugc-review/': typeof UgcReviewIndexRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/refresh': typeof ApiAuthRefreshRoute
+  '/api/backend/$': typeof ApiBackendSplatRoute
+  '/tiktok-scorer/$scoreId/compare/$comparisonId': typeof TiktokScorerScoreIdCompareComparisonIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
   '/mvp': typeof MvpRoute
   '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
+  '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
+  '/tiktok-scorer/$scoreId': typeof TiktokScorerScoreIdRouteWithChildren
+  '/tiktok-scorer/new': typeof TiktokScorerNewRoute
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
   '/campaigns': typeof CampaignsIndexRoute
   '/creative-library': typeof CreativeLibraryIndexRoute
   '/performance': typeof PerformanceIndexRoute
+  '/tiktok-scorer': typeof TiktokScorerIndexRoute
   '/ugc-review': typeof UgcReviewIndexRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/refresh': typeof ApiAuthRefreshRoute
+  '/api/backend/$': typeof ApiBackendSplatRoute
+  '/tiktok-scorer/$scoreId/compare/$comparisonId': typeof TiktokScorerScoreIdCompareComparisonIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/campaigns': typeof CampaignsRouteWithChildren
   '/creative-library': typeof CreativeLibraryRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
   '/mvp': typeof MvpRoute
   '/performance': typeof PerformanceRouteWithChildren
   '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
+  '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
+  '/tiktok-scorer': typeof TiktokScorerRouteWithChildren
   '/ugc-review': typeof UgcReviewRouteWithChildren
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
+  '/tiktok-scorer/$scoreId': typeof TiktokScorerScoreIdRouteWithChildren
+  '/tiktok-scorer/new': typeof TiktokScorerNewRoute
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
   '/campaigns/': typeof CampaignsIndexRoute
   '/creative-library/': typeof CreativeLibraryIndexRoute
   '/performance/': typeof PerformanceIndexRoute
+  '/tiktok-scorer/': typeof TiktokScorerIndexRoute
   '/ugc-review/': typeof UgcReviewIndexRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/refresh': typeof ApiAuthRefreshRoute
+  '/api/backend/$': typeof ApiBackendSplatRoute
+  '/tiktok-scorer/$scoreId/compare/$comparisonId': typeof TiktokScorerScoreIdCompareComparisonIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/campaigns'
     | '/creative-library'
     | '/dashboard'
+    | '/login'
     | '/mvp'
     | '/performance'
     | '/production'
     | '/products'
+    | '/register'
     | '/settings'
+    | '/tiktok-scorer'
     | '/ugc-review'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
     | '/creative-library/$creativeId'
     | '/performance/$campaignId'
+    | '/tiktok-scorer/$scoreId'
+    | '/tiktok-scorer/new'
     | '/ugc-review/$assetId'
     | '/campaigns/'
     | '/creative-library/'
     | '/performance/'
+    | '/tiktok-scorer/'
     | '/ugc-review/'
+    | '/api/auth/callback'
+    | '/api/auth/login'
+    | '/api/auth/logout'
+    | '/api/auth/refresh'
+    | '/api/backend/$'
+    | '/tiktok-scorer/$scoreId/compare/$comparisonId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/dashboard'
+    | '/login'
     | '/mvp'
     | '/production'
     | '/products'
+    | '/register'
     | '/settings'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
     | '/creative-library/$creativeId'
     | '/performance/$campaignId'
+    | '/tiktok-scorer/$scoreId'
+    | '/tiktok-scorer/new'
     | '/ugc-review/$assetId'
     | '/campaigns'
     | '/creative-library'
     | '/performance'
+    | '/tiktok-scorer'
     | '/ugc-review'
+    | '/api/auth/callback'
+    | '/api/auth/login'
+    | '/api/auth/logout'
+    | '/api/auth/refresh'
+    | '/api/backend/$'
+    | '/tiktok-scorer/$scoreId/compare/$comparisonId'
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/campaigns'
     | '/creative-library'
     | '/dashboard'
+    | '/login'
     | '/mvp'
     | '/performance'
     | '/production'
     | '/products'
+    | '/register'
     | '/settings'
+    | '/tiktok-scorer'
     | '/ugc-review'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
     | '/creative-library/$creativeId'
     | '/performance/$campaignId'
+    | '/tiktok-scorer/$scoreId'
+    | '/tiktok-scorer/new'
     | '/ugc-review/$assetId'
     | '/campaigns/'
     | '/creative-library/'
     | '/performance/'
+    | '/tiktok-scorer/'
     | '/ugc-review/'
+    | '/api/auth/callback'
+    | '/api/auth/login'
+    | '/api/auth/logout'
+    | '/api/auth/refresh'
+    | '/api/backend/$'
+    | '/tiktok-scorer/$scoreId/compare/$comparisonId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   CampaignsRoute: typeof CampaignsRouteWithChildren
   CreativeLibraryRoute: typeof CreativeLibraryRouteWithChildren
   DashboardRoute: typeof DashboardRoute
+  LoginRoute: typeof LoginRoute
   MvpRoute: typeof MvpRoute
   PerformanceRoute: typeof PerformanceRouteWithChildren
   ProductionRoute: typeof ProductionRoute
   ProductsRoute: typeof ProductsRoute
+  RegisterRoute: typeof RegisterRoute
   SettingsRoute: typeof SettingsRoute
+  TiktokScorerRoute: typeof TiktokScorerRouteWithChildren
   UgcReviewRoute: typeof UgcReviewRouteWithChildren
+  ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
+  ApiAuthLoginRoute: typeof ApiAuthLoginRoute
+  ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
+  ApiAuthRefreshRoute: typeof ApiAuthRefreshRoute
+  ApiBackendSplatRoute: typeof ApiBackendSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -270,11 +434,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UgcReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tiktok-scorer': {
+      id: '/tiktok-scorer'
+      path: '/tiktok-scorer'
+      fullPath: '/tiktok-scorer'
+      preLoaderRoute: typeof TiktokScorerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -305,6 +483,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MvpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -326,6 +511,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampaignsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -339,6 +531,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/ugc-review/'
       preLoaderRoute: typeof UgcReviewIndexRouteImport
       parentRoute: typeof UgcReviewRoute
+    }
+    '/tiktok-scorer/': {
+      id: '/tiktok-scorer/'
+      path: '/'
+      fullPath: '/tiktok-scorer/'
+      preLoaderRoute: typeof TiktokScorerIndexRouteImport
+      parentRoute: typeof TiktokScorerRoute
     }
     '/performance/': {
       id: '/performance/'
@@ -368,6 +567,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UgcReviewAssetIdRouteImport
       parentRoute: typeof UgcReviewRoute
     }
+    '/tiktok-scorer/new': {
+      id: '/tiktok-scorer/new'
+      path: '/new'
+      fullPath: '/tiktok-scorer/new'
+      preLoaderRoute: typeof TiktokScorerNewRouteImport
+      parentRoute: typeof TiktokScorerRoute
+    }
+    '/tiktok-scorer/$scoreId': {
+      id: '/tiktok-scorer/$scoreId'
+      path: '/$scoreId'
+      fullPath: '/tiktok-scorer/$scoreId'
+      preLoaderRoute: typeof TiktokScorerScoreIdRouteImport
+      parentRoute: typeof TiktokScorerRoute
+    }
     '/performance/$campaignId': {
       id: '/performance/$campaignId'
       path: '/$campaignId'
@@ -395,6 +608,48 @@ declare module '@tanstack/react-router' {
       fullPath: '/campaigns/$campaignId'
       preLoaderRoute: typeof CampaignsCampaignIdRouteImport
       parentRoute: typeof CampaignsRoute
+    }
+    '/api/backend/$': {
+      id: '/api/backend/$'
+      path: '/api/backend/$'
+      fullPath: '/api/backend/$'
+      preLoaderRoute: typeof ApiBackendSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/refresh': {
+      id: '/api/auth/refresh'
+      path: '/api/auth/refresh'
+      fullPath: '/api/auth/refresh'
+      preLoaderRoute: typeof ApiAuthRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/logout': {
+      id: '/api/auth/logout'
+      path: '/api/auth/logout'
+      fullPath: '/api/auth/logout'
+      preLoaderRoute: typeof ApiAuthLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/callback': {
+      id: '/api/auth/callback'
+      path: '/api/auth/callback'
+      fullPath: '/api/auth/callback'
+      preLoaderRoute: typeof ApiAuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tiktok-scorer/$scoreId/compare/$comparisonId': {
+      id: '/tiktok-scorer/$scoreId/compare/$comparisonId'
+      path: '/compare/$comparisonId'
+      fullPath: '/tiktok-scorer/$scoreId/compare/$comparisonId'
+      preLoaderRoute: typeof TiktokScorerScoreIdCompareComparisonIdRouteImport
+      parentRoute: typeof TiktokScorerScoreIdRoute
     }
   }
 }
@@ -443,6 +698,34 @@ const PerformanceRouteWithChildren = PerformanceRoute._addFileChildren(
   PerformanceRouteChildren,
 )
 
+interface TiktokScorerScoreIdRouteChildren {
+  TiktokScorerScoreIdCompareComparisonIdRoute: typeof TiktokScorerScoreIdCompareComparisonIdRoute
+}
+
+const TiktokScorerScoreIdRouteChildren: TiktokScorerScoreIdRouteChildren = {
+  TiktokScorerScoreIdCompareComparisonIdRoute:
+    TiktokScorerScoreIdCompareComparisonIdRoute,
+}
+
+const TiktokScorerScoreIdRouteWithChildren =
+  TiktokScorerScoreIdRoute._addFileChildren(TiktokScorerScoreIdRouteChildren)
+
+interface TiktokScorerRouteChildren {
+  TiktokScorerScoreIdRoute: typeof TiktokScorerScoreIdRouteWithChildren
+  TiktokScorerNewRoute: typeof TiktokScorerNewRoute
+  TiktokScorerIndexRoute: typeof TiktokScorerIndexRoute
+}
+
+const TiktokScorerRouteChildren: TiktokScorerRouteChildren = {
+  TiktokScorerScoreIdRoute: TiktokScorerScoreIdRouteWithChildren,
+  TiktokScorerNewRoute: TiktokScorerNewRoute,
+  TiktokScorerIndexRoute: TiktokScorerIndexRoute,
+}
+
+const TiktokScorerRouteWithChildren = TiktokScorerRoute._addFileChildren(
+  TiktokScorerRouteChildren,
+)
+
 interface UgcReviewRouteChildren {
   UgcReviewAssetIdRoute: typeof UgcReviewAssetIdRoute
   UgcReviewIndexRoute: typeof UgcReviewIndexRoute
@@ -459,15 +742,24 @@ const UgcReviewRouteWithChildren = UgcReviewRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   CampaignsRoute: CampaignsRouteWithChildren,
   CreativeLibraryRoute: CreativeLibraryRouteWithChildren,
   DashboardRoute: DashboardRoute,
+  LoginRoute: LoginRoute,
   MvpRoute: MvpRoute,
   PerformanceRoute: PerformanceRouteWithChildren,
   ProductionRoute: ProductionRoute,
   ProductsRoute: ProductsRoute,
+  RegisterRoute: RegisterRoute,
   SettingsRoute: SettingsRoute,
+  TiktokScorerRoute: TiktokScorerRouteWithChildren,
   UgcReviewRoute: UgcReviewRouteWithChildren,
+  ApiAuthCallbackRoute: ApiAuthCallbackRoute,
+  ApiAuthLoginRoute: ApiAuthLoginRoute,
+  ApiAuthLogoutRoute: ApiAuthLogoutRoute,
+  ApiAuthRefreshRoute: ApiAuthRefreshRoute,
+  ApiBackendSplatRoute: ApiBackendSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

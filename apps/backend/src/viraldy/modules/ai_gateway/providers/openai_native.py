@@ -562,6 +562,9 @@ def _model_setting_hint(operation: str) -> str:
         "campaign_pack_generate": "OPENAI_MODEL_CAMPAIGN_PACK or OPENAI_TEXT_MODEL",
         "seller_decision_summary": "OPENAI_MODEL_DECISION_SUMMARY or OPENAI_TEXT_MODEL",
         "revision_message_generate": "OPENAI_MODEL_REVISION_MESSAGE or OPENAI_TEXT_MODEL",
+        "ugc_execution_brief_synthesis": (
+            "OPENAI_MODEL_UGC_EXECUTION_BRIEF or OPENAI_TEXT_MODEL"
+        ),
     }
     return operation_settings.get(operation, "OPENAI_TEXT_MODEL")
 
