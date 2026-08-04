@@ -94,7 +94,7 @@ export function ReviewBeforeYouSpend() {
             </div>
 
             {/* Tab Panels */}
-            <div className="mt-8 mx-auto max-w-4xl">
+            <div key={activeFeature} className="mt-8 mx-auto max-w-4xl analysis-state-enter">
                 {activeFeature === "score-fix" && (
                     <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
                         {/* Explanation */}

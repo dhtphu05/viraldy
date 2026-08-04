@@ -96,7 +96,7 @@ export function UseCases() {
             </div>
 
             {/* Tab Panels */}
-            <div className="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+            <div key={activeTab} className="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start analysis-state-enter">
                 {/* Details Column */}
                 <div className="lg:col-span-7 space-y-6">
                     <div className="surface-card p-6 border border-hairline shadow-soft-card">
