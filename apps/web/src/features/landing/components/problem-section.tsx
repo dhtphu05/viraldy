@@ -1,45 +1,48 @@
 import { SectionWrapper } from "./section-wrapper";
 
-const decisions = [
-    "Which creative should I learn from?",
-    "What part of it actually matters?",
-    "How do I adapt it to my product without making a copy?",
-    "What should I send to the creator?",
-    "Did the creator actually follow the plan?",
-    "Can I fix this draft with an edit, or do I need a reshoot?",
-    "What should I test next?",
-];
-
 export function ProblemSection() {
+    const decisions = [
+        { q: "What should we make?", desc: "Which reference angle actually matches our product margin, claims, and buyer persona?" },
+        { q: "How should the creator film it?", desc: "How do we write a brief that specifies required scenes, variants, and hook timings without crushing creator freedom?" },
+        { q: "Is this draft actually good enough?", desc: "Is the video ready to put money behind, or is it missing structural hooks and product proofs?" },
+        { q: "What exactly should we fix?", desc: "Can the editor salvage it by re-sequencing the timeline, or must the creator reshoot a demo scene?" },
+        { q: "What did we learn from the test?", desc: "Did version 2 perform better? Which creative hook actually drove the ROAS lift?" },
+    ];
+
     return (
-        <SectionWrapper id="problem">
+        <SectionWrapper id="problem" background="surface" className="py-20 border-b border-hairline">
             <div className="mx-auto max-w-3xl">
-                <h2 className="text-2xl font-bold text-text-primary sm:text-3xl">
+                <span className="rounded-full bg-destructive-soft px-3 py-1.5 text-xs font-semibold text-destructive">
+                    The Pain
+                </span>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
                     Making more content is easy.
+                    <br />
+                    <span className="text-text-secondary">Knowing what is worth making is harder.</span>
                 </h2>
-                <h3 className="mt-2 text-xl font-semibold text-text-secondary sm:text-2xl">
-                    Knowing what content is worth making is harder.
-                </h3>
 
-                <p className="mt-6 text-sm leading-relaxed text-text-secondary">
-                    You can already ask ChatGPT for 20 hooks. You can already generate videos with
-                    AI. You can already save competitor ads.
+                <p className="mt-6 text-base leading-relaxed text-text-secondary">
+                    You can already ask ChatGPT to generate 20 scripts. You can already save hundreds of winning ad references. You can already send sample products to creators. But teams still struggle to answer the critical questions:
                 </p>
 
-                <p className="mt-2 text-sm font-medium text-text-primary">But sellers still have to decide:</p>
-
-                <ul className="mt-4 space-y-2">
-                    {decisions.map((item) => (
-                        <li key={item} className="flex items-start gap-2 text-sm text-text-secondary">
-                            <span className="mt-0.5 shrink-0 text-primary">&mdash;</span>
-                            {item}
-                        </li>
+                {/* List of Seller Decisions */}
+                <div className="mt-8 space-y-4">
+                    {decisions.map((item, idx) => (
+                        <div key={idx} className="flex gap-4 p-4 rounded-xl border border-hairline bg-background/50">
+                            <span className="text-sm font-bold text-primary shrink-0 tabular">0{idx + 1}</span>
+                            <div>
+                                <h4 className="text-sm font-bold text-text-primary">&ldquo;{item.q}&rdquo;</h4>
+                                <p className="mt-1 text-xs text-text-secondary leading-relaxed">{item.desc}</p>
+                            </div>
+                        </div>
                     ))}
-                </ul>
+                </div>
 
-                <p className="mt-6 text-sm font-medium text-text-primary">
-                    Viraldy connects those decisions into one creative workflow.
-                </p>
+                <div className="mt-8 p-5 rounded-2xl bg-primary-softer border border-primary/20 text-center">
+                    <p className="text-sm font-medium text-text-primary leading-relaxed">
+                        Viraldy is the <strong>decision layer</strong> between creative research, production, review, and learning. We eliminate the messy spreadsheets and guess-work.
+                    </p>
+                </div>
             </div>
         </SectionWrapper>
     );

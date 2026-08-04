@@ -25,8 +25,8 @@ export function LandingFooter() {
                                 <a href="#how-it-works" className="text-sm text-text-secondary hover:text-text-primary">
                                     How it works
                                 </a>
-                                <a href="#pricing" className="text-sm text-text-secondary hover:text-text-primary">
-                                    Pricing
+                                <a href="#use-cases" className="text-sm text-text-secondary hover:text-text-primary">
+                                    Use Cases
                                 </a>
                             </div>
                         </div>
