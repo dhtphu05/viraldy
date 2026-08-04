@@ -1,48 +1,123 @@
 import { SectionWrapper } from "./section-wrapper";
+import { ArrowRightCircle, Sparkles } from "lucide-react";
 
 export function ProblemSection() {
-    const decisions = [
-        { q: "What should we make?", desc: "Which reference angle actually matches our product margin, claims, and buyer persona?" },
-        { q: "How should the creator film it?", desc: "How do we write a brief that specifies required scenes, variants, and hook timings without crushing creator freedom?" },
-        { q: "Is this draft actually good enough?", desc: "Is the video ready to put money behind, or is it missing structural hooks and product proofs?" },
-        { q: "What exactly should we fix?", desc: "Can the editor salvage it by re-sequencing the timeline, or must the creator reshoot a demo scene?" },
-        { q: "What did we learn from the test?", desc: "Did version 2 perform better? Which creative hook actually drove the ROAS lift?" },
-    ];
-
     return (
         <SectionWrapper id="problem" background="surface" className="py-20 border-b border-hairline">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-4xl text-center mb-12">
                 <span className="rounded-full bg-destructive-soft px-3 py-1.5 text-xs font-semibold text-destructive">
                     The Pain
                 </span>
                 <h2 className="mt-4 text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-                    Making more content is easy.
+                    Making more content isn't the hard part.
                     <br />
-                    <span className="text-text-secondary">Knowing what is worth making is harder.</span>
+                    <span className="text-text-secondary">Knowing what's worth making is.</span>
                 </h2>
-
-                <p className="mt-6 text-base leading-relaxed text-text-secondary">
-                    You can already ask ChatGPT to generate 20 scripts. You can already save hundreds of winning ad references. You can already send sample products to creators. But teams still struggle to answer the critical questions:
+                <p className="mt-6 mx-auto max-w-2xl text-base leading-relaxed text-text-secondary">
+                    You can save competitor TikToks. You can ask AI for hooks. You can hire more creators. But somebody still has to decide what is worth making, what the creator should actually film, and whether the video that comes back is good enough to use.
                 </p>
+            </div>
 
-                {/* List of Seller Decisions */}
-                <div className="mt-8 space-y-4">
-                    {decisions.map((item, idx) => (
-                        <div key={idx} className="flex gap-4 p-4 rounded-xl border border-hairline bg-background/50">
-                            <span className="text-sm font-bold text-primary shrink-0 tabular">0{idx + 1}</span>
-                            <div>
-                                <h4 className="text-sm font-bold text-text-primary">&ldquo;{item.q}&rdquo;</h4>
-                                <p className="mt-1 text-xs text-text-secondary leading-relaxed">{item.desc}</p>
+            {/* Before vs With comparison panel */}
+            <div className="mx-auto max-w-4xl grid gap-8 md:grid-cols-2">
+                {/* Visual Left: Before Viraldy */}
+                <div className="p-6 rounded-3xl border border-divider bg-surface-soft flex flex-col justify-between shadow-sm">
+                    <div>
+                        <span className="text-[10px] font-bold text-destructive uppercase tracking-wider block mb-4">
+                            Before Viraldy
+                        </span>
+                        <div className="flex flex-col gap-2.5 text-xs text-text-secondary font-medium">
+                            <div className="p-2.5 rounded-lg bg-surface border border-hairline">
+                                TikTok Saves
+                            </div>
+                            <div className="flex justify-center text-text-tertiary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-hairline">
+                                ChatGPT prompts
+                            </div>
+                            <div className="flex justify-center text-text-tertiary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-hairline">
+                                Google Drive
+                            </div>
+                            <div className="flex justify-center text-text-tertiary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-hairline">
+                                Creator chats
+                            </div>
+                            <div className="flex justify-center text-text-tertiary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-hairline">
+                                Spreadsheets
+                            </div>
+                            <div className="flex justify-center text-text-tertiary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-hairline">
+                                Manual feedback
                             </div>
                         </div>
-                    ))}
+                    </div>
+                    <div className="mt-6 pt-3 border-t border-divider text-center text-[11px] text-destructive font-semibold">
+                        Context gets lost between every step.
+                    </div>
                 </div>
 
-                <div className="mt-8 p-5 rounded-2xl bg-primary-softer border border-primary/20 text-center">
-                    <p className="text-sm font-medium text-text-primary leading-relaxed">
-                        Viraldy is the <strong>decision layer</strong> between creative research, production, review, and learning. We eliminate the messy spreadsheets and guess-work.
-                    </p>
+                {/* Visual Right: With Viraldy */}
+                <div className="p-6 rounded-3xl border border-primary/20 bg-primary-softer/20 flex flex-col justify-between shadow-md">
+                    <div>
+                        <span className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-4 flex items-center gap-1">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            With Viraldy
+                        </span>
+                        <div className="flex flex-col gap-2.5 text-xs text-text-primary font-semibold">
+                            <div className="p-2.5 rounded-lg bg-surface border border-primary/20 shadow-sm">
+                                Product
+                            </div>
+                            <div className="flex justify-center text-primary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-primary/20 shadow-sm">
+                                Creative Pattern
+                            </div>
+                            <div className="flex justify-center text-primary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-primary/20 shadow-sm">
+                                Creative Direction
+                            </div>
+                            <div className="flex justify-center text-primary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-primary/20 shadow-sm">
+                                Creator Plan
+                            </div>
+                            <div className="flex justify-center text-primary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-primary/20 shadow-sm">
+                                Draft Review &amp; Exact Fix
+                            </div>
+                            <div className="flex justify-center text-primary">
+                                <ArrowRightCircle className="h-4 w-4 rotate-90" />
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-surface border border-primary/20 shadow-sm">
+                                Revision &amp; Next Test
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-6 pt-3 border-t border-primary/10 text-center text-[11px] text-primary font-bold">
+                        The product context stays connected.
+                    </div>
                 </div>
+            </div>
+
+            <div className="mt-12 text-center text-base font-bold text-text-primary">
+                Viraldy turns disconnected creative work into one decision workflow.
             </div>
         </SectionWrapper>
     );

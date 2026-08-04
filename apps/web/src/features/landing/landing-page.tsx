@@ -1,14 +1,21 @@
 import { LandingNav } from "./components/landing-nav";
 import { LandingFooter } from "./components/landing-footer";
 import { HeroSection } from "./components/hero-section";
+import { ScaleProofBand } from "./components/scale-proof-band";
 import { CoreWorkflow } from "./components/core-workflow";
 import { ProblemSection } from "./components/problem-section";
-import { FeaturePatternBreakdown } from "./components/feature-pattern-breakdown";
-import { FeatureCreativeDirections } from "./components/feature-creative-directions";
-import { FeatureCreatorPack } from "./components/feature-creator-pack";
+import { StoryIntro } from "./components/story-intro";
+import { ReferenceInput } from "./components/reference-input";
+import { PatternBreakdown } from "./components/pattern-breakdown";
+import { ReusableStructure } from "./components/reusable-structure";
+import { KeepChangeAvoid } from "./components/keep-change-avoid";
+import { PatternApplicability } from "./components/pattern-applicability";
+import { CreativeDirections } from "./components/creative-directions";
+import { CreatorPlan } from "./components/creator-plan";
 import { ReviewBeforeYouSpend } from "./components/review-before-you-spend";
+import { RevisionCompare } from "./components/revision-compare";
 import { SellerDecisions } from "./components/seller-decisions";
-import { LearningLoop } from "./components/learning-loop";
+import { PerformanceLearning } from "./components/performance-learning";
 import { UseCases } from "./components/use-cases";
 import { WhyViraldy } from "./components/why-viraldy";
 import { TrustSection } from "./components/trust-section";
@@ -23,41 +30,64 @@ export function LandingPage() {
                 {/* 01 Hero Section */}
                 <HeroSection />
 
-                {/* 02 Workflow (Viraldy in 30 Seconds) */}
+                {/* 02 Data Proof / Scale Band */}
+                <ScaleProofBand />
+
+                {/* 03 Core Workflow (Viraldy in 30 Seconds) */}
                 <CoreWorkflow />
 
-                {/* 03 The Problem */}
+                {/* 04 The Problem (Before vs With Viraldy) */}
                 <ProblemSection />
 
-                {/* 04 Find What to Make (Breakdowns + Creative Directions) */}
-                <FeaturePatternBreakdown />
-                <FeatureCreativeDirections />
+                {/* 05 Story Intro & Product Context Card */}
+                <StoryIntro />
 
-                {/* 05 Make it Filmable (Creator Plans) */}
-                <FeatureCreatorPack />
+                {/* 06 Reference Input */}
+                <ReferenceInput />
 
-                {/* 06 Review Before You Spend (Scores & Fixes + Draft Reviews + Revision compares) */}
+                {/* 07 Winning Pattern Breakdown */}
+                <PatternBreakdown />
+
+                {/* 08 Reusable Pattern Beats Sequence */}
+                <ReusableStructure />
+
+                {/* 09 Keep, Change, Avoid */}
+                <KeepChangeAvoid />
+
+                {/* 10 Suitability / Applicability */}
+                <PatternApplicability />
+
+                {/* 11 3 Creative Directions & Concept Matrix */}
+                <CreativeDirections />
+
+                {/* 12 Creator Plan & Storyboard */}
+                <CreatorPlan />
+
+                {/* 13 Quality Control: Draft 1 Score & Fix */}
                 <ReviewBeforeYouSpend />
 
-                {/* 07 Commerce Decisions beyond the core loop */}
+                {/* 14 Quality Control: V2 Revision Compare */}
+                <RevisionCompare />
+
+                {/* 15 Commerce Decisions beyond the core loop */}
                 <SellerDecisions />
 
-                {/* 08 Learn What to Test Next (Roadmap/Beta Performance loops) */}
-                <LearningLoop />
+                {/* 16 Performance Learning & Next Test Recommender */}
+                <PerformanceLearning />
 
-                {/* 09 Use Cases (Tabbed display) */}
+                {/* 17 Interactive Use Case Tabs */}
                 <UseCases />
 
-                {/* 10 Why Viraldy (Comparison matrix) */}
+                {/* 18 Nuanced Why Viraldy Matrix */}
                 <WhyViraldy />
 
-                {/* 11 Trust Section (Product Proof / Golden Cases explanation) */}
+                {/* 19 Trust & Grounding Methodology */}
                 <TrustSection />
 
-                {/* 12 FAQ Section */}
+                {/* 20 FAQ */}
                 <FaqSection />
 
-                {/* 13 Final High-Converting CTA */}
+                {/* 21 Final CTA */}
                 <EarlyAccessCta />
             </main>
             <LandingFooter />

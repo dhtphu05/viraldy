@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Sparkles, Package, Play, Sparkle, RefreshCw, CheckCircle, AlertTriangle, Cpu, ClipboardList } from "lucide-react";
+import { ArrowRight, Sparkles, Package, Play, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { SectionWrapper } from "./section-wrapper";
@@ -49,31 +49,44 @@ export function HeroSection() {
                 {/* Eyebrow */}
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary-softer px-4 py-1.5 shadow-sm transition-transform duration-300 hover:scale-105">
                     <Sparkles className="h-3.5 w-3.5 text-primary animate-spin" style={{ animationDuration: "3s" }} />
-                    <span className="text-xs font-semibold text-primary">
-                        Creative Intelligence for TikTok Shop &amp; Ecommerce
+                    <span className="text-xs font-semibold text-primary uppercase tracking-wider">
+                        Creative Intelligence for TikTok Shop · POD · Dropshipping
                     </span>
                 </div>
 
                 {/* H1 Headline */}
                 <h1 className="text-4xl font-bold leading-tight tracking-tight text-text-primary sm:text-5xl lg:text-6xl">
-                    Know what TikTok
+                    Turn your product into
                     <br />
                     <span className="bg-gradient-to-r from-primary via-warn to-primary bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
-                        to make next.
+                        creatives worth testing.
                     </span>
                 </h1>
 
                 {/* Subheadline */}
                 <p className="mt-6 mx-auto max-w-2xl text-base leading-relaxed text-text-secondary sm:text-lg">
-                    Viraldy helps TikTok Shop and ecommerce teams turn products and winning creatives into better creative directions, creator-ready plans, and exact video fixes &mdash; before wasting time, samples, or ad spend.
+                    Viraldy helps sellers find stronger creative angles, turn them into creator-ready plans, and catch exactly what to edit or reshoot before spending more on content.
                 </p>
+
+                {/* Breadcrumb Flow Support Line */}
+                <div className="mt-8 mx-auto max-w-xl flex flex-wrap items-center justify-center gap-2 text-xs font-bold text-text-tertiary">
+                    <span>Product or reference</span>
+                    <span>&rarr;</span>
+                    <span className="text-primary font-bold">Creative direction</span>
+                    <span>&rarr;</span>
+                    <span>Creator plan</span>
+                    <span>&rarr;</span>
+                    <span className="text-info font-bold">Video review</span>
+                    <span>&rarr;</span>
+                    <span className="text-ok font-bold">Exact fix</span>
+                </div>
 
                 {/* CTA Buttons with Microcopy */}
                 <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
                     <div className="flex flex-col items-center">
                         <Button asChild size="lg" className="w-full sm:w-auto shadow-lg shadow-primary/20 bg-primary hover:bg-primary-hover font-semibold transition-all duration-300 hover:-translate-y-0.5">
                             <Link to="/login">
-                                Get Creative Directions
+                                Plan My Next Creative
                                 <ArrowRight className="ml-2 h-4.5 w-4.5" />
                             </Link>
                         </Button>
@@ -83,7 +96,7 @@ export function HeroSection() {
                     <div className="flex flex-col items-center">
                         <Button asChild variant="outline" size="lg" className="w-full sm:w-auto font-semibold transition-all duration-300 hover:-translate-y-0.5">
                             <Link to="/login">
-                                Review a Video
+                                Review My Video
                                 <ArrowRight className="ml-2 h-4.5 w-4.5" />
                             </Link>
                         </Button>
@@ -91,9 +104,11 @@ export function HeroSection() {
                     </div>
                 </div>
 
-                {/* Micro-tagline */}
-                <div className="mt-8 text-xs font-medium tracking-wide text-text-tertiary uppercase">
-                    Product in. Creative direction out. Video checked before you spend.
+                {/* Bottom Microcopy */}
+                <div className="mt-8 max-w-md mx-auto grid grid-cols-3 gap-2 text-[10px] font-semibold text-text-tertiary tracking-wide uppercase">
+                    <div>No generic scripts.</div>
+                    <div>No vague &ldquo;make hook stronger.&rdquo;</div>
+                    <div>No guessing creator briefings.</div>
                 </div>
             </div>
 
@@ -125,7 +140,7 @@ export function HeroSection() {
                 })}
             </div>
 
-            {/* HERO MONEY SHOT: Real Product UI Visual composition using Garment Steamer */}
+            {/* HERO MONEY SHOT: Composition of 3 Connected Panels */}
             <div className="mx-auto max-w-[1100px] rounded-3xl border border-hairline bg-surface/50 p-6 sm:p-8 backdrop-blur-sm shadow-floating-card transition-all duration-500">
                 <div className="flex flex-wrap items-center justify-between border-b border-divider pb-4 mb-8">
                     <div className="flex items-center gap-2">
@@ -141,131 +156,149 @@ export function HeroSection() {
                                 Resume Autoplay
                             </button>
                         )}
-                        <StatusChip tone="info" dot>Primary Golden Case Demo</StatusChip>
+                        <StatusChip tone="info" dot>Product Theatre</StatusChip>
                     </div>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-12 items-stretch">
-                    {/* Left: Product Context Card */}
+                    {/* PANEL A: Product Input Context Card */}
                     <div
-                        className={`md:col-span-3 surface-card p-5 border flex flex-col justify-between shadow-sm transition-all duration-500 ${
+                        className={`md:col-span-3 p-5 rounded-2xl border flex flex-col justify-between shadow-sm bg-surface transition-all duration-500 ${
                             activeStep === "product"
-                                ? "border-primary bg-surface scale-[1.02] ring-4 ring-primary/10 shadow-lg"
-                                : "border-divider bg-surface/60 opacity-60"
+                                ? "border-primary scale-[1.02] ring-4 ring-primary/10 shadow-lg"
+                                : "border-divider opacity-60"
                         }`}
                     >
                         <div>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">01. Context</span>
-                            <h4 className="mt-2 text-sm font-bold text-text-primary">Garment Steamer</h4>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">Panel A · Input Context</span>
+                            <h4 className="mt-2 text-sm font-bold text-text-primary">SWIFTPRESS</h4>
+                            <p className="text-xs text-text-secondary font-medium">Mini Garment Steamer</p>
                             <ul className="mt-4 space-y-2 text-xs text-text-secondary">
-                                <li><strong>Market</strong>: US</li>
-                                <li><strong>Price</strong>: $29.99</li>
-                                <li><strong>Buyer</strong>: College student in a dorm</li>
-                                <li><strong>Allowed</strong>: Wrinkle removal</li>
-                                <li><strong>Prohibited</strong>: 'safe on every fabric'</li>
+                                <li><strong>Price:</strong> $29.99</li>
+                                <li><strong>Market:</strong> US Market</li>
+                                <li><strong>Channel:</strong> TikTok Shop</li>
+                                <li><strong>Buyer:</strong> College student</li>
+                                <li><strong>Goal:</strong> Affiliate creative test</li>
                             </ul>
                         </div>
-                        <div className="mt-4 pt-3 border-t border-divider text-[10px] text-text-tertiary italic">
-                            Source: home_travel_steamer
+                        <div className="mt-4 pt-3 border-t border-divider text-[10px] text-text-tertiary font-medium">
+                            Product Specs Grounded
                         </div>
                     </div>
 
-                    {/* Center: 3 Creative Directions Card */}
+                    {/* PANEL B: 3 Creative Directions Card */}
                     <div
-                        className={`md:col-span-5 surface-card p-5 border flex flex-col justify-between shadow-sm transition-all duration-500 ${
+                        className={`md:col-span-5 p-5 rounded-2xl border flex flex-col justify-between shadow-sm bg-surface transition-all duration-500 ${
                             activeStep === "directions"
-                                ? "border-primary bg-primary-softer scale-[1.02] ring-4 ring-primary/10 shadow-lg"
-                                : "border-divider bg-surface/60 opacity-60"
+                                ? "border-primary bg-primary-softer/20 scale-[1.02] ring-4 ring-primary/10 shadow-lg"
+                                : "border-divider opacity-60"
                         }`}
                     >
                         <div>
                             <div className="flex justify-between items-center">
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">02. Directions</span>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">Panel B · Creative Output</span>
                                 <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[9px] font-bold text-primary">Late-for-Class Rescue</span>
                             </div>
-                            <h4 className="mt-2 text-sm font-bold text-text-primary">3 Creative Directions</h4>
+                            <h4 className="mt-2 text-sm font-bold text-text-primary">3 CREATIVE DIRECTIONS</h4>
                             
-                            <div className="mt-3 space-y-2">
-                                <div className="p-2.5 rounded-lg bg-surface border border-primary/20 text-xs shadow-sm transition-transform duration-300 hover:scale-[1.01]">
+                            <div className="mt-3 space-y-2 text-xs leading-normal">
+                                <div className="p-2.5 rounded-xl bg-surface border border-primary/20 shadow-sm">
                                     <div className="flex justify-between font-semibold text-text-primary">
                                         <span>Late-for-Class Rescue</span>
-                                        <span className="text-primary font-bold">BEST FIT</span>
+                                        <span className="text-primary font-bold uppercase text-[9px] tracking-wider">BEST FIT</span>
                                     </div>
-                                    <p className="mt-1 text-[11px] text-text-secondary leading-snug">Spoken Hook: 'I had ten minutes before class and this shirt looked like it came straight out of my backpack.'</p>
-                                </div>
-
-                                <div className="p-2.5 rounded-lg bg-surface/50 border border-divider text-xs opacity-75">
-                                    <span className="font-semibold text-text-primary">Carry-On Clothing Rescue</span>
-                                </div>
-
-                                <div className="p-2.5 rounded-lg bg-surface/50 border border-divider text-xs opacity-75">
-                                    <span className="font-semibold text-text-primary">Small-Space Alternative</span>
+                                    <dl className="mt-2 space-y-1.5 text-[11px] text-text-secondary">
+                                        <div>
+                                            <dt className="font-bold text-text-tertiary">Buyer:</dt>
+                                            <dd>College student in a dorm</dd>
+                                        </div>
+                                        <div>
+                                            <dt className="font-bold text-text-tertiary">Opening:</dt>
+                                            <dd>Wrinkled shirt before class</dd>
+                                        </div>
+                                        <div>
+                                            <dt className="font-bold text-text-tertiary">Product:</dt>
+                                            <dd>Visible before 1.8s</dd>
+                                        </div>
+                                        <div>
+                                            <dt className="font-bold text-text-tertiary">Demo:</dt>
+                                            <dd>Steam the same shirt section</dd>
+                                        </div>
+                                        <div>
+                                            <dt className="font-bold text-text-tertiary">Proof:</dt>
+                                            <dd>Return to the same area</dd>
+                                        </div>
+                                    </dl>
                                 </div>
                             </div>
                         </div>
                         <div className="mt-4 pt-3 border-t border-divider text-[10px] text-text-tertiary">
-                            Testing: Time pressure vs generic convenience
+                            Isolating testing angles
                         </div>
                     </div>
 
-                    {/* Right: Creator Draft Score & Fix Card */}
+                    {/* PANEL C: Creator Draft Review Output */}
                     <div
-                        className={`md:col-span-4 surface-card p-5 border flex flex-col justify-between shadow-sm transition-all duration-500 ${
+                        className={`md:col-span-4 p-5 rounded-2xl border flex flex-col justify-between shadow-sm bg-surface transition-all duration-500 ${
                             activeStep === "qa" || activeStep === "revision"
-                                ? "border-primary bg-surface scale-[1.02] ring-4 ring-primary/10 shadow-lg"
-                                : "border-divider bg-surface/60 opacity-60"
+                                ? "border-primary scale-[1.02] ring-4 ring-primary/10 shadow-lg"
+                                : "border-divider opacity-60"
                         }`}
                     >
-                        {activeStep === "qa" ? (
+                        {activeStep !== "revision" ? (
                             <div className="h-full flex flex-col justify-between">
                                 <div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">03. Video QA</span>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">Panel C · Review Output</span>
                                         <span className="text-base font-bold text-text-primary">71<span className="text-xs text-text-tertiary">/100</span></span>
                                     </div>
-                                    <h4 className="mt-2 text-sm font-bold text-text-primary">Draft 1 Verification</h4>
-
-                                    <div className="mt-3 space-y-2">
-                                        <div className="p-2.5 rounded-lg bg-destructive-soft border border-destructive/20 text-[11px] leading-snug">
-                                            <div className="flex items-center gap-1 font-semibold text-destructive">
-                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                                <span>REVISION REQUIRED</span>
-                                            </div>
-                                            <p className="mt-1 text-text-secondary">
-                                                <strong>Quick Edit:</strong> Product reveal is late (4.2s vs expected &lt; 2.0s).
-                                            </p>
-                                            <p className="mt-1 text-text-secondary">
-                                                <strong>Reshoot:</strong> Missing same-shirt before/after proof.
-                                            </p>
+                                    <h4 className="mt-2 text-sm font-bold text-text-primary">CREATOR DRAFT</h4>
+                                    
+                                    <div className="mt-3 p-2.5 rounded-xl bg-destructive-soft border border-destructive/20 text-[10px] leading-snug space-y-2">
+                                        <div className="flex items-center gap-1.5 font-bold text-destructive">
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                            <span>REVISE BEFORE PAID USE</span>
+                                        </div>
+                                        <div>
+                                            <strong className="text-text-primary uppercase text-[8px] tracking-wide block">Quick Edit</strong>
+                                            <p className="text-text-secondary">Product reveal is late (observed 4.2s vs expected &le; 2.0s).</p>
+                                        </div>
+                                        <div>
+                                            <strong className="text-text-primary uppercase text-[8px] tracking-wide block">Reshoot</strong>
+                                            <p className="text-text-secondary">Same-item result comparison missing.</p>
+                                        </div>
+                                        <div>
+                                            <strong className="text-ok uppercase text-[8px] tracking-wide block">Keep</strong>
+                                            <p className="text-text-secondary">Natural creator delivery preserved.</p>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="mt-4 pt-3 border-t border-divider flex items-center justify-between text-[10px] text-text-tertiary">
                                     <span>Status: Fix Pending</span>
-                                    <span className="text-primary font-semibold">Verify Draft 2 next</span>
+                                    <span className="text-primary font-semibold">Verification Draft 1</span>
                                 </div>
                             </div>
                         ) : (
                             <div className="h-full flex flex-col justify-between">
                                 <div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">04. Verification</span>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">Panel C · Review Output</span>
                                         <span className="text-base font-bold text-ok">92<span className="text-xs text-text-tertiary">/100</span></span>
                                     </div>
-                                    <h4 className="mt-2 text-sm font-bold text-text-primary">Draft 2 (Revision)</h4>
+                                    <h4 className="mt-2 text-sm font-bold text-text-primary">CREATOR DRAFT</h4>
 
-                                    <div className="mt-3 space-y-2">
-                                        <div className="p-2.5 rounded-lg bg-ok-soft border border-ok/25 text-[11px] leading-snug">
-                                            <div className="flex items-center gap-1 font-semibold text-ok">
-                                                <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                                                <span>ALL BLOCKERS RESOLVED</span>
-                                            </div>
-                                            <p className="mt-1 text-text-secondary">
-                                                ✓ Product reveal shifted to 1.4 seconds.
-                                            </p>
-                                            <p className="mt-1 text-text-secondary">
-                                                ✓ Same-shirt proof added.
-                                            </p>
+                                    <div className="mt-3 p-2.5 rounded-xl bg-ok-soft border border-ok/25 text-[10px] leading-snug space-y-2">
+                                        <div className="flex items-center gap-1.5 font-bold text-ok">
+                                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                            <span>ALL BLOCKERS RESOLVED</span>
+                                        </div>
+                                        <div>
+                                            <strong className="text-ok uppercase text-[8px] tracking-wide block">Product Reveal</strong>
+                                            <p className="text-text-secondary">✓ Shifted to 1.4s (within 2s bound).</p>
+                                        </div>
+                                        <div>
+                                            <strong className="text-ok uppercase text-[8px] tracking-wide block">Proof</strong>
+                                            <p className="text-text-secondary">✓ Same-shirt before/after comparison added.</p>
                                         </div>
                                     </div>
                                 </div>
