@@ -2,13 +2,12 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/shared/ui/button";
 
 const navLinks = [
-    { label: "Product", href: "#product" },
     { label: "How it works", href: "#how-it-works" },
-    { label: "TikTok Score & Fix", href: "#tiktok-score" },
-    { label: "For Sellers", href: "#sellers" },
-    { label: "For Agencies", href: "#agencies" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "Resources", href: "#faq" },
+    { label: "Quality QA", href: "#tiktok-score" },
+    { label: "Use Cases", href: "#use-cases" },
+    { label: "Why Viraldy", href: "#why-viraldy" },
+    { label: "Trust Proof", href: "#trust" },
+    { label: "FAQ", href: "#faq" },
 ];
 
 export function LandingNav() {
@@ -32,7 +31,7 @@ export function LandingNav() {
                 </div>
 
                 <Button asChild size="sm">
-                    <Link to="/login">Try Viraldy</Link>
+                    <Link to="/login">Get Creative Directions</Link>
                 </Button>
             </nav>
         </header>

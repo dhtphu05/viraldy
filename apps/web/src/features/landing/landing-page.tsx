@@ -1,27 +1,16 @@
 import { LandingNav } from "./components/landing-nav";
 import { LandingFooter } from "./components/landing-footer";
 import { HeroSection } from "./components/hero-section";
-import { ValueStrip } from "./components/value-strip";
-import { BuiltFor } from "./components/built-for";
+import { CoreWorkflow } from "./components/core-workflow";
 import { ProblemSection } from "./components/problem-section";
 import { FeaturePatternBreakdown } from "./components/feature-pattern-breakdown";
 import { FeatureCreativeDirections } from "./components/feature-creative-directions";
 import { FeatureCreatorPack } from "./components/feature-creator-pack";
-import { FeatureTikTokScore } from "./components/feature-tiktok-score";
-import { FeatureCreatorDraftReview } from "./components/feature-creator-draft-review";
-import { FeatureRevisionCompare } from "./components/feature-revision-compare";
-import { CoreWorkflow } from "./components/core-workflow";
-import { WhyViraldy } from "./components/why-viraldy";
-import { UseCaseTikTokShop } from "./components/use-case-tiktok-shop";
-import { UseCasePod } from "./components/use-case-pod";
-import { UseCaseDropshipping } from "./components/use-case-dropshipping";
-import { AgencySection } from "./components/agency-section";
-import { DifferenceSection } from "./components/difference-section";
-import { OutputSection } from "./components/output-section";
-import { PhilosophySection } from "./components/philosophy-section";
-import { AiCreatorRoadmap } from "./components/ai-creator-roadmap";
+import { ReviewBeforeYouSpend } from "./components/review-before-you-spend";
+import { SellerDecisions } from "./components/seller-decisions";
 import { LearningLoop } from "./components/learning-loop";
-import { ComparisonTable } from "./components/comparison-table";
+import { UseCases } from "./components/use-cases";
+import { WhyViraldy } from "./components/why-viraldy";
 import { TrustSection } from "./components/trust-section";
 import { EarlyAccessCta } from "./components/early-access-cta";
 import { FaqSection } from "./components/faq-section";
@@ -30,32 +19,46 @@ export function LandingPage() {
     return (
         <div className="flex h-dvh flex-col overflow-y-auto bg-background">
             <LandingNav />
-            <main>
+            <main className="flex-1">
+                {/* 01 Hero Section */}
                 <HeroSection />
-                <ValueStrip />
-                <BuiltFor />
+
+                {/* 02 Workflow (Viraldy in 30 Seconds) */}
+                <CoreWorkflow />
+
+                {/* 03 The Problem */}
                 <ProblemSection />
+
+                {/* 04 Find What to Make (Breakdowns + Creative Directions) */}
                 <FeaturePatternBreakdown />
                 <FeatureCreativeDirections />
+
+                {/* 05 Make it Filmable (Creator Plans) */}
                 <FeatureCreatorPack />
-                <FeatureTikTokScore />
-                <FeatureCreatorDraftReview />
-                <FeatureRevisionCompare />
-                <CoreWorkflow />
-                <WhyViraldy />
-                <UseCaseTikTokShop />
-                <UseCasePod />
-                <UseCaseDropshipping />
-                <AgencySection />
-                <DifferenceSection />
-                <OutputSection />
-                <PhilosophySection />
-                <AiCreatorRoadmap />
+
+                {/* 06 Review Before You Spend (Scores & Fixes + Draft Reviews + Revision compares) */}
+                <ReviewBeforeYouSpend />
+
+                {/* 07 Commerce Decisions beyond the core loop */}
+                <SellerDecisions />
+
+                {/* 08 Learn What to Test Next (Roadmap/Beta Performance loops) */}
                 <LearningLoop />
-                <ComparisonTable />
+
+                {/* 09 Use Cases (Tabbed display) */}
+                <UseCases />
+
+                {/* 10 Why Viraldy (Comparison matrix) */}
+                <WhyViraldy />
+
+                {/* 11 Trust Section (Product Proof / Golden Cases explanation) */}
                 <TrustSection />
-                <EarlyAccessCta />
+
+                {/* 12 FAQ Section */}
                 <FaqSection />
+
+                {/* 13 Final High-Converting CTA */}
+                <EarlyAccessCta />
             </main>
             <LandingFooter />
         </div>

@@ -24,7 +24,7 @@ const faqs = [
     },
     {
         q: "Can I send the output directly to a creator?",
-        a: "Yes. The Creator Pack is designed to turn the selected creative direction into a clear production brief with hooks, talking points, shots, required product details, CTA, do/don't guidance and revision requirements.",
+        a: "Yes. The Creator Plan is designed to turn the selected creative direction into a clear production brief with hooks, talking points, shots, required product details, CTA, do/don't guidance and revision requirements.",
     },
     {
         q: "What happens when my creator sends the video?",
