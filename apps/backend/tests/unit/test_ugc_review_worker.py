@@ -11,6 +11,7 @@ from viraldy.modules.assets.public import AssetVersionSnapshot
 from viraldy.modules.domain_intelligence import public as domain_public
 from viraldy.modules.domain_intelligence.public import (
     NormalizedEvidenceBundle,
+    UGCRecommendation,
     UGCReviewResult,
 )
 from viraldy.modules.jobs.models import ProcessingJobModel
@@ -147,3 +148,108 @@ def test_ugc_review_worker_reuses_media_pipeline_and_persists_recommendation_res
     assert output["review_id"] == str(job.id)
     assert output["policy_pack_version"] == "v1"
     assert output["primary_model_run_id"] == str(primary_model_run_id)
+
+
+def test_execution_brief_keeps_deterministic_result_when_live_synthesis_fails(
+    monkeypatch,
+) -> None:
+    job = ProcessingJobModel(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        subject_type="asset_version",
+        subject_id=uuid4(),
+        job_type="ugc_review_v1",
+        queue_name="default",
+        status="running",
+        progress=80,
+        stage="evaluating_review",
+        attempt_count=1,
+        max_attempts=3,
+    )
+    recommendation = UGCRecommendation(
+        id="recommendation-1",
+        group="fix_first",
+        title="Deterministic title",
+        reason="Evidence-backed reason.",
+        why_it_matters="This is required before publishing.",
+        owner="editor",
+        confidence="high",
+        task_kind="video_edit_required",
+        priority="fix_before_publish",
+    )
+    result = UGCReviewResult(
+        review_id=str(job.id),
+        headline="Review ready",
+        summary="One edit is required.",
+        recommended_next_action="revise",
+        overall_confidence="high",
+        strengths_to_keep=["Keep the natural opening."],
+        fix_first=[recommendation],
+        creator_revision_message="Keep the opening.",
+        policy_pack_version="v1",
+        created_at=datetime.now(UTC).isoformat(),
+    )
+    loaded = AssetVersionSnapshot(
+        asset_id=uuid4(),
+        asset_version_id=job.subject_id,
+        workspace_id=job.workspace_id,
+        product_id=None,
+        storage_key="workspace/asset/source.mp4",
+        original_filename="draft.mp4",
+        declared_mime_type="video/mp4",
+        detected_mime_type="video/mp4",
+        size_bytes=100,
+        checksum_sha256="a" * 64,
+        metadata_json={},
+    )
+    calls: dict[str, object] = {}
+
+    class FakeModelRuns:
+        def __init__(self, _session) -> None:
+            pass
+
+        def create_running(self, **_values):
+            return SimpleNamespace(id=uuid4())
+
+        def fail(self, _run, code, _message, **_values):
+            calls["failure_code"] = code
+
+    class LiveSettings:
+        ai_mode = "live"
+        ai_provider = "openai"
+
+        def resolve_openai_model(self, _operation):
+            return "gpt-test"
+
+    monkeypatch.setattr(
+        "viraldy.modules.ai_gateway.repository.SyncAiModelRunRepository", FakeModelRuns
+    )
+    monkeypatch.setattr(
+        "viraldy.modules.ai_gateway.execution.execute_structured_operation",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(Exception("invalid provider output")),
+    )
+    monkeypatch.setattr(
+        "viraldy.modules.ai_gateway.prompt_packages.get_prompt_package",
+        lambda _operation: SimpleNamespace(
+            prompt_version="ugc_execution_brief_v1",
+            output_schema_version="ugc_execution_brief_synthesis_v1",
+            prompt_name="ugc_execution_brief",
+        ),
+    )
+
+    enriched = worker._enrich_ugc_execution_brief(
+        job=job,
+        loaded=loaded,
+        context=domain_public.UGCReviewContext(),
+        evidence_bundle=NormalizedEvidenceBundle(),
+        result=result,
+        settings=LiveSettings(),
+        session=cast(Session, SimpleNamespace(commit=lambda: None)),
+    )
+
+    assert enriched.fix_first[0].title == "Deterministic title"
+    synthesis = enriched.analysis_provenance["execution_brief_synthesis"]
+    assert synthesis["status"] == "fallback"
+    assert synthesis["reason"] == "invalid_output"
+    assert isinstance(synthesis["model_run_id"], str)
+    assert calls["failure_code"] == "UGC_EXECUTION_BRIEF_INVALID"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from decimal import Decimal
 
@@ -19,8 +20,8 @@ def adapt_media_evidence(
     normalized = [_normalize_item(item) for item in items]
     evidence_types = {item.kind for item in normalized}
     coverage = {
-        "transcript": "transcript_segment" in evidence_types,
-        "ocr": bool({"on_screen_text", "product_identity", "personalization"} & evidence_types),
+        "transcript": any(item.source == "transcript" for item in normalized),
+        "ocr": any(item.source == "ocr" for item in normalized),
         "visual_observations": bool(
             {
                 "product_appearance",
@@ -68,6 +69,8 @@ def adapt_media_evidence(
 
 def _normalize_item(item: EvidenceItemModel) -> NormalizedEvidence:
     value = dict(item.value_json or {})
+    if item.evidence_type == "transcript_segment":
+        value = _with_transcript_disclosure_details(value)
     kind = _normalized_kind(item.evidence_type, value)
     return NormalizedEvidence(
         id=str(item.id),
@@ -82,6 +85,8 @@ def _normalize_item(item: EvidenceItemModel) -> NormalizedEvidence:
 
 
 def _normalized_kind(evidence_type: str, value: dict[str, object]) -> str:
+    if evidence_type == "transcript_segment" and value.get("disclosure_detected") is True:
+        return "disclosure"
     if evidence_type == "on_screen_text":
         role = str(value.get("text_role") or "")
         if role == "product_identity":
@@ -97,6 +102,60 @@ def _normalized_kind(evidence_type: str, value: dict[str, object]) -> str:
     if evidence_type == "offer_signal":
         return "offer"
     return evidence_type
+
+
+def _with_transcript_disclosure_details(value: dict[str, object]) -> dict[str, object]:
+    text = _transcript_text(value)
+    details = _disclosure_details(text)
+    if details is None:
+        return value
+    return {
+        **value,
+        "present": True,
+        "disclosure_detected": True,
+        "modality": "spoken",
+        **details,
+    }
+
+
+def _transcript_text(value: dict[str, object]) -> str:
+    for field in ("text", "spoken_text", "transcript", "utterance"):
+        candidate = value.get(field)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return ""
+
+
+def _disclosure_details(text: str) -> dict[str, object] | None:
+    normalized = text.casefold()
+    if _contains_any(normalized, ("paid partnership", "sponsored", "gifted", "affiliate")):
+        return {"language": "en"}
+    if re.search(r"(?:^|[^a-z])ad(?:[^a-z]|$)", normalized):
+        return {"language": "en"}
+    if _contains_any(text, ("협찬", "광고", "스폰서")):
+        details: dict[str, object] = {"language": "ko"}
+        if "협찬" in text:
+            details["translation"] = "This video was made with brand sponsorship."
+        return details
+    if _contains_any(
+        normalized,
+        (
+            "tài trợ",
+            "tai tro",
+            "quảng cáo",
+            "quang cao",
+            "được tặng",
+            "duoc tang",
+            "liên kết tiếp thị",
+            "lien ket tiep thi",
+        ),
+    ):
+        return {"language": "vi"}
+    return None
+
+
+def _contains_any(value: str, needles: tuple[str, ...]) -> bool:
+    return any(needle in value for needle in needles)
 
 
 def _source(evidence_type: str) -> EvidenceSource:

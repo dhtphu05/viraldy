@@ -19,6 +19,7 @@ from viraldy.modules.ai_gateway.prompts import (
     PATTERN_KIT_PROMPT_VERSION,
     REVISION_MESSAGE_PROMPT_VERSION,
     STORYBOARD_IMAGE_PROMPT_VERSION,
+    UGC_EXECUTION_BRIEF_PROMPT_VERSION,
     VIRAL_KIT_PROMPT_VERSION,
     get_prompt_package,
 )
@@ -30,8 +31,13 @@ from viraldy.modules.creative_domain.schema_versions import (
     PATTERN_KIT_SCHEMA_VERSION,
     REVISION_MESSAGE_SCHEMA_VERSION,
     STORYBOARD_IMAGE_SCHEMA_VERSION,
+    UGC_EXECUTION_BRIEF_SCHEMA_VERSION,
     VIDEO_PREVIEW_SCHEMA_VERSION,
     VIRAL_KIT_SCHEMA_VERSION,
+)
+from viraldy.modules.domain_intelligence.execution_brief_contracts import (
+    UGCExecutionBriefRecommendationPatchV1,
+    UGCExecutionBriefSynthesisV1,
 )
 from viraldy.modules.presentations.contracts import (
     CreatorRevisionMessageV2,
@@ -49,6 +55,7 @@ class AiOperationName(StrEnum):
     CAMPAIGN_PACK_GENERATE = "campaign_pack_generate"
     SELLER_DECISION_SUMMARY = "seller_decision_summary"
     REVISION_MESSAGE_GENERATE = "revision_message_generate"
+    UGC_EXECUTION_BRIEF_SYNTHESIS = "ugc_execution_brief_synthesis"
     STORYBOARD_IMAGE_GENERATE = "storyboard_image_generate"
     CONCEPT_VIDEO_PREVIEW_GENERATE = "concept_video_preview_generate"
 
@@ -145,6 +152,12 @@ class SellerDecisionSummaryInputV1(OperationContractBase):
     product_name: str = Field(min_length=1)
     objective: str | None = None
     locale: Literal["en-US", "vi-VN"] = "en-US"
+
+
+class UGCExecutionBriefInputV1(OperationContractBase):
+    workspace_id: UUID
+    review_id: str = Field(min_length=1, max_length=160)
+    recommendation_ids: list[str] = Field(min_length=1)
 
 
 class GenerationOperationInputV1(OperationContractBase):
@@ -257,6 +270,13 @@ AI_OPERATION_DEFINITIONS: dict[str, AiOperationDefinition] = {
         REVISION_MESSAGE_PROMPT_VERSION,
         REVISION_MESSAGE_SCHEMA_VERSION,
     ),
+    AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS.value: _definition(
+        AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS,
+        UGCExecutionBriefInputV1,
+        UGCExecutionBriefSynthesisV1,
+        UGC_EXECUTION_BRIEF_PROMPT_VERSION,
+        UGC_EXECUTION_BRIEF_SCHEMA_VERSION,
+    ),
     AiOperationName.STORYBOARD_IMAGE_GENERATE.value: _definition(
         AiOperationName.STORYBOARD_IMAGE_GENERATE,
         GenerationOperationInputV1,
@@ -368,6 +388,25 @@ def build_ai_operation_fixture(
             required_changes=changes,
             referenced_blocker_codes=revision_input.blocker_codes,
             resubmission_request=revision_input.resubmission_request,
+        )
+    if operation_name is AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS:
+        brief_input = UGCExecutionBriefInputV1.model_validate(validated_input)
+        return UGCExecutionBriefSynthesisV1(
+            recommendation_patches=[
+                UGCExecutionBriefRecommendationPatchV1(
+                    recommendation_id=recommendation_id,
+                    exact_action=(
+                        "Complete the existing evidence-backed task before publishing."
+                    ),
+                    acceptance_criteria=[
+                        "The task is completed without changing unsupported product facts."
+                    ],
+                )
+                for recommendation_id in brief_input.recommendation_ids
+            ],
+            creator_revision_message=(
+                "Keep the current strengths and complete the listed changes before review."
+            ),
         )
     return GenerationArtifactOutputV1(
         generation_run_id=fixture_id("generation-run"),

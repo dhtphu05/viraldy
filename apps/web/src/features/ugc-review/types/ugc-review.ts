@@ -8,6 +8,17 @@ export type MaterialConnection = "yes" | "no" | "unknown";
 export type ReviewConfidence = "high" | "medium" | "low";
 export type RecommendationGroup = "fix_first" | "improve" | "confirm";
 export type RecommendationOwner = "seller" | "creator" | "editor";
+export type RecommendationTaskKind =
+    | "video_edit_required"
+    | "publish_ops_required"
+    | "seller_input_required"
+    | "keep"
+    | "do_not_change";
+export type RecommendationPriority =
+    | "fix_before_publish"
+    | "confirm_before_publish"
+    | "optional_improvement"
+    | "keep";
 export type ReviewFixType =
     | "edit_existing_footage"
     | "add_overlay"
@@ -66,6 +77,12 @@ export type UgcRecommendation = Readonly<{
     evidence: readonly UgcReviewEvidence[];
     confidence: ReviewConfidence;
     affectedUse: string | null;
+    taskKind: RecommendationTaskKind;
+    priority: RecommendationPriority;
+    timeRange: Readonly<{ startMs: number; endMs: number | null }> | null;
+    exactAction: string | null;
+    exactCopy: readonly string[];
+    acceptanceCriteria: readonly string[];
 }>;
 
 export type UgcReviewResult = Readonly<{

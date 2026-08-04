@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session
 
 from viraldy.modules.domain_intelligence.constants import ACTIVE_MVP_RULE_CODES
 from viraldy.modules.domain_intelligence.evidence_adapter import adapt_media_evidence
+from viraldy.modules.domain_intelligence.execution_brief import apply_execution_brief_synthesis
+from viraldy.modules.domain_intelligence.execution_brief_contracts import (
+    UGCExecutionBriefRecommendationPatchV1,
+    UGCExecutionBriefSynthesisV1,
+)
 from viraldy.modules.domain_intelligence.importer import (
     ArtifactValidationError,
     PolicyPackImporter,
@@ -30,9 +35,12 @@ from viraldy.modules.domain_intelligence.schemas import (
     PolicyPackCounts,
     PolicyPackStatus,
     RecommendationGroup,
+    RecommendationPriority,
+    RecommendationTaskKind,
     ReviewEvidence,
     ReviewFixType,
     ReviewNextAction,
+    ReviewTimeRange,
     UGCRecommendation,
     UGCReviewContext,
     UGCReviewResult,
@@ -97,19 +105,25 @@ __all__ = [
     "PolicyPackCounts",
     "PolicyPackImporter",
     "PolicyPackStatus",
+    "RecommendationPriority",
     "RecommendationGroup",
+    "RecommendationTaskKind",
     "ReviewEvidence",
     "ReviewFixType",
     "ReviewNextAction",
+    "ReviewTimeRange",
     "SemanticEvaluator",
     "SyncDomainIntelligenceQueries",
     "UGCRecommendation",
+    "UGCExecutionBriefRecommendationPatchV1",
+    "UGCExecutionBriefSynthesisV1",
     "UGCRevisionComparison",
     "UGCReviewContext",
     "UGCReviewResult",
     "UnknownState",
     "ValidatedPolicyPack",
     "adapt_media_evidence",
+    "apply_execution_brief_synthesis",
     "evaluate_review",
     "render_creator_message",
     "select_applicable_rules",

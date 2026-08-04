@@ -550,6 +550,63 @@ def _disclosure(
 ) -> list[EvaluationCandidate]:
     if "DISC-001" not in rule_codes or context.material_connection == "no":
         return []
+    disclosures = [
+        item
+        for item in _items(items, "disclosure")
+        if item.confidence != "low" and item.value.get("present", True) is not False
+    ]
+    visible_disclosure_present = any(
+        item.source == "ocr"
+        or str(item.value.get("modality") or "").lower() in {"visual", "caption", "platform"}
+        for item in disclosures
+    )
+    if visible_disclosure_present:
+        return []
+    spoken_disclosures = [
+        item
+        for item in disclosures
+        if item.source == "transcript" or str(item.value.get("modality") or "").lower() == "spoken"
+    ]
+    if spoken_disclosures:
+        signal = spoken_disclosures[0]
+        return [
+            EvaluationCandidate(
+                rule_code="DISC-001",
+                mistake_code="M-DISC-001",
+                group="fix_first",
+                title="Add visible disclosure for the target market",
+                reason=(
+                    "The transcript includes a spoken sponsorship disclosure, but the review "
+                    "does not show a visible caption or publish-time disclosure setting."
+                ),
+                why_it_matters="The commercial relationship should be clear before viewers evaluate the product.",
+                owner="editor",
+                fix_type="add_overlay",
+                instructions=[
+                    "Add a seller-approved visible disclosure caption in the opening before product claims."
+                ],
+                strengths_to_preserve=["Keep the creator's natural delivery and product footage."],
+                completion_criteria=[
+                    "The visible disclosure appears before any product benefit claim.",
+                    "The disclosure remains readable on mobile.",
+                    "The seller or operator confirms the publish-time disclosure setting.",
+                ],
+                evidence_ids=[signal.id],
+                confidence=signal.confidence,
+                affected_use=context.intended_use,
+                task_kind="video_edit_required",
+                priority="fix_before_publish",
+                exact_action=(
+                    "Add a seller-approved visible disclosure caption during the opening."
+                ),
+                exact_copy=["seller-approved disclosure copy required"],
+                acceptance_criteria=[
+                    "The visible disclosure appears before any product benefit claim.",
+                    "The disclosure remains readable on mobile.",
+                    "The seller or operator confirms the publish-time disclosure setting.",
+                ],
+            )
+        ]
     disclosure_present = any(
         item.confidence != "low" and item.value.get("present", True) is not False
         for item in _items(items, "disclosure")
@@ -568,15 +625,27 @@ def _disclosure(
                 owner="editor",
                 fix_type="add_overlay",
                 instructions=[
-                    "Add the seller-approved disclosure and confirm the publish-time setting."
+                    "Add the seller-approved disclosure caption and confirm the publish-time setting."
                 ],
                 strengths_to_preserve=["Keep the creator's natural delivery and product footage."],
                 completion_criteria=[
-                    "The disclosure is clear in the draft and publish settings are confirmed."
+                    "The visible disclosure appears before any product benefit claim.",
+                    "The disclosure remains readable on mobile.",
+                    "The seller or operator confirms the publish-time disclosure setting.",
                 ],
                 evidence_ids=[],
                 confidence="high",
                 affected_use=context.intended_use,
+                task_kind="video_edit_required",
+                priority="fix_before_publish",
+                time_range={"start_ms": 0, "end_ms": 2500},
+                exact_action="Add a seller-approved visible disclosure caption during the opening.",
+                exact_copy=["seller-approved disclosure copy required"],
+                acceptance_criteria=[
+                    "The visible disclosure appears before any product benefit claim.",
+                    "The disclosure remains readable on mobile.",
+                    "The seller or operator confirms the publish-time disclosure setting.",
+                ],
             )
         ]
     return []
@@ -628,6 +697,15 @@ def _operational_unknowns(
                 evidence_ids=[],
                 unknown_state="publish_check_required",
                 affected_use=context.intended_use,
+                task_kind="publish_ops_required",
+                exact_action=(
+                    "At publish time, confirm the product tag, disclosure setting and cleared audio."
+                ),
+                completion_override=[
+                    "The final product tag points to the reviewed product/SKU.",
+                    "The publish-time disclosure setting matches the material connection.",
+                    "Audio is cleared for the intended use.",
+                ],
             )
         )
     if evidence.metadata.get("economics_missing") is True:
@@ -736,7 +814,12 @@ def _confirm(
     unknown_state: str = "seller_confirmation_required",
     fix_type: str = "confirm_seller_input",
     affected_use: str | None = None,
+    task_kind: str | None = None,
+    exact_action: str | None = None,
+    exact_copy: list[str] | None = None,
+    completion_override: list[str] | None = None,
 ) -> EvaluationCandidate:
+    completion_criteria = completion_override or completion
     return EvaluationCandidate(
         rule_code=rule_code,
         mistake_code=mistake_code,
@@ -753,6 +836,11 @@ def _confirm(
         confidence="low" if unknown_state == "insufficient_evidence" else "medium",
         affected_use=affected_use,
         unknown_state=unknown_state,
+        task_kind=task_kind,
+        priority="confirm_before_publish",
+        exact_action=exact_action or (instructions[0] if instructions else title),
+        exact_copy=exact_copy or [],
+        acceptance_criteria=completion_criteria,
     )
 
 

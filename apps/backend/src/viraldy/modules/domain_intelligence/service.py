@@ -55,6 +55,7 @@ def evaluate_review(
         "missing_required": evidence.missing_required,
         "pipeline_version": evidence.pipeline_version,
         "semantic_provider": semantic_provider,
+        "execution_brief_provider": "deterministic_fallback",
         "performance_evidence_status": "insufficient_evidence",
     }
     model_provider_versions = evidence.metadata.get("model_provider_versions")

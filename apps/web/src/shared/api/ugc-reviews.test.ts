@@ -166,6 +166,14 @@ describe("UGC Review contract mapper", () => {
         expect(result.confirmations[0]?.group).toBe("confirm");
         expect(result.message).toContain("reshoot the product close-up");
         expect(result.provenance.media_duration_ms).toBe(18_000);
+        expect(result.fixFirst[0]).toMatchObject({
+            taskKind: "video_edit_required",
+            priority: "fix_before_publish",
+            timeRange: { startMs: 2000, endMs: 3500 },
+            exactAction: "Film a steady close-up of the exact product.",
+            exactCopy: ["Use the seller-approved product name."],
+            acceptanceCriteria: ["The exact product is visible and in focus."],
+        });
         expect("score" in result).toBe(false);
     });
 
@@ -248,6 +256,12 @@ function recommendation(id: string, group: "fix_first" | "improve" | "confirm") 
         instructions: ["Film a steady close-up of the exact product."],
         strengths_to_preserve: ["Keep the creator's natural opening."],
         completion_criteria: ["The exact product is visible and in focus."],
+        task_kind: "video_edit_required",
+        priority: "fix_before_publish",
+        time_range: { start_ms: 2_000, end_ms: 3_500 },
+        exact_action: "Film a steady close-up of the exact product.",
+        exact_copy: ["Use the seller-approved product name."],
+        acceptance_criteria: ["The exact product is visible and in focus."],
         evidence: [
             {
                 id: `${id}-evidence`,

@@ -153,6 +153,7 @@ def test_openai_defaults_and_operation_model_routing() -> None:
         _env_file=None,
         openai_model_pattern_kit="gpt-5-pattern",
         openai_model_decision_summary="gpt-5-summary",
+        openai_model_ugc_execution_brief="gpt-5-ugc-brief",
     )
 
     assert settings.openai_base_url == "https://api.openai.com/v1"
@@ -167,6 +168,10 @@ def test_openai_defaults_and_operation_model_routing() -> None:
     assert settings.openai_image_transport == "base64"
     assert settings.resolve_openai_model("pattern_kit_extract") == "gpt-5-pattern"
     assert settings.resolve_openai_model("seller_decision_summary") == "gpt-5-summary"
+    assert (
+        settings.resolve_openai_model("ugc_execution_brief_synthesis")
+        == "gpt-5-ugc-brief"
+    )
     assert settings.resolve_openai_model("media_observation", vision=True) == "gpt-5"
     assert settings.resolve_openai_model("media_observation") == "gpt-5"
     assert settings.resolve_openai_model("unknown_operation") == "gpt-5"

@@ -1,6 +1,6 @@
 import { sanitizeReturnTo } from "./auth-flow";
 
-const PUBLIC_AUTH_PATHS = ["/login", "/register", "/api/auth"];
+const PUBLIC_AUTH_PATHS = ["/", "/login", "/register", "/api/auth"];
 
 export function isPublicAuthPath(pathname: string): boolean {
     return PUBLIC_AUTH_PATHS.some(

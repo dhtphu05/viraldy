@@ -129,6 +129,7 @@ class Settings(BaseSettings):
     openai_model_campaign_pack: str | None = None
     openai_model_decision_summary: str | None = None
     openai_model_revision_message: str | None = None
+    openai_model_ugc_execution_brief: str | None = None
 
     image_generation_enabled: bool = False
     video_generation_enabled: bool = False
@@ -233,6 +234,7 @@ class Settings(BaseSettings):
         "openai_model_campaign_pack",
         "openai_model_decision_summary",
         "openai_model_revision_message",
+        "openai_model_ugc_execution_brief",
         mode="before",
     )
     @classmethod
@@ -336,6 +338,7 @@ class Settings(BaseSettings):
             "campaign_pack_generate": self.openai_model_campaign_pack,
             "seller_decision_summary": self.openai_model_decision_summary,
             "revision_message_generate": self.openai_model_revision_message,
+            "ugc_execution_brief_synthesis": self.openai_model_ugc_execution_brief,
         }
         uses_vision_model = vision or operation == "media_observation"
         return operation_models.get(operation) or (

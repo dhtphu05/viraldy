@@ -13,8 +13,11 @@ from viraldy.modules.domain_intelligence.public import (
     EvaluationCandidate,
     NormalizedEvidence,
     NormalizedEvidenceBundle,
+    UGCExecutionBriefRecommendationPatchV1,
+    UGCExecutionBriefSynthesisV1,
     UGCReviewContext,
     adapt_media_evidence,
+    apply_execution_brief_synthesis,
     evaluate_review,
     select_applicable_rules,
 )
@@ -162,7 +165,12 @@ def test_missing_rights_for_paid_use_is_confirmation_not_creative_failure() -> N
 def test_missing_publish_metadata_is_a_typed_publish_check() -> None:
     result = _evaluate(UGCReviewContext(intended_use="affiliate"), [])
 
-    assert any(item.unknown_state == "publish_check_required" for item in result.confirmations)
+    recommendation = next(
+        item for item in result.confirmations if item.unknown_state == "publish_check_required"
+    )
+    assert recommendation.task_kind == "publish_ops_required"
+    assert recommendation.exact_action
+    assert recommendation.acceptance_criteria
 
 
 def test_mockup_only_pod_proof_requests_better_media() -> None:
@@ -462,3 +470,108 @@ def test_evidence_adapter_preserves_provider_and_model_version_metadata() -> Non
         {"provider": "openai", "model_version": "gpt-example"}
     ]
     assert bundle.pipeline_version == "media_pipeline_v1"
+
+
+def test_spoken_korean_disclosure_requires_visible_disclosure_without_claiming_absence() -> None:
+    transcript = cast(
+        EvidenceItemModel,
+        SimpleNamespace(
+            id="transcript-disclosure",
+            evidence_type="transcript_segment",
+            value_json={"text": "이 영상은 브랜드 협찬으로 제작되었습니다."},
+            start_ms=0,
+            end_ms=1800,
+            confidence=Decimal("0.95"),
+            provider="openai",
+            model_version="gpt-example",
+            pipeline_version="media_pipeline_v1",
+        ),
+    )
+
+    bundle = adapt_media_evidence([transcript])
+    result = _evaluate(UGCReviewContext(material_connection="yes"), bundle.items)
+
+    assert bundle.coverage["transcript"] is True
+    assert bundle.items[0].kind == "disclosure"
+    assert bundle.items[0].source == "transcript"
+    assert bundle.items[0].value["modality"] == "spoken"
+    assert bundle.items[0].value["language"] == "ko"
+    assert bundle.items[0].value["translation"] == "This video was made with brand sponsorship."
+    recommendation = next(item for item in result.fix_first if item.mistake_code == "M-DISC-001")
+    assert recommendation.title == "Add visible disclosure for the target market"
+    assert "no clear disclosure" not in recommendation.reason.lower()
+    assert recommendation.evidence[0].id == "transcript-disclosure"
+    assert recommendation.task_kind == "video_edit_required"
+    assert recommendation.exact_action is not None
+    assert recommendation.exact_copy == ["seller-approved disclosure copy required"]
+    assert recommendation.acceptance_criteria
+
+
+def test_execution_brief_applies_only_allowed_patch_fields() -> None:
+    original = _evaluate(
+        UGCReviewContext(material_connection="yes"),
+        [_evidence("missing-disclosure", "product_appearance", "Product is visible.")],
+    )
+    recommendation = original.fix_first[0]
+    synthesis = UGCExecutionBriefSynthesisV1(
+        recommendation_patches=[
+            UGCExecutionBriefRecommendationPatchV1(
+                recommendation_id=recommendation.id,
+                title="Add a readable opening disclosure",
+                exact_action="Place the seller-approved caption over the opening product shot.",
+                exact_copy=["seller-approved disclosure copy required"],
+                acceptance_criteria=["The caption is readable on mobile before product claims."],
+            )
+        ],
+        creator_revision_message=(
+            "Keep the product footage and add the approved opening disclosure."
+        ),
+    )
+
+    enriched = apply_execution_brief_synthesis(original, synthesis)
+    patched = enriched.fix_first[0]
+
+    assert patched.id == recommendation.id
+    assert patched.rule_code == recommendation.rule_code
+    assert patched.owner == recommendation.owner
+    assert patched.task_kind == recommendation.task_kind
+    assert patched.title == "Add a readable opening disclosure"
+    assert patched.exact_copy == ["seller-approved disclosure copy required"]
+    assert enriched.creator_revision_message.startswith("Keep the product footage")
+
+
+def test_execution_brief_rejects_unknown_or_missing_recommendation_ids() -> None:
+    original = _evaluate(
+        UGCReviewContext(material_connection="yes"),
+        [_evidence("missing-disclosure", "product_appearance", "Product is visible.")],
+    )
+    synthesis = UGCExecutionBriefSynthesisV1(
+        recommendation_patches=[
+            UGCExecutionBriefRecommendationPatchV1(
+                recommendation_id="unknown-recommendation",
+                exact_action="Unsupported replacement.",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="recommendation IDs"):
+        apply_execution_brief_synthesis(original, synthesis)
+
+
+def test_execution_brief_rejects_prohibited_performance_promises() -> None:
+    original = _evaluate(
+        UGCReviewContext(material_connection="yes"),
+        [_evidence("missing-disclosure", "product_appearance", "Product is visible.")],
+    )
+    recommendation = original.fix_first[0]
+    synthesis = UGCExecutionBriefSynthesisV1(
+        recommendation_patches=[
+            UGCExecutionBriefRecommendationPatchV1(
+                recommendation_id=recommendation.id,
+                exact_action="Add this because it is guaranteed performance.",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="prohibited performance language"):
+        apply_execution_brief_synthesis(original, synthesis)

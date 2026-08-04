@@ -80,17 +80,23 @@ function RecommendationCard({
     const timestamped = recommendation.evidence.filter(
         (item): item is typeof item & { startMs: number } => item.startMs !== null,
     );
-    const canSend = recommendation.owner === "creator" || recommendation.owner === "editor";
-    const canApply = recommendation.group !== "confirm";
+    const canSend =
+        recommendation.taskKind === "video_edit_required" &&
+        (recommendation.owner === "creator" || recommendation.owner === "editor");
+    const canApply = recommendation.taskKind === "video_edit_required";
+    const isPublishTask = recommendation.taskKind === "publish_ops_required";
 
     return (
         <SurfaceCard padding="lg" variant="outlined">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                        <StatusChip tone={recommendation.group === "fix_first" ? "warn" : "info"}>
-                            {humanizeLabel(recommendation.fixType ?? recommendation.group)}
+                        <StatusChip
+                            tone={recommendation.priority === "fix_before_publish" ? "warn" : "info"}
+                        >
+                            {humanizeLabel(recommendation.priority)}
                         </StatusChip>
+                        <StatusChip tone="neutral">{humanizeLabel(recommendation.taskKind)}</StatusChip>
                         <StatusChip tone="neutral">Owner: {recommendation.owner}</StatusChip>
                         <ConfidenceBadge level={recommendation.confidence} />
                     </div>
@@ -107,6 +113,17 @@ function RecommendationCard({
                         {actionReceipt(savedAction)}
                     </StatusChip>
                 )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+                <StatusChip tone="neutral">
+                    <Clock3 className="h-3 w-3" />
+                    {recommendation.timeRange
+                        ? renderTimeRange(recommendation.timeRange)
+                        : isPublishTask
+                          ? "Publish-time"
+                          : "No specific timestamp"}
+                </StatusChip>
             </div>
 
             {timestamped.length > 0 && (
@@ -130,19 +147,20 @@ function RecommendationCard({
                 </div>
             )}
 
-            {recommendation.instructions.length > 0 && (
+            {(recommendation.exactAction || recommendation.instructions.length > 0) && (
                 <div className="mt-5 rounded-xl bg-surface-soft p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                        What to do
+                        Exact action
                     </p>
-                    <ol className="mt-2 space-y-2 text-sm text-text-primary">
-                        {recommendation.instructions.map((instruction, index) => (
-                            <li key={instruction} className="flex gap-2">
-                                <span className="text-primary">{index + 1}.</span>
-                                <span>{instruction}</span>
-                            </li>
-                        ))}
-                    </ol>
+                    <p className="mt-2 text-sm leading-6 text-text-primary">
+                        {recommendation.exactAction ?? recommendation.instructions[0]}
+                    </p>
+                </div>
+            )}
+
+            {recommendation.exactCopy.length > 0 && (
+                <div className="mt-5">
+                    <ListBlock title="Exact copy" items={recommendation.exactCopy} tone="neutral" />
                 </div>
             )}
 
@@ -154,10 +172,15 @@ function RecommendationCard({
                         tone="ok"
                     />
                 )}
-                {recommendation.completionCriteria.length > 0 && (
+                {(recommendation.acceptanceCriteria.length > 0 ||
+                    recommendation.completionCriteria.length > 0) && (
                     <ListBlock
                         title="Done when"
-                        items={recommendation.completionCriteria}
+                        items={
+                            recommendation.acceptanceCriteria.length > 0
+                                ? recommendation.acceptanceCriteria
+                                : recommendation.completionCriteria
+                        }
                         tone="neutral"
                     />
                 )}
@@ -240,6 +263,11 @@ function RecommendationCard({
             </div>
         </SurfaceCard>
     );
+}
+
+function renderTimeRange(timeRange: Readonly<{ startMs: number; endMs: number | null }>): string {
+    if (timeRange.endMs === null) return formatEvidenceTime(timeRange.startMs);
+    return `${formatEvidenceTime(timeRange.startMs)} - ${formatEvidenceTime(timeRange.endMs)}`;
 }
 
 function ListBlock({

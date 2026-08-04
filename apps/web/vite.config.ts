@@ -26,11 +26,7 @@ export default defineConfig(({ command }) => {
     if (isBuild) {
         plugins.push(
             nitro({
-                preset: "cloudflare-module",
-                cloudflare: {
-                    nodeCompat: true,
-                    deployConfig: true,
-                },
+                preset: "vercel",
             }),
         );
     }

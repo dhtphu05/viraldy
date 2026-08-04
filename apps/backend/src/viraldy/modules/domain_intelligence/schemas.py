@@ -5,6 +5,19 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 RecommendationGroup = Literal["fix_first", "improve", "confirm"]
+RecommendationTaskKind = Literal[
+    "video_edit_required",
+    "publish_ops_required",
+    "seller_input_required",
+    "keep",
+    "do_not_change",
+]
+RecommendationPriority = Literal[
+    "fix_before_publish",
+    "confirm_before_publish",
+    "optional_improvement",
+    "keep",
+]
 ReviewFixType = Literal[
     "edit_existing_footage",
     "add_overlay",
@@ -87,6 +100,17 @@ class ReviewEvidence(StrictBaseModel):
         return self
 
 
+class ReviewTimeRange(StrictBaseModel):
+    start_ms: int = Field(ge=0)
+    end_ms: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> ReviewTimeRange:
+        if self.end_ms is not None and self.end_ms < self.start_ms:
+            raise ValueError("end_ms must be greater than or equal to start_ms")
+        return self
+
+
 class UGCRecommendation(StrictBaseModel):
     id: str = Field(min_length=1, max_length=160)
     rule_code: str | None = Field(default=None, max_length=100)
@@ -104,6 +128,12 @@ class UGCRecommendation(StrictBaseModel):
     confidence: Confidence
     affected_use: str | None = None
     unknown_state: UnknownState | None = None
+    task_kind: RecommendationTaskKind = "video_edit_required"
+    priority: RecommendationPriority = "optional_improvement"
+    time_range: ReviewTimeRange | None = None
+    exact_action: str | None = Field(default=None, min_length=1)
+    exact_copy: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
 
 
 class UGCReviewResult(StrictBaseModel):
@@ -201,6 +231,12 @@ class EvaluationCandidate(StrictBaseModel):
     confidence: Confidence
     affected_use: str | None = None
     unknown_state: UnknownState | None = None
+    task_kind: RecommendationTaskKind | None = None
+    priority: RecommendationPriority | None = None
+    time_range: ReviewTimeRange | None = None
+    exact_action: str | None = Field(default=None, min_length=1)
+    exact_copy: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
 
 
 class ImportSummary(StrictBaseModel):

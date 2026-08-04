@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { isPublicAuthPath, loginRedirectFor } from "./auth-routing";
 
 describe("auth route protection", () => {
-    it.each(["/login", "/register", "/api/auth/login", "/api/auth/callback"])(
+    it.each(["/", "/login", "/register", "/api/auth/login", "/api/auth/callback"])(
         "keeps %s public",
         (path) => {
             expect(isPublicAuthPath(path)).toBe(true);
         },
     );
 
-    it.each(["/", "/dashboard", "/products", "/account"])("protects %s", (path) => {
+    it.each(["/dashboard", "/products", "/account"])("protects %s", (path) => {
         expect(isPublicAuthPath(path)).toBe(false);
     });
 

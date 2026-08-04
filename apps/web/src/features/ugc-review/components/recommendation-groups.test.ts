@@ -19,6 +19,20 @@ function recommendation(group: RecommendationGroup, title: string): UgcRecommend
         instructions: ["Follow the evidence-backed change."],
         strengthsToPreserve: ["Keep the natural creator delivery."],
         completionCriteria: ["The requested change is visible."],
+        taskKind: group === "confirm" ? "publish_ops_required" : "video_edit_required",
+        priority:
+            group === "confirm"
+                ? "confirm_before_publish"
+                : group === "improve"
+                  ? "optional_improvement"
+                  : "fix_before_publish",
+        timeRange: group === "confirm" ? null : { startMs: 0, endMs: 2500 },
+        exactAction:
+            group === "confirm"
+                ? "Confirm the required setting at publish time."
+                : "Add the requested revision during the opening shot.",
+        exactCopy: ["seller-approved disclosure copy required"],
+        acceptanceCriteria: ["The requested change is visible and readable on mobile."],
         evidence: [],
         confidence: "high",
         affectedUse: null,
@@ -26,7 +40,7 @@ function recommendation(group: RecommendationGroup, title: string): UgcRecommend
 }
 
 describe("RecommendationGroups", () => {
-    it("renders Fix first, Improve, and Confirm from the live result contract", () => {
+    it("renders seller task-list sections from the live result contract", () => {
         const markup = renderToStaticMarkup(
             createElement(RecommendationGroups, {
                 result: {
@@ -42,12 +56,18 @@ describe("RecommendationGroups", () => {
             }),
         );
 
-        expect(markup).toContain("Fix first");
+        expect(markup).toContain("Fix before posting");
         expect(markup).toContain("Replace the mismatched product shot");
-        expect(markup).toContain("Improve");
+        expect(markup).toContain("Optional improvements");
         expect(markup).toContain("Connect the product earlier");
-        expect(markup).toContain("Confirm");
+        expect(markup).toContain("Confirm at publish");
         expect(markup).toContain("Confirm paid-use rights");
+        expect(markup).toContain("Seller input required");
+        expect(markup).toContain("Keep unchanged");
+        expect(markup).toContain("Publish-time");
+        expect(markup).toContain("Exact action");
+        expect(markup).toContain("Exact copy");
+        expect(markup).toContain("Done when");
         expect(markup).not.toMatch(/predicted score|score lift/i);
     });
 });

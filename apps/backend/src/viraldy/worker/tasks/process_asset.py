@@ -663,10 +663,17 @@ def _review_ugc_asset(
         pack_version=pack_status.version,
         analysis_provenance={
             "analysis_mode": settings.ai_mode,
-            "primary_model_run_id": (
-                str(primary_model_run_id) if primary_model_run_id else None
-            ),
+            "primary_model_run_id": (str(primary_model_run_id) if primary_model_run_id else None),
         },
+    )
+    result = _enrich_ugc_execution_brief(
+        job=job,
+        loaded=loaded,
+        context=context,
+        evidence_bundle=evidence_bundle,
+        result=result,
+        settings=settings,
+        session=session,
     )
 
     repo.update_progress(job, 90, "persisting_results")
@@ -692,6 +699,189 @@ def _review_ugc_asset(
         "analysis_mode": settings.ai_mode,
         "primary_model_run_id": (str(primary_model_run_id) if primary_model_run_id else None),
     }
+
+
+def _enrich_ugc_execution_brief(
+    *,
+    job: ProcessingJobModel,
+    loaded: AssetVersionSnapshot,
+    context: object,
+    evidence_bundle: object,
+    result: object,
+    settings: object,
+    session: Session,
+) -> object:
+    """Use OpenAI only to improve task wording after deterministic evaluation."""
+    from viraldy.modules.ai_gateway.context import ViraldyOperationContextV1
+    from viraldy.modules.ai_gateway.execution import execute_structured_operation
+    from viraldy.modules.ai_gateway.operations import AiOperationName
+    from viraldy.modules.ai_gateway.prompt_packages import get_prompt_package
+    from viraldy.modules.ai_gateway.repository import SyncAiModelRunRepository
+    from viraldy.modules.ai_gateway.request_identity import stable_json_hash
+    from viraldy.modules.domain_intelligence.execution_brief_contracts import (
+        UGCExecutionBriefSynthesisV1,
+    )
+    from viraldy.modules.domain_intelligence.public import apply_execution_brief_synthesis
+    from viraldy.modules.domain_intelligence.schemas import (
+        NormalizedEvidenceBundle,
+        UGCReviewContext,
+        UGCReviewResult,
+    )
+
+    typed_context = cast(UGCReviewContext, context)
+    typed_evidence = cast(NormalizedEvidenceBundle, evidence_bundle)
+    typed_result = cast(UGCReviewResult, result)
+    if settings.ai_mode != "live":
+        return typed_result
+    recommendations = [
+        *typed_result.fix_first,
+        *typed_result.improvements,
+        *typed_result.confirmations,
+    ]
+    if not recommendations:
+        return _with_execution_brief_provenance(typed_result, {"status": "not_applicable"})
+
+    prompt = get_prompt_package(AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS)
+    input_summary = {
+        "review_id": typed_result.review_id,
+        "recommendation_ids": [item.id for item in recommendations],
+        "evidence_count": len(typed_evidence.items),
+    }
+    initial_hash = stable_json_hash(input_summary)
+    model_runs = SyncAiModelRunRepository(session)
+    model_run = model_runs.create_running(
+        workspace_id=job.workspace_id,
+        processing_job_id=job.id,
+        subject_type="ugc_review",
+        subject_id=job.id,
+        capability="ugc_execution_brief_synthesis",
+        operation=AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS.value,
+        analysis_mode=settings.ai_mode,
+        provider=settings.ai_provider,
+        model=settings.resolve_openai_model(AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS.value),
+        prompt_version=prompt.prompt_version,
+        response_schema_version=prompt.output_schema_version,
+        schema_version=prompt.output_schema_version,
+        request_hash=initial_hash,
+        input_hash=initial_hash,
+        input_summary=input_summary,
+        endpoint_family="responses" if settings.ai_provider == "openai" else "chat_completions",
+        prompt_name=prompt.prompt_name,
+        request_id=f"ugc-execution-brief:{job.id}",
+    )
+    session.commit()
+    operation_context = ViraldyOperationContextV1(
+        operation=AiOperationName.UGC_EXECUTION_BRIEF_SYNTHESIS,
+        request_id=f"ugc-execution-brief:{model_run.id}",
+        workspace_id=job.workspace_id,
+        target_market=typed_context.market,
+        source_artifact_ids=[loaded.asset_id],
+        source_version_ids=[loaded.asset_version_id],
+        seller_constraints=typed_context.model_dump(mode="json"),
+        operation_payload={
+            "review_id": typed_result.review_id,
+            "recommendation_ids": [item.id for item in recommendations],
+            "recommendations": [item.model_dump(mode="json") for item in recommendations],
+            "evidence": [item.model_dump(mode="json") for item in typed_evidence.items],
+        },
+        schema_version=prompt.output_schema_version,
+        prompt_version=prompt.prompt_version,
+    )
+    try:
+        execution = execute_structured_operation(
+            settings,
+            operation_context,
+            UGCExecutionBriefSynthesisV1,
+        )
+        synthesis = UGCExecutionBriefSynthesisV1.model_validate(execution.parsed_output)
+        enriched = apply_execution_brief_synthesis(typed_result, synthesis)
+        if execution.input_hash and execution.request_hash:
+            model_runs.update_identity(
+                model_run,
+                input_hash=execution.input_hash,
+                request_hash=execution.request_hash,
+            )
+        model_runs.complete(
+            model_run,
+            {
+                "recommendation_patch_count": len(synthesis.recommendation_patches),
+                "creator_revision_message": bool(synthesis.creator_revision_message),
+            },
+            execution.http_status,
+            execution.provider_request_id,
+            execution.latency_ms,
+            usage_json=execution.usage.model_dump(mode="json"),
+            repair_attempt_count=execution.repair_attempt_count,
+        )
+        return _with_execution_brief_provenance(
+            enriched,
+            {"status": "completed", "model_run_id": str(model_run.id)},
+        )
+    except AppError as exc:
+        _fail_execution_brief_run(model_runs, model_run, exc)
+        return _with_execution_brief_provenance(
+            typed_result,
+            {
+                "status": "fallback",
+                "model_run_id": str(model_run.id),
+                "reason": exc.code,
+            },
+        )
+    except Exception:
+        model_runs.fail(
+            model_run,
+            "UGC_EXECUTION_BRIEF_INVALID",
+            "Execution brief output was invalid.",
+            safe_error_message="Execution brief output was invalid; deterministic review retained.",
+        )
+        return _with_execution_brief_provenance(
+            typed_result,
+            {
+                "status": "fallback",
+                "model_run_id": str(model_run.id),
+                "reason": "invalid_output",
+            },
+        )
+
+
+def _with_execution_brief_provenance(result: object, synthesis: dict[str, object]) -> object:
+    from viraldy.modules.domain_intelligence.schemas import UGCReviewResult
+
+    typed_result = cast(UGCReviewResult, result)
+    return typed_result.model_copy(
+        update={
+            "analysis_provenance": {
+                **typed_result.analysis_provenance,
+                "execution_brief_provider": (
+                    "openai" if synthesis.get("status") == "completed" else "deterministic_fallback"
+                ),
+                "execution_brief_synthesis": synthesis,
+            }
+        }
+    )
+
+
+def _fail_execution_brief_run(repository: object, model_run: object, error: AppError) -> None:
+    details = error.details
+    repository.fail(
+        model_run,
+        error.code,
+        error.message,
+        http_status=(
+            details.get("http_status") if isinstance(details.get("http_status"), int) else None
+        ),
+        provider_request_id=(
+            details.get("provider_request_id")
+            if isinstance(details.get("provider_request_id"), str)
+            else None
+        ),
+        repair_attempt_count=(
+            details.get("repair_attempt_count")
+            if isinstance(details.get("repair_attempt_count"), int)
+            else None
+        ),
+        safe_error_message="Execution brief synthesis failed; deterministic review retained.",
+    )
 
 
 def _update_tiktok_stage(

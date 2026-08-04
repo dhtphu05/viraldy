@@ -51,5 +51,24 @@ make web-build
 ## Deployment Baseline
 
 - Build toolchain is direct Vite/TanStack Start configuration in `vite.config.ts`.
-- Production build emits Nitro Cloudflare module output.
+- Production build emits Nitro Vercel output.
 - Platform-specific sandbox bridge plugins and editor-owned error hooks are not part of this app.
+
+## Vercel
+
+Configure the Vercel project with:
+
+```bash
+Root Directory: apps/web
+Install Command: pnpm install
+Build Command: pnpm build
+Output Directory: leave empty (Nitro emits .vercel/output)
+```
+
+Required production environment:
+
+```bash
+VITE_API_BASE_URL=https://<backend-domain>/api/v1
+```
+
+The backend must also allow the deployed Vercel origin in `BACKEND_CORS_ORIGINS`.

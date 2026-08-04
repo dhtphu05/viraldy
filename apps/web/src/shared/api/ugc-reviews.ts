@@ -1,6 +1,8 @@
 import type {
     RecommendationGroup,
     RecommendationOwner,
+    RecommendationPriority,
+    RecommendationTaskKind,
     ReviewConfidence,
     ReviewEvidenceSource,
     ReviewFixType,
@@ -213,6 +215,9 @@ function recommendationList(value: unknown, group: RecommendationGroup): UgcReco
 
 function normalizeRecommendation(value: unknown, group: RecommendationGroup): UgcRecommendation {
     const source = asRecord(value);
+    const instructions = stringList(source.instructions);
+    const completionCriteria = stringList(source.completion_criteria);
+    const acceptanceCriteria = stringList(source.acceptance_criteria);
     return {
         id: requiredString(source.id, "recommendation.id"),
         ruleCode: optionalString(source.rule_code),
@@ -227,13 +232,44 @@ function normalizeRecommendation(value: unknown, group: RecommendationGroup): Ug
             "seller",
         ),
         fixType: normalizeFixType(source.fix_type),
-        instructions: stringList(source.instructions),
+        instructions,
         strengthsToPreserve: stringList(source.strengths_to_preserve),
-        completionCriteria: stringList(source.completion_criteria),
+        completionCriteria,
         evidence: evidenceList(source.evidence),
         confidence: normalizeConfidence(source.confidence),
         affectedUse: optionalString(source.affected_use),
+        taskKind: literal<RecommendationTaskKind>(
+            source.task_kind,
+            [
+                "video_edit_required",
+                "publish_ops_required",
+                "seller_input_required",
+                "keep",
+                "do_not_change",
+            ],
+            group === "confirm" ? "seller_input_required" : "video_edit_required",
+        ),
+        priority: literal<RecommendationPriority>(
+            source.priority,
+            ["fix_before_publish", "confirm_before_publish", "optional_improvement", "keep"],
+            group === "fix_first"
+                ? "fix_before_publish"
+                : group === "confirm"
+                  ? "confirm_before_publish"
+                  : "optional_improvement",
+        ),
+        timeRange: timeRange(source.time_range),
+        exactAction: optionalString(source.exact_action) ?? instructions[0] ?? null,
+        exactCopy: stringList(source.exact_copy),
+        acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : completionCriteria,
     };
+}
+
+function timeRange(value: unknown): { startMs: number; endMs: number | null } | null {
+    const source = asRecord(value);
+    const startMs = nonNegativeNumber(source.start_ms);
+    const endMs = nonNegativeNumber(source.end_ms);
+    return startMs !== null && (endMs === null || endMs >= startMs) ? { startMs, endMs } : null;
 }
 
 function evidenceList(value: unknown): UgcReviewEvidence[] {

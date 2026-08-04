@@ -28,6 +28,9 @@ from viraldy.modules.ai_gateway.prompt_content.system_v2 import (
     SYSTEM_PROMPT_V2,
     SYSTEM_PROMPT_VERSION,
 )
+from viraldy.modules.ai_gateway.prompt_content.ugc_execution_brief_v1 import (
+    UGC_EXECUTION_BRIEF_DEVELOPER_PROMPT_V1,
+)
 from viraldy.modules.ai_gateway.prompt_content.viral_kit_v2 import (
     VIRAL_KIT_DEVELOPER_PROMPT_V2,
 )
@@ -45,5 +48,6 @@ __all__ = [
     "SYSTEM_PROMPT_NAME",
     "SYSTEM_PROMPT_V2",
     "SYSTEM_PROMPT_VERSION",
+    "UGC_EXECUTION_BRIEF_DEVELOPER_PROMPT_V1",
     "VIRAL_KIT_DEVELOPER_PROMPT_V2",
 ]

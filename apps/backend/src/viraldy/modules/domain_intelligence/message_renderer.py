@@ -11,7 +11,12 @@ def render_creator_message(
     improvements: Sequence[UGCRecommendation],
 ) -> str:
     preserved = strengths[0] if strengths else "the useful creator delivery and unaffected footage"
-    opening = f"Please keep {preserved[0].lower() + preserved[1:] if preserved else preserved}"
+    preserved_text = _without_leading_keep(preserved)
+    opening = (
+        f"Please keep {preserved_text[0].lower() + preserved_text[1:]}"
+        if preserved_text
+        else "Please keep the useful creator delivery and unaffected footage"
+    )
     actions: list[str] = []
     for recommendation in [*fix_first, *improvements[:1]]:
         if recommendation.fix_type == "reshoot_scene":
@@ -29,3 +34,12 @@ def render_creator_message(
             "No reshoot is requested from the current evidence; preserve the approved scope."
         )
     return " ".join([f"{opening}.", *actions])
+
+
+def _without_leading_keep(value: str) -> str:
+    stripped = value.strip()
+    lowered = stripped.lower()
+    for prefix in ("keep the ", "keep "):
+        if lowered.startswith(prefix):
+            return stripped[len(prefix) :]
+    return stripped
