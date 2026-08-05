@@ -31,7 +31,7 @@ export function SellerDecisions() {
         {
             title: "Rights & Spark Ads",
             question: "Can we safely scale this video with paid budget?",
-            description: "Verifies visual licensing, commercial audio clearances, and TikTok Spark Ad codes to ensure zero advertising compliance delays.",
+            description: "Tracks paid-usage requirements, commercial audio notes, and Spark Ad handoff status without promising that every approval risk is eliminated.",
             status: "Coming Soon" as const,
             tone: "warn" as const,
             icon: Shield,

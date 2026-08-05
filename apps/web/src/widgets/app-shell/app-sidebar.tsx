@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { PanelLeftClose, PanelLeft, Sparkles } from "lucide-react";
+import { PanelLeftClose, PanelLeft } from "lucide-react";
 import { useAppStore } from "@/app/store/app-store";
 import { cn } from "@/shared/lib/utils";
+import { BrandLogo } from "@/shared/ui/brand-logo";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/shared/ui/tooltip";
 import { navigationGroups, type ShellNavItem } from "./navigation";
 
@@ -9,6 +10,17 @@ function NavLinkRow({ item, collapsed }: { item: ShellNavItem; collapsed: boolea
     const pathname = useRouterState({ select: (s) => s.location.pathname });
     const active = pathname === item.to || pathname.startsWith(item.to + "/");
     const Icon = item.icon;
+    const icon = item.iconSrc ? (
+        <img
+            src={item.iconSrc}
+            alt=""
+            aria-hidden
+            className="h-[22px] w-[22px] shrink-0 object-contain"
+            draggable={false}
+        />
+    ) : (
+        <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-primary")} />
+    );
     const link = (
         <Link
             to={item.to}
@@ -27,7 +39,7 @@ function NavLinkRow({ item, collapsed }: { item: ShellNavItem; collapsed: boolea
                     className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
                 />
             )}
-            <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-primary")} />
+            {icon}
             {!collapsed && <span className="truncate">{item.label}</span>}
             {active && collapsed && (
                 <span
@@ -63,23 +75,14 @@ export function AppSidebar() {
             >
                 <div
                     className={cn(
-                        "flex h-16 items-center gap-2 px-4",
+                        "flex h-16 items-center px-4",
                         collapsed && "justify-center px-0",
                     )}
                 >
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
-                        <Sparkles className="h-4 w-4" />
-                    </span>
-                    {!collapsed && (
-                        <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-text-primary">
-                                Viraldy
-                            </p>
-                            <p className="truncate text-[11px] text-text-tertiary">
-                                Creative Intelligence
-                            </p>
-                        </div>
-                    )}
+                    <BrandLogo
+                        markOnly={collapsed}
+                        className={collapsed ? "h-9 w-9" : "h-10 w-[150px]"}
+                    />
                 </div>
 
                 <nav className={cn("flex-1 overflow-y-auto px-2 pb-4", collapsed && "px-2")}>
@@ -133,14 +136,8 @@ export function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }
     const pathname = useRouterState({ select: (s) => s.location.pathname });
     return (
         <div className="flex h-full flex-col">
-            <div className="flex h-16 items-center gap-2 px-4">
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
-                    <Sparkles className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-text-primary">Viraldy</p>
-                    <p className="truncate text-[11px] text-text-tertiary">Creative Intelligence</p>
-                </div>
+            <div className="flex h-16 items-center px-4">
+                <BrandLogo className="h-10 w-[150px]" />
             </div>
             <nav className="flex-1 overflow-y-auto px-2 pb-4">
                 {navigationGroups.map((group) => (
@@ -153,6 +150,22 @@ export function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }
                                 const active =
                                     pathname === item.to || pathname.startsWith(item.to + "/");
                                 const Icon = item.icon;
+                                const icon = item.iconSrc ? (
+                                    <img
+                                        src={item.iconSrc}
+                                        alt=""
+                                        aria-hidden
+                                        className="h-[22px] w-[22px] shrink-0 object-contain"
+                                        draggable={false}
+                                    />
+                                ) : (
+                                    <Icon
+                                        className={cn(
+                                            "h-[18px] w-[18px] shrink-0",
+                                            active && "text-primary",
+                                        )}
+                                    />
+                                );
                                 return (
                                     <Link
                                         key={item.to}
@@ -171,12 +184,7 @@ export function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }
                                                 className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
                                             />
                                         )}
-                                        <Icon
-                                            className={cn(
-                                                "h-[18px] w-[18px]",
-                                                active && "text-primary",
-                                            )}
-                                        />
+                                        {icon}
                                         {item.label}
                                     </Link>
                                 );

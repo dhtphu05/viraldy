@@ -26,7 +26,7 @@ export function StoryIntro() {
                         </span>
                         <div>
                             <h3 className="text-base font-bold text-text-primary">SwiftPress Mini Garment Steamer</h3>
-                            <p className="text-xs text-text-tertiary">Product Context Card · Locked Fixture Data</p>
+                            <p className="text-xs text-text-tertiary">Product Intelligence Report</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

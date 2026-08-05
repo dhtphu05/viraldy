@@ -9,7 +9,11 @@ import { filterScoreRuns, type HistoryFilters } from "../lib/tiktok-score-view-m
 import type { TikTokScoreRun } from "../types";
 import { listProducts } from "@/shared/api/products";
 import { formatUtcDateTime } from "@/shared/lib/date-format";
-import { listTikTokScores, trackTikTokScoreEvent } from "@/shared/api/tiktok-scores";
+import {
+    getAssetPlayback,
+    listTikTokScores,
+    trackTikTokScoreEvent,
+} from "@/shared/api/tiktok-scores";
 import { queryKeys } from "@/shared/api/query-keys";
 import { Button } from "@/shared/ui/button";
 import { ConfidenceBadge } from "@/shared/ui/confidence-badge";
@@ -417,22 +421,43 @@ function HistoryTable({ runs }: { runs: TikTokScoreRun[] }) {
 function HistoryRow({ run }: { run: TikTokScoreRun }) {
     const comparisonId = run.comparisonIds.at(-1);
     const comparisonBaseScoreId = run.parentScoreRunId ?? run.id;
+    const videoLabel = run.productName ? `${run.productName} video` : "TikTok video";
+    const playback = useQuery({
+        queryKey: queryKeys.tiktokScores.playback(
+            run.workspaceId ?? undefined,
+            run.assetId,
+            run.assetVersionId,
+        ),
+        queryFn: () => getAssetPlayback(run.workspaceId!, run.assetId!, run.assetVersionId),
+        enabled: Boolean(run.workspaceId && run.assetId && run.assetVersionId),
+        retry: 0,
+        staleTime: 5 * 60 * 1_000,
+    });
+    const mediaUrl = playback.data?.videoUrl ?? run.mediaUrl;
     return (
         <TableRow>
             <TableCell className="px-4">
-                <Link
-                    to="/tiktok-scorer/$scoreId"
-                    params={{ scoreId: run.id }}
-                    search={{ jobId: undefined }}
-                    className="font-medium text-text-primary hover:text-primary"
-                >
-                    {run.assetName}
-                </Link>
-                <p className="mt-0.5 text-xs text-text-tertiary">
-                    {run.score === null
-                        ? "Score pending"
-                        : `${Math.round(run.score)}/100 structural score`}
-                </p>
+                <div className="flex items-center gap-3">
+                    <VideoThumbnail run={run} mediaUrl={mediaUrl} />
+                    <div className="min-w-0">
+                        <Link
+                            to="/tiktok-scorer/$scoreId"
+                            params={{ scoreId: run.id }}
+                            search={{ jobId: undefined }}
+                            className="font-medium text-text-primary hover:text-primary"
+                        >
+                            {videoLabel}
+                        </Link>
+                        <p className="mt-0.5 truncate text-xs text-text-tertiary">
+                            {run.assetName}
+                        </p>
+                        <p className="mt-1 text-xs text-text-secondary">
+                            {run.score === null
+                                ? stageLabel(run.currentStage || run.status)
+                                : `${Math.round(run.score)}/100 structural score`}
+                        </p>
+                    </div>
+                </div>
             </TableCell>
             <TableCell>
                 {run.productName ?? <span className="text-text-tertiary">No product</span>}
@@ -481,6 +506,30 @@ function HistoryRow({ run }: { run: TikTokScoreRun }) {
                 </Button>
             </TableCell>
         </TableRow>
+    );
+}
+
+function VideoThumbnail({ run, mediaUrl }: { run: TikTokScoreRun; mediaUrl: string | null }) {
+    return (
+        <div className="relative h-16 w-10 shrink-0 overflow-hidden rounded-xl border border-divider bg-surface-soft shadow-soft-card">
+            {mediaUrl ? (
+                <video
+                    src={mediaUrl}
+                    aria-label={`Preview of ${run.assetName}`}
+                    className="h-full w-full object-cover"
+                    muted
+                    playsInline
+                    preload="metadata"
+                />
+            ) : (
+                <div className="grid h-full w-full place-items-center bg-gradient-to-b from-primary-softer to-surface-soft text-primary">
+                    <Video className="h-4 w-4" />
+                </div>
+            )}
+            <span className="absolute bottom-1 left-1 rounded bg-black/65 px-1 text-[9px] font-medium uppercase text-white">
+                9:16
+            </span>
+        </div>
     );
 }
 
@@ -536,6 +585,14 @@ function humanize(value: string) {
         .replace(/_v\d+$/, "")
         .replace(/_/g, " ")
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function stageLabel(value: string) {
+    return value === "retrying"
+        ? "Retrying analysis"
+        : value === "processing"
+          ? "Analyzing video"
+          : humanize(value);
 }
 function statusTone(status: string) {
     return status === "failed" || status === "cancelled"

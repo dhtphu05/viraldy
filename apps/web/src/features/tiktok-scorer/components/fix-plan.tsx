@@ -96,48 +96,72 @@ function FixCard({
 }) {
     const strong =
         action.priority === "P0" || action.priority === "P1" || action.severity === "hard";
+    const rangeLabel = action.targetTimeRangeMs ? formatRange(action.targetTimeRangeMs) : null;
     return (
         <SurfaceCard variant={strong ? "critical" : "plain"} padding="lg">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap gap-2">
-                        <StatusChip tone={action.priority === "P0" ? "destructive" : "warn"}>
-                            {action.priority}
-                        </StatusChip>
-                        <StatusChip tone={action.severity === "hard" ? "destructive" : "warn"}>
-                            {humanize(action.severity)} severity
-                        </StatusChip>
-                        <StatusChip tone="info">
-                            <UserRound className="h-3 w-3" />
-                            {humanize(action.ownerRole)}
-                        </StatusChip>
-                        <StatusChip tone="neutral">
-                            <Clock3 className="h-3 w-3" />
-                            {humanize(action.effort)} effort
-                        </StatusChip>
-                        <StatusChip tone={action.reshootRequired ? "warn" : "ok"}>
-                            {action.reshootRequired ? "Reshoot required" : humanize(action.fixType)}
-                        </StatusChip>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <FixMeta
+                            label="Priority"
+                            value={`${action.priority} · ${humanize(action.severity)}`}
+                            tone={
+                                action.priority === "P0" || action.severity === "hard"
+                                    ? "risk"
+                                    : "warn"
+                            }
+                        />
+                        <FixMeta
+                            label="Owner"
+                            value={humanize(action.ownerRole)}
+                            icon={UserRound}
+                            tone="info"
+                        />
+                        <FixMeta
+                            label="Effort"
+                            value={humanize(action.effort)}
+                            icon={Clock3}
+                            tone="neutral"
+                        />
+                        <FixMeta
+                            label="Change type"
+                            value={
+                                action.reshootRequired
+                                    ? "Reshoot required"
+                                    : humanize(action.fixType)
+                            }
+                            tone={action.reshootRequired ? "warn" : "ok"}
+                        />
                     </div>
-                    <h4 className="mt-3 text-base font-semibold text-text-primary">
-                        {action.title}
-                    </h4>
-                    <p className="mt-1 text-sm text-text-secondary">{action.whyItMatters}</p>
+                    <h4 className="mt-5 text-lg font-semibold text-text-primary">{action.title}</h4>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">
+                        {action.whyItMatters}
+                    </p>
                 </div>
-                {action.targetTimeRangeMs && (
+                {rangeLabel && (
                     <Button type="button" size="sm" variant="secondary" onClick={onSeek}>
                         <Video className="h-4 w-4" />
-                        View {formatRange(action.targetTimeRangeMs)}
+                        View {rangeLabel}
                     </Button>
                 )}
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <ValuePanel label="Expected" value={action.expected} tone="ok" />
-                <ValuePanel label="Observed" value={action.observed} tone="warn" />
+            <div className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
+                <ValuePanel
+                    eyebrow="Target state"
+                    label="What should be visible"
+                    value={action.expected}
+                    tone="ok"
+                />
+                <ValuePanel
+                    eyebrow="Current evidence"
+                    label="What the scorer found"
+                    value={action.observed}
+                    tone="warn"
+                />
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 <ListBlock
                     title="Exact instructions"
                     items={action.instructions}
@@ -243,31 +267,55 @@ function FixCard({
 }
 
 function ValuePanel({
+    eyebrow,
     label,
     value,
     tone,
 }: {
+    eyebrow: string;
     label: string;
     value: Record<string, unknown>;
     tone: "ok" | "warn";
 }) {
     const entries = Object.entries(value);
+    const main = entries[0];
     return (
         <div
-            className={tone === "ok" ? "rounded-xl bg-ok-soft p-3" : "rounded-xl bg-warn-soft p-3"}
+            className={
+                tone === "ok"
+                    ? "rounded-2xl border border-ok/20 bg-ok-soft p-4"
+                    : "rounded-2xl border border-warn/20 bg-warn-soft p-4"
+            }
         >
-            <p className="text-xs font-medium uppercase text-text-tertiary">{label}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                {eyebrow}
+            </p>
+            <p className="mt-1 text-sm font-medium text-text-primary">{label}</p>
             {entries.length ? (
-                <dl className="mt-2 space-y-1">
-                    {entries.map(([key, item]) => (
-                        <div
-                            key={key}
-                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2 text-sm"
-                        >
-                            <dt className="text-text-secondary">{humanize(key)}</dt>
-                            <dd className="break-words text-text-primary">{formatValue(item)}</dd>
+                <dl className="mt-3 space-y-2">
+                    {main && (
+                        <div>
+                            <dt className="text-xs uppercase tracking-wide text-text-tertiary">
+                                {humanize(main[0])}
+                            </dt>
+                            <dd className="mt-1 break-words text-lg font-medium leading-snug text-text-primary">
+                                {formatValue(main[1])}
+                            </dd>
                         </div>
-                    ))}
+                    )}
+                    {entries.map(([key, item]) =>
+                        key === main?.[0] ? null : (
+                            <div
+                                key={key}
+                                className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2 border-t border-white/50 pt-2 text-sm"
+                            >
+                                <dt className="text-text-secondary">{humanize(key)}</dt>
+                                <dd className="break-words text-text-primary">
+                                    {formatValue(item)}
+                                </dd>
+                            </div>
+                        ),
+                    )}
                 </dl>
             ) : (
                 <p className="mt-1 text-sm text-text-secondary">Not supplied</p>
@@ -288,23 +336,56 @@ function ListBlock({
     empty: string;
 }) {
     return (
-        <div>
-            <p className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                <Icon className="h-4 w-4 text-primary" />
+        <div className="rounded-2xl border border-divider bg-surface-soft p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-primary-softer text-primary">
+                    <Icon className="h-4 w-4" />
+                </span>
                 {title}
             </p>
             {items.length ? (
-                <ul className="mt-2 space-y-1.5 text-sm text-text-secondary">
+                <ol className="mt-3 space-y-2 text-sm text-text-secondary">
                     {items.map((item, index) => (
-                        <li key={`${item}-${index}`} className="flex gap-2">
-                            <span aria-hidden>•</span>
+                        <li key={`${item}-${index}`} className="flex gap-3">
+                            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface text-[11px] font-semibold text-text-tertiary">
+                                {index + 1}
+                            </span>
                             <span>{item}</span>
                         </li>
                     ))}
-                </ul>
+                </ol>
             ) : (
                 <p className="mt-2 text-sm text-text-tertiary">{empty}</p>
             )}
+        </div>
+    );
+}
+
+function FixMeta({
+    label,
+    value,
+    tone,
+    icon: Icon,
+}: {
+    label: string;
+    value: string;
+    tone: "risk" | "warn" | "info" | "neutral" | "ok";
+    icon?: typeof UserRound;
+}) {
+    const toneClass = {
+        risk: "border-destructive/25 bg-destructive-soft text-destructive",
+        warn: "border-warn/25 bg-warn-soft text-warn",
+        info: "border-info/25 bg-info-soft text-info",
+        neutral: "border-divider bg-surface-soft text-text-secondary",
+        ok: "border-ok/25 bg-ok-soft text-ok",
+    }[tone];
+    return (
+        <div className={`rounded-2xl border px-3 py-2 ${toneClass}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide opacity-75">{label}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
+                {Icon && <Icon className="h-3.5 w-3.5" />}
+                {value}
+            </p>
         </div>
     );
 }

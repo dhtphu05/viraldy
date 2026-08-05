@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { Check, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, LockKeyhole, ShieldCheck } from "lucide-react";
 
+import { BrandLogo } from "@/shared/ui/brand-logo";
 import type { AuthSnapshot } from "../auth-session";
 import { sanitizeReturnTo, type AuthIntent } from "../lib/auth-flow";
 
@@ -150,11 +151,8 @@ function Brand() {
             className="relative inline-flex w-fit items-center gap-3"
             aria-label="Viraldy home"
         >
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
-                <Sparkles className="h-4 w-4" aria-hidden />
-            </span>
+            <BrandLogo className="h-11 w-[164px]" />
             <span>
-                <span className="block text-sm font-semibold text-text-primary">Viraldy</span>
                 <span className="block text-xs text-text-tertiary">Creative Intelligence</span>
             </span>
         </Link>

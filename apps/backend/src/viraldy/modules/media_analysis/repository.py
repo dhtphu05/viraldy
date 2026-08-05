@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from viraldy.modules.creative_domain.schema_versions import EVIDENCE_SCHEMA_VERSION
 from viraldy.modules.media_analysis.evidence_bundle import validate_evidence_payload
+from viraldy.modules.media_analysis.json_safety import sanitize_postgres_json
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
 
 
@@ -128,6 +129,14 @@ class SyncMediaAnalysisRepository:
                 EvidenceItemModel.asset_version_id == asset_version_id,
             )
         )
+        sanitized_artifacts = [
+            {**item, "payload_json": sanitize_postgres_json(item.get("payload_json"))}
+            for item in artifacts
+        ]
+        sanitized_evidence = [
+            {**item, "value_json": sanitize_postgres_json(item.get("value_json"))}
+            for item in evidence
+        ]
         artifact_models = [
             MediaArtifactModel(
                 workspace_id=workspace_id,
@@ -144,7 +153,7 @@ class SyncMediaAnalysisRepository:
                 analysis_mode=item["analysis_mode"],
                 pipeline_version=pipeline_version,
             )
-            for item in artifacts
+            for item in sanitized_artifacts
         ]
         evidence_models = [
             EvidenceItemModel(
@@ -173,7 +182,7 @@ class SyncMediaAnalysisRepository:
                 model_version=item.get("model_version"),
                 pipeline_version=pipeline_version,
             )
-            for item in _validated_evidence(asset_version_id, evidence)
+            for item in _validated_evidence(asset_version_id, sanitized_evidence)
         ]
         self._session.add_all([*artifact_models, *evidence_models])
         self._session.flush()

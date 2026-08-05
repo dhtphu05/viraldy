@@ -122,7 +122,7 @@ export function PatternBreakdown() {
                     {/* Header */}
                     <div className="flex items-center justify-between border-b border-divider pb-3">
                         <span className="text-xs font-bold text-text-tertiary uppercase tracking-wider">
-                            Grounded Structural Breakdowns
+                            Evidence-Backed Creative Breakdown
                         </span>
                         <StatusChip tone="info">Source: home_travel_steamer</StatusChip>
                     </div>

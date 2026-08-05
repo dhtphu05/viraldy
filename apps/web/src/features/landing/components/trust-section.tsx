@@ -75,15 +75,15 @@ export function TrustSection() {
                 A structural score is not a promise of virality, ROAS or GMV.
             </div>
 
-            {/* Golden Fixture Methodology Panel */}
+            {/* Reference Methodology Panel */}
             <div className="mx-auto max-w-3xl p-5 rounded-2xl bg-surface border border-hairline flex gap-3 items-start shadow-sm">
                 <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                 <div>
                     <h3 className="text-sm font-bold text-text-primary">
-                        Golden Fixture Methodology
+                        Reference Methodology
                     </h3>
                     <p className="mt-1 text-xs text-text-secondary leading-relaxed">
-                        The SwiftPress Garment Steamer, Dog Mom Crewneck, and Bag Sealer examples shown on this page are <strong>actual product test fixtures</strong> built directly into the Viraldy domain codebase. They demonstrate the exact logic, OCR checks, and rule verification the system runs in production.
+                        The SwiftPress Garment Steamer, Dog Mom Crewneck, and Bag Sealer examples shown on this page are reference product scenarios used to demonstrate the exact logic, OCR checks, and rule verification the system runs in production.
                     </p>
                 </div>
             </div>
