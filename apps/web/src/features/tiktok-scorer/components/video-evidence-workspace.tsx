@@ -3,11 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { TikTokEvidence, TikTokScoreRun } from "../types";
 import { safeSeekSeconds } from "../lib/tiktok-score-view-model";
-import {
-    EvidenceTimeline,
-    type EvidenceMarkerKind,
-    type EvidenceTimelineMarker,
-} from "@/shared/ui/evidence-timeline";
+import type { EvidenceMarkerKind, EvidenceTimelineMarker } from "@/shared/ui/evidence-timeline";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 
@@ -40,6 +36,7 @@ export function VideoEvidenceWorkspace({
         [run.evidence],
     );
     const markers = useMemo(() => buildMarkers(run), [run]);
+    const evidenceGroups = useMemo(() => groupEvidence(run.evidence), [run.evidence]);
 
     useEffect(() => {
         if (!seekTarget) return;
@@ -152,7 +149,7 @@ export function VideoEvidenceWorkspace({
 
                 <div className="min-w-0">
                     {durationSeconds > 0 && markers.length > 0 ? (
-                        <EvidenceTimeline
+                        <CompactEvidenceTimeline
                             duration={durationSeconds}
                             currentTime={currentTime}
                             markers={markers}
@@ -165,61 +162,43 @@ export function VideoEvidenceWorkspace({
                         </div>
                     )}
 
-                    <div className="mt-4 space-y-2">
+                    <div className="mt-5 space-y-4">
                         {run.evidence.length ? (
-                            run.evidence.map((evidence) => (
-                                <button
-                                    key={evidence.id}
-                                    type="button"
-                                    onClick={() => {
-                                        const timestamp = evidence.startMs ?? 0;
-                                        seek(timestamp / 1_000, {
-                                            id: evidence.id,
-                                            at: timestamp / 1_000,
-                                            label: evidence.summary,
-                                            kind: markerKind(evidence.sourceType),
-                                        });
-                                    }}
-                                    className="flex w-full min-w-0 gap-3 rounded-xl border border-control-border bg-surface p-3 text-left transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            evidenceGroups.map((group) => (
+                                <section
+                                    key={group.key}
+                                    className="rounded-2xl border border-divider bg-surface p-3"
                                 >
-                                    <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-info-soft text-info">
-                                        {evidence.frameUrl ? (
-                                            <Play className="h-4 w-4" />
-                                        ) : evidence.transcript || evidence.ocrText ? (
-                                            <Captions className="h-4 w-4" />
-                                        ) : (
-                                            <ImageOff className="h-4 w-4" />
-                                        )}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="flex flex-wrap items-center gap-2">
-                                            <span className="font-medium text-text-primary">
-                                                {evidence.summary}
-                                            </span>
-                                            {evidence.confidence && (
-                                                <StatusChip tone="info">
-                                                    {evidence.confidence} confidence
-                                                </StatusChip>
-                                            )}
-                                        </span>
-                                        <span className="mt-1 block text-xs text-text-tertiary">
-                                            {humanize(evidence.sourceType)} ·{" "}
-                                            {evidence.startMs === null
-                                                ? "No timestamp"
-                                                : formatMs(evidence.startMs)}
-                                        </span>
-                                        {evidence.transcript && (
-                                            <span className="mt-2 block text-sm text-text-secondary">
-                                                Transcript: “{evidence.transcript}”
-                                            </span>
-                                        )}
-                                        {evidence.ocrText && (
-                                            <span className="mt-1 block text-sm text-text-secondary">
-                                                On-screen text: “{evidence.ocrText}”
-                                            </span>
-                                        )}
-                                    </span>
-                                </button>
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-text-primary">
+                                                {group.title}
+                                            </h3>
+                                            <p className="text-xs text-text-tertiary">
+                                                {group.items.length} evidence item
+                                                {group.items.length === 1 ? "" : "s"}
+                                            </p>
+                                        </div>
+                                        <StatusChip tone={group.tone}>{group.label}</StatusChip>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {group.items.map((evidence) => (
+                                            <EvidenceButton
+                                                key={evidence.id}
+                                                evidence={evidence}
+                                                onOpen={() => {
+                                                    const timestamp = evidence.startMs ?? 0;
+                                                    seek(timestamp / 1_000, {
+                                                        id: evidence.id,
+                                                        at: timestamp / 1_000,
+                                                        label: evidence.summary,
+                                                        kind: markerKind(evidence.sourceType),
+                                                    });
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </section>
                             ))
                         ) : (
                             <p className="rounded-xl bg-surface-soft p-4 text-sm text-text-secondary">
@@ -231,6 +210,159 @@ export function VideoEvidenceWorkspace({
                 </div>
             </div>
         </SurfaceCard>
+    );
+}
+
+function CompactEvidenceTimeline({
+    duration,
+    currentTime,
+    markers,
+    activeId,
+    onSeek,
+}: {
+    duration: number;
+    currentTime: number;
+    markers: EvidenceTimelineMarker[];
+    activeId?: string | null;
+    onSeek: (seconds: number, marker: EvidenceTimelineMarker) => void;
+}) {
+    const sorted = useMemo(() => [...markers].sort((a, b) => a.at - b.at), [markers]);
+    const grouped = useMemo(() => groupMarkersForTimeline(sorted), [sorted]);
+    const safeDuration = Math.max(duration, 1);
+    const playhead = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
+
+    return (
+        <section
+            aria-label="Video evidence timeline"
+            className="rounded-2xl border border-divider bg-surface p-4"
+        >
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                        Evidence map
+                    </p>
+                    <h3 className="mt-1 text-sm font-semibold text-text-primary">
+                        Key moments by timestamp
+                    </h3>
+                </div>
+                <StatusChip tone="neutral">{markers.length} markers</StatusChip>
+            </div>
+
+            <div className="mt-4 overflow-x-auto pb-1">
+                <div className="relative h-12 min-w-[520px]">
+                    <div className="absolute left-0 right-0 top-5 h-2 rounded-full bg-surface-soft" />
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute top-3.5 z-20 h-5 w-0.5 -translate-x-1/2 bg-primary transition-[left] duration-[200ms] motion-reduce:transition-none"
+                        style={{ left: `${playhead}%` }}
+                    />
+                    {sorted.map((marker) => {
+                        const selected = marker.id === activeId;
+                        return (
+                            <button
+                                key={marker.id}
+                                type="button"
+                                aria-label={`${marker.label} at ${formatMs(marker.at * 1_000)}`}
+                                aria-pressed={selected}
+                                onClick={() => onSeek(marker.at, marker)}
+                                className="absolute top-0 z-10 grid h-10 w-10 -translate-x-1/2 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                style={{
+                                    left: `${Math.min(
+                                        100,
+                                        Math.max(0, (marker.at / safeDuration) * 100),
+                                    )}%`,
+                                }}
+                            >
+                                <span
+                                    className={`${markerDotClass(
+                                        marker.kind,
+                                    )} h-3.5 w-3.5 rounded-full ring-2 ring-surface transition-transform duration-[180ms] motion-reduce:transition-none ${
+                                        selected ? "scale-125 ring-primary" : ""
+                                    }`}
+                                />
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {grouped.map((group) => (
+                    <button
+                        key={group.key}
+                        type="button"
+                        onClick={() => onSeek(group.primary.at, group.primary)}
+                        className={`rounded-xl border p-3 text-left transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                            group.items.some((item) => item.id === activeId)
+                                ? "border-primary bg-primary-soft"
+                                : "border-divider bg-surface"
+                        }`}
+                    >
+                        <span className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                                <span
+                                    className={`${markerDotClass(
+                                        group.primary.kind,
+                                    )} h-2.5 w-2.5 rounded-full`}
+                                />
+                                {formatMs(group.primary.at * 1_000)}
+                            </span>
+                            <span className="text-xs text-text-tertiary">
+                                {group.items.length} cue{group.items.length === 1 ? "" : "s"}
+                            </span>
+                        </span>
+                        <span className="mt-1 block text-xs font-medium text-text-tertiary">
+                            {markerKindLabel(group.primary.kind)}
+                        </span>
+                        <span className="mt-1 line-clamp-2 block text-sm text-text-secondary">
+                            {group.label}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        </section>
+    );
+}
+
+function EvidenceButton({ evidence, onOpen }: { evidence: TikTokEvidence; onOpen: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            className="flex w-full min-w-0 gap-3 rounded-xl bg-surface-soft p-3 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-info-soft text-info">
+                {evidence.frameUrl ? (
+                    <Play className="h-4 w-4" />
+                ) : evidence.transcript || evidence.ocrText ? (
+                    <Captions className="h-4 w-4" />
+                ) : (
+                    <ImageOff className="h-4 w-4" />
+                )}
+            </span>
+            <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-text-primary">{evidence.summary}</span>
+                    {evidence.confidence && (
+                        <StatusChip tone="info">{evidence.confidence} confidence</StatusChip>
+                    )}
+                </span>
+                <span className="mt-1 block text-xs text-text-tertiary">
+                    {humanize(evidence.sourceType)} ·{" "}
+                    {evidence.startMs === null ? "No timestamp" : formatMs(evidence.startMs)}
+                </span>
+                {evidence.transcript && (
+                    <span className="mt-2 block text-sm text-text-secondary">
+                        Transcript: “{evidence.transcript}”
+                    </span>
+                )}
+                {evidence.ocrText && (
+                    <span className="mt-1 block text-sm text-text-secondary">
+                        On-screen text: “{evidence.ocrText}”
+                    </span>
+                )}
+            </span>
+        </button>
     );
 }
 
@@ -298,6 +430,103 @@ function markerKind(sourceType: string): EvidenceMarkerKind {
     if (source.includes("offer") || source.includes("disclosure")) return "offer";
     if (source.includes("risk") || source.includes("claim")) return "risk";
     return "hook";
+}
+
+function groupMarkersForTimeline(markers: EvidenceTimelineMarker[]) {
+    const groups = new Map<
+        string,
+        { key: string; primary: EvidenceTimelineMarker; items: EvidenceTimelineMarker[] }
+    >();
+    for (const marker of markers) {
+        const timeBucket = Math.round(marker.at);
+        const key = `${timeBucket}-${marker.kind}`;
+        const existing = groups.get(key);
+        if (existing) {
+            groups.set(key, { ...existing, items: [...existing.items, marker] });
+        } else {
+            groups.set(key, { key, primary: marker, items: [marker] });
+        }
+    }
+    return Array.from(groups.values()).map((group) => {
+        const label = group.items
+            .map((item) => cleanMarkerLabel(item.label))
+            .filter((label, index, all) => label && all.indexOf(label) === index)
+            .slice(0, 2)
+            .join(" · ");
+        return {
+            ...group,
+            label: label || markerKindLabel(group.primary.kind),
+        };
+    });
+}
+
+function cleanMarkerLabel(label: string) {
+    const trimmed = label.trim();
+    if (!trimmed) return "";
+    if (/^[a-z0-9_]+$/i.test(trimmed) && trimmed.includes("_")) return humanize(trimmed);
+    return trimmed;
+}
+
+function markerKindLabel(kind: EvidenceMarkerKind) {
+    const labels: Record<EvidenceMarkerKind, string> = {
+        hook: "Opening hook",
+        product: "Product visibility",
+        demo: "Demo action",
+        proof: "Proof/outcome",
+        offer: "Disclosure or offer",
+        cta: "CTA",
+        risk: "Claim/disclosure safety",
+        missing: "Missing evidence",
+    };
+    return labels[kind];
+}
+
+function markerDotClass(kind: EvidenceMarkerKind) {
+    const classes: Record<EvidenceMarkerKind, string> = {
+        hook: "bg-info",
+        product: "bg-ok",
+        demo: "bg-info",
+        proof: "bg-ok",
+        offer: "bg-warn",
+        cta: "bg-info",
+        risk: "bg-destructive",
+        missing: "bg-warn",
+    };
+    return classes[kind];
+}
+
+function groupEvidence(evidence: TikTokEvidence[]) {
+    const groups = [
+        { key: "proof", title: "Proof moments", label: "Outcome", tone: "ok" as const },
+        { key: "demo", title: "Demo steps", label: "Action", tone: "info" as const },
+        { key: "product", title: "Product visibility", label: "Product", tone: "ok" as const },
+        { key: "claim", title: "Claims and disclosures", label: "Safety", tone: "warn" as const },
+        {
+            key: "platform",
+            title: "Platform/native cues",
+            label: "TikTok fit",
+            tone: "neutral" as const,
+        },
+        { key: "other", title: "Other evidence", label: "Context", tone: "info" as const },
+    ];
+    return groups.flatMap((group) => {
+        const items = evidence.filter((item) => evidenceGroupKey(item.sourceType) === group.key);
+        return items.length ? [{ ...group, items }] : [];
+    });
+}
+
+function evidenceGroupKey(sourceType: string) {
+    const source = sourceType.toLowerCase();
+    if (source.includes("proof")) return "proof";
+    if (source.includes("demo")) return "demo";
+    if (source.includes("product")) return "product";
+    if (source.includes("claim") || source.includes("transcript") || source.includes("text")) {
+        return "claim";
+    }
+    if (source.includes("platform") || source.includes("editing") || source.includes("cta")) {
+        return "platform";
+    }
+    return "other";
 }
 
 function formatSeconds(seconds: number) {

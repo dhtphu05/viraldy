@@ -321,6 +321,52 @@ function compactSearch(search: MvpSearch): MvpSearch {
     ) as MvpSearch;
 }
 
+function hasText(value: string | undefined) {
+    return Boolean(value?.trim());
+}
+
+function defaultBuyerPersona(product: Product | undefined) {
+    return product?.product_context.personas?.[0]?.id;
+}
+
+function buyerPersonaLabel(product: Product | undefined, buyerPersona: string | undefined) {
+    if (!buyerPersona) return "target buyer";
+    return (
+        product?.product_context.personas?.find((persona) => persona.id === buyerPersona)?.label ??
+        buyerPersona
+    );
+}
+
+function defaultBuyerPain(product: Product | undefined, buyerPersona: string | undefined) {
+    const productName = product?.name ?? "this product";
+    const persona = buyerPersonaLabel(product, buyerPersona);
+    return `${persona} needs a clearer reason to trust and choose ${productName} quickly.`;
+}
+
+function defaultDesiredOutcome(product: Product | undefined, buyerPersona: string | undefined) {
+    const productName = product?.name ?? "this product";
+    const persona = buyerPersonaLabel(product, buyerPersona);
+    return `${persona} understands why ${productName} is relevant and feels ready to take the next step.`;
+}
+
+function productionContextAutofill(
+    product: Product | undefined,
+    current: Pick<MvpSearch, "buyerPersona" | "buyerPain" | "desiredOutcome">,
+): Pick<MvpSearch, "buyerPersona" | "buyerPain" | "desiredOutcome"> {
+    const buyerPersona = hasText(current.buyerPersona)
+        ? current.buyerPersona
+        : defaultBuyerPersona(product);
+    return {
+        buyerPersona,
+        buyerPain: hasText(current.buyerPain)
+            ? current.buyerPain
+            : defaultBuyerPain(product, buyerPersona),
+        desiredOutcome: hasText(current.desiredOutcome)
+            ? current.desiredOutcome
+            : defaultDesiredOutcome(product, buyerPersona),
+    };
+}
+
 function ProductionRunRoute() {
     const queryClient = useQueryClient();
     const search = Route.useSearch();
@@ -1123,21 +1169,69 @@ function ProductionRunRoute() {
                 target,
             );
             setUploadState({ status: "completed", progress: 100, filename: file.name });
-            await queryClient.invalidateQueries({ queryKey: queryKeys.assets.list(workspaceId) });
-            updateWorkflowSearch(
-                target === "ugc"
-                    ? {
-                          ugcAssetId: uploaded.id,
-                          preflightRunId: undefined,
-                          preflightJobId: undefined,
-                      }
-                    : {
-                          quickAssetId: uploaded.id,
-                          quickRunId: undefined,
-                          quickJobId: undefined,
-                      },
+            if (target === "ugc") {
+                await queryClient.invalidateQueries({
+                    queryKey: queryKeys.assets.list(workspaceId),
+                });
+                updateWorkflowSearch({
+                    ugcAssetId: uploaded.id,
+                    preflightRunId: undefined,
+                    preflightJobId: undefined,
+                });
+                toast.success("Upload completed");
+                return;
+            }
+
+            const board =
+                boards.data?.find((item) => item.name === "Production Run uploads") ??
+                (await apiPost<Board>(`/workspaces/${workspaceId}/reference-boards`, {
+                    name: "Production Run uploads",
+                    description: "Reference media uploaded directly in Production Run.",
+                    product_id: product?.id ?? null,
+                    board_type: "creative_research",
+                }));
+            const reference = await apiPost<Reference>(`/workspaces/${workspaceId}/references`, {
+                board_id: board.id,
+                asset_id: uploaded.id,
+                product_id: product?.id ?? null,
+                source_platform: "uploaded",
+                source_url: null,
+                title: file.name,
+                notes: "Uploaded as the primary reference in Production Run.",
+            });
+            queryClient.setQueryData<Asset[]>(queryKeys.assets.list(workspaceId), (current = []) =>
+                current.some((item) => item.id === uploaded.id) ? current : [...current, uploaded],
             );
-            toast.success("Upload completed");
+            queryClient.setQueryData<Board[]>(
+                queryKeys.referenceBoards.list(workspaceId),
+                (current = []) =>
+                    current.some((item) => item.id === board.id) ? current : [...current, board],
+            );
+            queryClient.setQueryData<Reference[]>(
+                queryKeys.references.list(workspaceId),
+                (current = []) => [
+                    ...current.filter((item) => item.id !== reference.id),
+                    reference,
+                ],
+            );
+            updateWorkflowSearch({
+                primaryReferenceId: reference.id,
+                quickAssetId: uploaded.id,
+                ...productionContextAutofill(product, search),
+                quickRunId: undefined,
+                quickJobId: undefined,
+                dnaId: undefined,
+                dnaJobId: undefined,
+                patternKitId: undefined,
+                viralKitId: undefined,
+                selectedConceptId: undefined,
+                conceptConfirmed: undefined,
+                packId: undefined,
+                campaignId: undefined,
+                preflightRunId: undefined,
+                preflightJobId: undefined,
+            });
+            toast.success("Primary reference uploaded and selected");
         } catch (error) {
             setUploadState({
                 status: "failed",
@@ -1993,6 +2087,7 @@ function ProductionContextPanel({
                         }))}
                         onChange={(productId) => {
                             const nextProduct = products.find((item) => item.id === productId);
+                            const contextAutofill = productionContextAutofill(nextProduct, search);
                             onChange({
                                 productId,
                                 market:
@@ -2000,8 +2095,7 @@ function ProductionContextPanel({
                                     nextProduct?.product_context.identity?.market ??
                                     nextProduct?.market ??
                                     undefined,
-                                buyerPersona:
-                                    nextProduct?.product_context.personas?.[0]?.id ?? undefined,
+                                ...contextAutofill,
                                 patternKitId: undefined,
                                 viralKitId: undefined,
                                 selectedConceptId: undefined,
@@ -2024,6 +2118,7 @@ function ProductionContextPanel({
                         onChange={(primaryReferenceId) =>
                             onChange({
                                 primaryReferenceId,
+                                ...productionContextAutofill(selectedProduct, search),
                                 quickAssetId: undefined,
                                 dnaId: undefined,
                                 dnaJobId: undefined,
@@ -2093,7 +2188,10 @@ function ProductionContextPanel({
                             }))}
                             onChange={(buyerPersona) =>
                                 onChange({
-                                    buyerPersona,
+                                    ...productionContextAutofill(selectedProduct, {
+                                        ...search,
+                                        buyerPersona,
+                                    }),
                                     viralKitId: undefined,
                                     selectedConceptId: undefined,
                                     conceptConfirmed: undefined,
@@ -2110,7 +2208,10 @@ function ProductionContextPanel({
                             placeholder="Who is this for?"
                             onChange={(buyerPersona) =>
                                 onChange({
-                                    buyerPersona,
+                                    ...productionContextAutofill(selectedProduct, {
+                                        ...search,
+                                        buyerPersona,
+                                    }),
                                     viralKitId: undefined,
                                     selectedConceptId: undefined,
                                     conceptConfirmed: undefined,
@@ -2173,11 +2274,11 @@ function ProductionContextPanel({
                     htmlFor="production-reference-upload"
                     className="text-sm font-medium text-text-primary"
                 >
-                    Upload alternate reference media
+                    Upload new primary reference
                 </label>
                 <p className="mt-1 text-xs text-text-secondary">
-                    Optional. The uploaded asset becomes the selected quick-score media; it does not
-                    replace the primary reference record.
+                    Upload a winning video reference when it is not already in the library. Viraldy
+                    will select it as the primary reference for Creative DNA.
                 </p>
                 <Input
                     id="production-reference-upload"

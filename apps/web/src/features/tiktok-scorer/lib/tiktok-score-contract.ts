@@ -349,14 +349,21 @@ function normalizeEvidence(value: unknown): TikTokEvidence {
         range(source.time_range_ms) ?? range([timeRangeObject.start_ms, timeRangeObject.end_ms]);
     const summary = record(source.value_summary_json);
     const numericConfidence = numberValue(source.confidence);
+    const sourceType = text(source.source_type, text(source.evidence_type, "evidence"));
     return {
         id: text(source.id),
-        sourceType: text(source.source_type, text(source.evidence_type, "evidence")),
+        sourceType,
         startMs: numberValue(source.start_ms) ?? timeRange?.[0] ?? null,
         endMs: numberValue(source.end_ms) ?? timeRange?.[1] ?? null,
         summary: text(
-            source.summary ?? summary.summary ?? summary.description ?? summary.text,
-            text(source.description, "Observed evidence"),
+            source.summary ??
+                summary.summary ??
+                summary.description ??
+                summary.action ??
+                summary.visual_description ??
+                summary.text ??
+                summary.proof_type,
+            text(source.description, fallbackEvidenceSummary(sourceType)),
         ),
         transcript: nullableText(
             source.transcript ??
@@ -382,6 +389,23 @@ function normalizeEvidence(value: unknown): TikTokEvidence {
                       ? "medium"
                       : "low",
     };
+}
+
+function fallbackEvidenceSummary(sourceType: string): string {
+    if (sourceType.includes("product_appearance")) return "Product appearance";
+    if (sourceType.includes("product_visibility")) return "Product visibility summary";
+    if (sourceType.includes("demo_step")) return "Demo step";
+    if (sourceType.includes("demo_summary")) return "Demo summary";
+    if (sourceType.includes("proof")) return "Proof moment";
+    if (sourceType.includes("hook")) return "Opening hook";
+    if (sourceType.includes("cta")) return "CTA cue";
+    if (sourceType.includes("claim")) return "Claim safety cue";
+    if (sourceType.includes("platform")) return "Platform/native cue";
+    if (sourceType.includes("editing")) return "Editing cue";
+    if (sourceType.includes("creator")) return "Creator delivery cue";
+    if (sourceType.includes("transcript")) return "Transcript segment";
+    if (sourceType.includes("on_screen_text")) return "On-screen text";
+    return "Evidence item";
 }
 
 function normalizeSceneInventory(value: unknown): TikTokSceneInventory | null {

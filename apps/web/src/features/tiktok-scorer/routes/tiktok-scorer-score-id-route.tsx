@@ -11,6 +11,7 @@ import {
     Send,
     ShieldCheck,
     Sparkles,
+    Video,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -179,6 +180,7 @@ function TikTokScoreResultRoute() {
                 <FailedRun
                     run={run}
                     message={run.failureMessage ?? job.data?.error_message ?? null}
+                    mediaUrl={playback.data?.videoUrl ?? run.mediaUrl}
                     onRetry={() => void score.refetch()}
                 />
             </AppShell>
@@ -210,6 +212,7 @@ function TikTokScoreResultRoute() {
                     run={run}
                     stage={stage}
                     syncing={score.isFetching || job.isFetching}
+                    mediaUrl={playback.data?.videoUrl ?? run.mediaUrl}
                     onRefresh={() => {
                         void score.refetch();
                         if (jobId) void job.refetch();
@@ -246,6 +249,7 @@ function TikTokScoreResultRoute() {
                         </AlertDescription>
                     </Alert>
                 )}
+                <ScoreVideoPreview run={run} mediaUrl={playback.data?.videoUrl ?? run.mediaUrl} />
                 <DecisionSummary run={run} />
                 <StrengthsAndBlockers
                     run={run}
@@ -321,15 +325,17 @@ function ProcessingRun({
     run,
     stage,
     syncing,
+    mediaUrl,
     onRefresh,
 }: {
     run: TikTokScoreRun;
     stage: string;
     syncing: boolean;
+    mediaUrl: string | null;
     onRefresh: () => void;
 }) {
     return (
-        <div className="mx-auto flex max-w-3xl flex-col gap-5">
+        <div className="mx-auto flex max-w-5xl flex-col gap-5">
             <div>
                 <Button asChild variant="ghost" size="sm">
                     <Link to="/tiktok-scorer">
@@ -339,33 +345,41 @@ function ProcessingRun({
                 </Button>
             </div>
             <SurfaceCard padding="lg">
-                <div className="flex items-start gap-3">
-                    <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                    </span>
+                <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <ScoreVideoPreview run={run} mediaUrl={mediaUrl} compact />
                     <div>
-                        <h1 className="text-xl font-semibold text-text-primary">
-                            Analyzing {run.assetName}
-                        </h1>
-                        <p className="mt-1 text-sm text-text-secondary">
-                            This progress comes from the real job stage. No percentage or completion
-                            time is estimated.
-                        </p>
+                        <div className="flex items-start gap-3">
+                            <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                            </span>
+                            <div>
+                                <h1 className="text-xl font-semibold text-text-primary">
+                                    Analyzing this TikTok
+                                </h1>
+                                <p className="mt-1 text-sm text-text-secondary">
+                                    The scorer is reading the actual video evidence. If a stage
+                                    retries, keep this page open or check again in a moment.
+                                </p>
+                                <p className="mt-2 text-xs text-text-tertiary">{run.assetName}</p>
+                            </div>
+                        </div>
+                        <div className="mt-6">
+                            <ProcessingStepper steps={buildProcessingSteps(stage)} />
+                        </div>
+                        <div className="mt-5 flex justify-end">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={onRefresh}
+                                disabled={syncing}
+                            >
+                                <RefreshCw
+                                    className={syncing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+                                />
+                                Check now
+                            </Button>
+                        </div>
                     </div>
-                </div>
-                <div className="mt-6">
-                    <ProcessingStepper steps={buildProcessingSteps(stage)} />
-                </div>
-                <div className="mt-5 flex justify-end">
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={onRefresh}
-                        disabled={syncing}
-                    >
-                        <RefreshCw className={syncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                        Check now
-                    </Button>
                 </div>
             </SurfaceCard>
         </div>
@@ -375,39 +389,109 @@ function ProcessingRun({
 function FailedRun({
     run,
     message,
+    mediaUrl,
     onRetry,
 }: {
     run: TikTokScoreRun;
     message: string | null;
+    mediaUrl: string | null;
     onRetry: () => void;
 }) {
     return (
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-5xl">
             <SurfaceCard variant="critical" padding="lg">
-                <EmptyState
-                    icon={AlertTriangle}
-                    title="This analysis failed"
-                    description={
-                        message ??
-                        "The scorer could not complete this run. The immutable video version remains available."
-                    }
-                    action={
-                        <>
-                            <Button type="button" variant="secondary" onClick={onRetry}>
-                                <RefreshCw className="h-4 w-4" />
-                                Retry status
-                            </Button>
-                            <Button asChild>
-                                <Link to="/tiktok-scorer/new">Start a new score</Link>
-                            </Button>
-                        </>
-                    }
-                />
-                <p className="text-center text-xs text-text-tertiary">
-                    Failure code: {run.failureCode ?? "Not supplied"}
-                </p>
+                <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <ScoreVideoPreview run={run} mediaUrl={mediaUrl} compact />
+                    <div>
+                        <EmptyState
+                            icon={AlertTriangle}
+                            title="This analysis needs a retry"
+                            description={
+                                message ??
+                                "The scorer could not complete this run. The immutable video version remains available."
+                            }
+                            action={
+                                <>
+                                    <Button type="button" variant="secondary" onClick={onRetry}>
+                                        <RefreshCw className="h-4 w-4" />
+                                        Retry status
+                                    </Button>
+                                    <Button asChild>
+                                        <Link to="/tiktok-scorer/new">Start a new score</Link>
+                                    </Button>
+                                </>
+                            }
+                        />
+                        <p className="text-center text-xs text-text-tertiary">
+                            Failure code: {run.failureCode ?? "Not supplied"}
+                        </p>
+                    </div>
+                </div>
             </SurfaceCard>
         </div>
+    );
+}
+
+function ScoreVideoPreview({
+    run,
+    mediaUrl,
+    compact = false,
+}: {
+    run: TikTokScoreRun;
+    mediaUrl: string | null;
+    compact?: boolean;
+}) {
+    const title = run.productName ? `${run.productName} video` : "TikTok video";
+    return (
+        <SurfaceCard padding={compact ? "sm" : "lg"}>
+            <div
+                className={
+                    compact ? "mx-auto max-w-[180px]" : "grid gap-5 md:grid-cols-[220px_1fr]"
+                }
+            >
+                <div className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-divider bg-surface-soft shadow-soft-card">
+                    {mediaUrl ? (
+                        <video
+                            src={mediaUrl}
+                            aria-label={`Preview of ${run.assetName}`}
+                            className="h-full w-full object-cover"
+                            controls={!compact}
+                            muted={compact}
+                            playsInline
+                            preload="metadata"
+                        />
+                    ) : (
+                        <div className="grid h-full w-full place-items-center bg-gradient-to-b from-primary-softer to-surface-soft text-primary">
+                            <Video className={compact ? "h-8 w-8" : "h-10 w-10"} />
+                        </div>
+                    )}
+                    <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                        TikTok 9:16
+                    </span>
+                </div>
+                {!compact && (
+                    <div className="flex flex-col justify-center">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                            Video under review
+                        </p>
+                        <h1 className="mt-2 text-2xl font-semibold text-text-primary">{title}</h1>
+                        <p className="mt-2 text-sm text-text-secondary">
+                            Recommendations are grounded in this uploaded video and verified product
+                            context. Filename stays as metadata, not the main object.
+                        </p>
+                        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                            <SummaryItem label="File" value={run.assetName} />
+                            <SummaryItem
+                                label="Product"
+                                value={run.productName ?? "No product selected"}
+                            />
+                            <SummaryItem label="Mode" value={humanize(run.scoreMode)} />
+                            <SummaryItem label="Status" value={humanize(run.status)} />
+                        </dl>
+                    </div>
+                )}
+            </div>
+        </SurfaceCard>
     );
 }
 

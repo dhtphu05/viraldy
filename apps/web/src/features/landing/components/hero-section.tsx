@@ -7,6 +7,33 @@ import { SectionWrapper } from "./section-wrapper";
 
 type MoneyShotState = "product" | "directions" | "qa" | "revision";
 
+const heroStoryCopy: Record<MoneyShotState, { label: string; question: string; answer: string; chips: string[] }> = {
+    product: {
+        label: "01 Find the Angle",
+        question: "Not sure which angle is actually worth filming?",
+        answer: "Turn one product into different creative bets with different buyers, hooks, proof moments, and test hypotheses.",
+        chips: ["3 product-specific directions", "Selected angle", "What each test should teach"],
+    },
+    directions: {
+        label: "02 Brief the Creator",
+        question: "Know the angle — but not what your creator should actually film?",
+        answer: "Turn the selected direction into a shoot-ready plan with scenes, proof requirements, claims to avoid, and CTA requirements.",
+        chips: ["Storyboard", "Must-show proof", "Claim guardrails"],
+    },
+    qa: {
+        label: "03 Review the Draft",
+        question: "Creator sent the draft. Is it ready, or does it just look okay?",
+        answer: "See exactly what can be edited, what needs a creator reshoot, and what is already strong enough to keep.",
+        chips: ["Edit vs reshoot", "Evidence-backed finding", "Keep strengths"],
+    },
+    revision: {
+        label: "04 Verify the Revision",
+        question: "Version 2 is back. Did it actually fix the important problems?",
+        answer: "Compare Draft 1 against Draft 2 so you know whether blockers were resolved before approval or spend.",
+        chips: ["71 → 87", "Resolved blockers", "Small paid test"],
+    },
+};
+
 export function HeroSection() {
     const [activeStep, setActiveStep] = useState<MoneyShotState>("product");
     const [isPaused, setIsPaused] = useState(false);
@@ -21,7 +48,7 @@ export function HeroSection() {
                 if (prev === "qa") return "revision";
                 return "product";
             });
-        }, 4500);
+        }, 3000);
 
         return () => clearInterval(interval);
     }, [isPaused]);
@@ -30,7 +57,7 @@ export function HeroSection() {
         { id: "product", label: "1. Add Product", desc: "US Market • $29.99 Steamer" },
         { id: "directions", label: "2. Generate Angles", desc: "3 Differentiated Bets" },
         { id: "qa", label: "3. Check Draft 1", desc: "Score 71 • Flag Blockers" },
-        { id: "revision", label: "4. Verify Revision", desc: "Score 92 • Blockers Resolved" },
+        { id: "revision", label: "4. Verify Revision", desc: "Score 87 • Blockers Resolved" },
     ];
 
     return (
@@ -38,7 +65,7 @@ export function HeroSection() {
             {/* Background Gradients */}
             <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,var(--primary-soft),transparent)] animate-pulse duration-[8000ms]"
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,var(--primary-soft),transparent)]"
             />
             <div
                 aria-hidden
@@ -48,7 +75,7 @@ export function HeroSection() {
             <div className="relative mx-auto max-w-4xl text-center">
                 {/* Eyebrow */}
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary-softer px-4 py-1.5 shadow-sm transition-transform duration-300 hover:scale-105">
-                    <Sparkles className="h-3.5 w-3.5 text-primary animate-spin" style={{ animationDuration: "3s" }} />
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
                     <span className="text-xs font-semibold text-primary uppercase tracking-wider">
                         Creative Intelligence for TikTok Shop · POD · Dropshipping
                     </span>
@@ -58,7 +85,7 @@ export function HeroSection() {
                 <h1 className="text-4xl font-bold leading-tight tracking-tight text-text-primary sm:text-5xl lg:text-6xl">
                     Turn your product into
                     <br />
-                    <span className="bg-gradient-to-r from-primary via-warn to-primary bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
+                    <span className="text-primary">
                         creatives worth testing.
                     </span>
                 </h1>
@@ -67,6 +94,27 @@ export function HeroSection() {
                 <p className="mt-6 mx-auto max-w-2xl text-base leading-relaxed text-text-secondary sm:text-lg">
                     Viraldy helps sellers find stronger creative angles, turn them into creator-ready plans, and catch exactly what to edit or reshoot before spending more on content.
                 </p>
+
+                <div className="mt-6 mx-auto min-h-[142px] max-w-2xl rounded-2xl border border-primary/20 bg-surface p-4 text-left shadow-soft-card sm:p-5">
+                    <div key={activeStep} className="analysis-state-enter">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                            {heroStoryCopy[activeStep].label}
+                        </span>
+                        <p className="mt-2 text-lg font-bold leading-snug text-text-primary sm:text-xl">
+                            {heroStoryCopy[activeStep].question}
+                        </p>
+                        <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                            {heroStoryCopy[activeStep].answer}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {heroStoryCopy[activeStep].chips.map((chip) => (
+                                <span key={chip} className="rounded-full bg-primary-soft px-2.5 py-1 text-[10px] font-bold text-primary">
+                                    {chip}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
 
                 {/* Breadcrumb Flow Support Line */}
                 <div className="mt-8 mx-auto max-w-xl flex flex-wrap items-center justify-center gap-2 text-xs font-bold text-text-tertiary">
@@ -108,7 +156,7 @@ export function HeroSection() {
                 <div className="mt-8 max-w-md mx-auto grid grid-cols-3 gap-2 text-[10px] font-semibold text-text-tertiary tracking-wide uppercase">
                     <div>No generic scripts.</div>
                     <div>No vague &ldquo;make hook stronger.&rdquo;</div>
-                    <div>No guessing creator briefings.</div>
+                    <div>No guessing what to tell your creator.</div>
                 </div>
             </div>
 
@@ -156,7 +204,7 @@ export function HeroSection() {
                                 Resume Autoplay
                             </button>
                         )}
-                        <StatusChip tone="info" dot>Product Theatre</StatusChip>
+                        <StatusChip tone="info" dot>Creative Workflow</StatusChip>
                     </div>
                 </div>
 
@@ -283,7 +331,7 @@ export function HeroSection() {
                                 <div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary block">Panel C · Review Output</span>
-                                        <span className="text-base font-bold text-ok">92<span className="text-xs text-text-tertiary">/100</span></span>
+                                        <span className="text-base font-bold text-ok">87<span className="text-xs text-text-tertiary">/100</span></span>
                                     </div>
                                     <h4 className="mt-2 text-sm font-bold text-text-primary">CREATOR DRAFT</h4>
 

@@ -15,6 +15,7 @@ export type ShellNavItem = {
     to: string;
     label: string;
     icon: ComponentType<{ className?: string }>;
+    iconSrc?: string;
 };
 
 export type ShellNavGroup = {
@@ -26,30 +27,70 @@ export const navigationGroups: ShellNavGroup[] = [
     {
         label: "Workspace",
         items: [
-            { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
-            { to: "/mvp", label: "Production Run", icon: Workflow },
+            {
+                to: "/dashboard",
+                label: "Overview",
+                icon: LayoutDashboard,
+                iconSrc: "/sidebar-icons/overview.png",
+            },
+            {
+                to: "/mvp",
+                label: "Production Run",
+                icon: Workflow,
+                iconSrc: "/sidebar-icons/production_run.png",
+            },
         ],
     },
     {
         label: "Create & Operate",
         items: [
-            { to: "/creative-library", label: "Creative Library", icon: Images },
+            {
+                to: "/creative-library",
+                label: "Creative Library",
+                icon: Images,
+                iconSrc: "/sidebar-icons/creative_lib.png",
+            },
             { to: "/tiktok-scorer", label: "TikTok Scorer", icon: ScanSearch },
-            { to: "/campaigns", label: "Campaigns", icon: Megaphone },
+            {
+                to: "/campaigns",
+                label: "Campaigns",
+                icon: Megaphone,
+                iconSrc: "/sidebar-icons/campaign.png",
+            },
         ],
     },
     {
         label: "Validate & Learn",
         items: [
-            { to: "/ugc-review", label: "UGC Review", icon: Video },
-            { to: "/performance", label: "Performance", icon: BarChart3 },
+            {
+                to: "/ugc-review",
+                label: "UGC Review",
+                icon: Video,
+                iconSrc: "/sidebar-icons/ugc_review.png",
+            },
+            {
+                to: "/performance",
+                label: "Performance",
+                icon: BarChart3,
+                iconSrc: "/sidebar-icons/performance.png",
+            },
         ],
     },
     {
         label: "Manage",
         items: [
-            { to: "/products", label: "Products", icon: Package },
-            { to: "/settings", label: "Settings", icon: Settings },
+            {
+                to: "/products",
+                label: "Products",
+                icon: Package,
+                iconSrc: "/sidebar-icons/product.png",
+            },
+            {
+                to: "/settings",
+                label: "Settings",
+                icon: Settings,
+                iconSrc: "/sidebar-icons/setting.png",
+            },
         ],
     },
 ];

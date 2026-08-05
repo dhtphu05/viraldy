@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { BrandLogo } from "@/shared/ui/brand-logo";
 import { Button } from "@/shared/ui/button";
 
 const navLinks = [
@@ -14,8 +15,8 @@ export function LandingNav() {
     return (
         <header className="sticky top-0 z-50 border-b border-hairline bg-background/80 backdrop-blur-md">
             <nav className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-4 sm:px-6 lg:px-10">
-                <a href="#" className="text-lg font-bold text-text-primary">
-                    VIRALDY
+                <a href="#" className="inline-flex items-center" aria-label="Viraldy home">
+                    <BrandLogo className="h-10 w-[150px]" />
                 </a>
 
                 <div className="hidden items-center gap-6 lg:flex">

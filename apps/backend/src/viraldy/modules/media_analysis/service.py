@@ -42,6 +42,7 @@ from viraldy.modules.creative_domain.schema_versions import (
 )
 from viraldy.modules.media_analysis.contracts import MediaObservationBundleV1, TimeRangeV1
 from viraldy.modules.media_analysis.fixtures import fixture_media_contract, is_known_fixture
+from viraldy.modules.media_analysis.json_safety import sanitize_postgres_json
 from viraldy.modules.media_analysis.models import EvidenceItemModel
 from viraldy.modules.media_analysis.provider import (
     LiveAnalysisProvider,
@@ -730,22 +731,25 @@ class SyncMediaEvidencePipeline:
         audio_key = contract.get("audio_storage_key", default_audio_key)
         if audio_key is not None:
             rows.append(("audio", audio_key, {"fixture": mode == "fixture"}))
-        return [
-            {
+        artifact_rows: list[dict[str, Any]] = []
+        for ordinal, (artifact_type, storage_key, payload) in enumerate(rows):
+            safe_payload = sanitize_postgres_json(payload)
+            artifact_rows.append(
+                {
                 "workspace_id": workspace_id,
                 "asset_version_id": asset_version_id,
                 "artifact_type": artifact_type,
                 "stage": _artifact_stage(artifact_type),
                 "ordinal": ordinal,
                 "storage_key": storage_key,
-                "sha256": _hash_json({"storage_key": storage_key, "payload": payload}),
-                "payload_json": payload,
+                "sha256": _hash_json({"storage_key": storage_key, "payload": safe_payload}),
+                "payload_json": safe_payload,
                 "provider": provider,
                 "model_version": model_version,
                 "analysis_mode": mode,
-            }
-            for ordinal, (artifact_type, storage_key, payload) in enumerate(rows)
-        ]
+                }
+            )
+        return artifact_rows
 
     def _evidence_rows(
         self,
@@ -1101,6 +1105,7 @@ def _row(
     model_version: str,
     value: dict[str, Any],
 ) -> dict[str, Any]:
+    safe_value = sanitize_postgres_json(value)
     return {
         "asset_version_id": asset_version_id,
         "analysis_run_type": run_type,
@@ -1112,19 +1117,19 @@ def _row(
                 "run_type": run_type,
                 "evidence_type": evidence_type,
                 "source": source,
-                "value": value,
+                "value": safe_value,
             }
         ),
-        "start_ms": value.get("start_ms"),
-        "end_ms": value.get("end_ms"),
-        "frame_storage_key": _frame_storage_key(value),
-        "value_json": value,
-        "confidence": value.get("confidence"),
+        "start_ms": safe_value.get("start_ms"),
+        "end_ms": safe_value.get("end_ms"),
+        "frame_storage_key": _frame_storage_key(safe_value),
+        "value_json": safe_value,
+        "confidence": safe_value.get("confidence"),
         "source": source,
         "provider": provider,
         "model_version": model_version,
-        "evidence_schema_version": value.get("schema_version", EVIDENCE_SCHEMA_VERSION),
-        "observation_id": value.get("observation_id"),
+        "evidence_schema_version": safe_value.get("schema_version", EVIDENCE_SCHEMA_VERSION),
+        "observation_id": safe_value.get("observation_id"),
     }
 
 
