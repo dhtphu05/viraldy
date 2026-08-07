@@ -286,6 +286,34 @@ class MediaObservationBundleV1(MediaObservationBase):
     platform: PlatformObservationV1 = Field(default_factory=PlatformObservationV1)
     uncertainties: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_derived_visibility_summary(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        appearances = data.get("product_appearances")
+        visibility = data.get("product_visibility")
+        if not isinstance(appearances, list) or not isinstance(visibility, dict):
+            return data
+        starts = [
+            time_range["start_ms"]
+            for item in appearances
+            if isinstance(item, dict)
+            and isinstance((time_range := item.get("time_range")), dict)
+            and isinstance(time_range.get("start_ms"), int)
+        ]
+        if not starts:
+            return data
+        earliest_start_ms = min(starts)
+        if visibility.get("first_appearance_ms") == earliest_start_ms:
+            return data
+        normalized = dict(data)
+        normalized["product_visibility"] = {
+            **visibility,
+            "first_appearance_ms": earliest_start_ms,
+        }
+        return normalized
+
     @model_validator(mode="after")
     def validate_bundle(self) -> MediaObservationBundleV1:
         self._validate_ranges_within_duration()

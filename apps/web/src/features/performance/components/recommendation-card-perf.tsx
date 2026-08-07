@@ -4,6 +4,14 @@ import type { PerfRecommendation } from "@/features/performance/types/performanc
 import { decisionTone } from "@/features/performance/lib/performanceEngine";
 import { cn } from "@/shared/lib/utils";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
+import { ViraldyIcon, type ViraldyIconName } from "@/shared/ui/viraldy-icon";
+
+const decisionIcon: Partial<Record<PerfRecommendation["group"], ViraldyIconName>> = {
+    Scale: "scale",
+    Fix: "fix",
+    Rehire: "rehire",
+    Stop: "stopTesting",
+};
 
 export function RecommendationCardPerf({
     rec,
@@ -24,6 +32,7 @@ export function RecommendationCardPerf({
         Stop: "Accept stop",
         Refresh: "Refresh hook",
     };
+    const iconName = decisionIcon[rec.group];
 
     return (
         <article
@@ -50,6 +59,7 @@ export function RecommendationCardPerf({
             )}
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
+                    {iconName && <ViraldyIcon name={iconName} size="xl" />}
                     <StatusChip tone={decisionTone[rec.group]}>{rec.kind}</StatusChip>
                     <span className="text-xs text-text-tertiary">{rec.confidence} confidence</span>
                     <span className="min-w-0 truncate text-xs text-text-tertiary">

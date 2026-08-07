@@ -1,18 +1,15 @@
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
-import { Sparkles, Wrench, RefreshCcw, Ban } from "lucide-react";
 import type { Recommendation, RecommendationKind, MetricTone } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
+import { ViraldyIcon, type ViraldyIconName } from "@/shared/ui/viraldy-icon";
 
-const kindMeta: Record<
-    RecommendationKind,
-    { tone: MetricTone; icon: React.ComponentType<{ className?: string }> }
-> = {
-    Scale: { tone: "ok", icon: Sparkles },
-    Fix: { tone: "warn", icon: Wrench },
-    Rehire: { tone: "info", icon: RefreshCcw },
-    "Stop testing": { tone: "destructive", icon: Ban },
+const kindMeta: Record<RecommendationKind, { tone: MetricTone; iconName: ViraldyIconName }> = {
+    Scale: { tone: "ok", iconName: "scale" },
+    Fix: { tone: "warn", iconName: "fix" },
+    Rehire: { tone: "info", iconName: "rehire" },
+    "Stop testing": { tone: "destructive", iconName: "stopTesting" },
 };
 
 export function RecommendationCard({
@@ -29,7 +26,6 @@ export function RecommendationCard({
     className?: string;
 }) {
     const meta = kindMeta[rec.kind];
-    const Icon = meta.icon;
     const primaryLabel =
         rec.kind === "Scale"
             ? "Create variants"
@@ -42,8 +38,8 @@ export function RecommendationCard({
         <SurfaceCard padding="md" className={cn("flex flex-col gap-4", className)}>
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-full bg-surface-soft text-text-primary">
-                        <Icon className="h-3.5 w-3.5" />
+                    <span className="grid h-7 w-7 place-items-center">
+                        <ViraldyIcon name={meta.iconName} size="xl" />
                     </span>
                     <StatusChip tone={meta.tone} dot>
                         {rec.kind}

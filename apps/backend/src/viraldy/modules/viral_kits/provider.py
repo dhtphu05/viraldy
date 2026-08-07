@@ -156,13 +156,27 @@ class LiveViralKitProvider:
                     viral_kit_id,
                     workspace_id,
                     version,
+                    created_by,
+                    created_at,
                     request,
                     product_snapshot,
                     pattern_version_ids,
+                    model_run_id,
                 ),
             )
             return ViralKitProviderExecution(
-                output=ViralKitV1.model_validate(result.parsed_output),
+                output=normalize_viral_kit_output(
+                    result.parsed_output,
+                    viral_kit_id=viral_kit_id,
+                    workspace_id=workspace_id,
+                    version=version,
+                    created_by=created_by,
+                    created_at=created_at,
+                    request=request,
+                    product_snapshot=product_snapshot,
+                    pattern_version_ids=pattern_version_ids,
+                    model_run_id=model_run_id,
+                ),
                 provider_result=result,
             )
 
@@ -196,14 +210,28 @@ class LiveViralKitProvider:
             payload["max_tokens"] = self._settings.ai_max_output_tokens
         raw = extract_message_json(self._client.chat_json(payload))
         try:
-            output = ViralKitV1.model_validate(raw)
+            output = normalize_viral_kit_output(
+                raw,
+                viral_kit_id=viral_kit_id,
+                workspace_id=workspace_id,
+                version=version,
+                created_by=created_by,
+                created_at=created_at,
+                request=request,
+                product_snapshot=product_snapshot,
+                pattern_version_ids=pattern_version_ids,
+                model_run_id=model_run_id,
+            )
             _native_output_validator(
                 viral_kit_id,
                 workspace_id,
                 version,
+                created_by,
+                created_at,
                 request,
                 product_snapshot,
                 pattern_version_ids,
+                model_run_id,
             )(output)
             return ViralKitProviderExecution(
                 output=output,
@@ -220,14 +248,28 @@ def _native_output_validator(
     viral_kit_id: UUID,
     workspace_id: UUID,
     version: int,
+    created_by: UUID,
+    created_at: str,
     request: CreateViralKitRequest,
     product_snapshot: dict[str, object],
     pattern_version_ids: list[UUID],
+    model_run_id: UUID,
 ) -> Callable[[BaseModel], None]:
     expected_product_id = UUID(str(product_snapshot["product_id"]))
 
     def validate(output: BaseModel) -> None:
-        viral_kit = ViralKitV1.model_validate(output)
+        viral_kit = normalize_viral_kit_output(
+            output,
+            viral_kit_id=viral_kit_id,
+            workspace_id=workspace_id,
+            version=version,
+            created_by=created_by,
+            created_at=created_at,
+            request=request,
+            product_snapshot=product_snapshot,
+            pattern_version_ids=pattern_version_ids,
+            model_run_id=model_run_id,
+        )
         if (
             viral_kit.id != viral_kit_id
             or viral_kit.workspace_id != workspace_id
@@ -250,6 +292,122 @@ def _native_output_validator(
         )
 
     return validate
+
+
+def normalize_viral_kit_output(
+    output: BaseModel | dict[str, object],
+    *,
+    viral_kit_id: UUID,
+    workspace_id: UUID,
+    version: int,
+    created_by: UUID,
+    created_at: str,
+    request: CreateViralKitRequest,
+    product_snapshot: dict[str, object],
+    pattern_version_ids: list[UUID],
+    model_run_id: UUID,
+) -> ViralKitV1:
+    payload = (
+        output.model_dump(mode="json")
+        if isinstance(output, BaseModel)
+        else dict(output)
+    )
+    product_context = ProductContextV1.model_validate(product_snapshot["product_context"])
+    constraints = _constraints(product_context, request)
+    required_claims = _claim_guardrails(constraints.governance)
+    required_disclosures = list(constraints.governance.required_disclosures)
+    normalized_concepts = []
+    for raw_concept in payload.get("concepts", []):
+        if not isinstance(raw_concept, dict):
+            normalized_concepts.append(raw_concept)
+            continue
+        concept = dict(raw_concept)
+        concept["claims_to_avoid"] = _merge_required_strings(
+            concept.get("claims_to_avoid"),
+            required_claims,
+        )
+        concept["required_disclosures"] = _merge_required_strings(
+            concept.get("required_disclosures"),
+            required_disclosures,
+        )
+        _separate_buyer_and_creator_persona(concept, product_context, constraints)
+        must_show_items = (
+            list(concept.get("must_show", []))
+            if isinstance(concept.get("must_show"), list)
+            else []
+        )
+        if request.commercial_constraints.product_tag_required and not any(
+            isinstance(requirement, dict)
+            and requirement.get("requirement_type") == "product_tag_presence"
+            for requirement in must_show_items
+        ):
+            must_show_items.append(
+                ViralKitRequirementDraftV1(
+                    id=f"{concept.get('id', 'concept')}_product_tag",
+                    requirement_type="product_tag_presence",
+                    instruction=(
+                        "Include the TikTok Shop product tag only after product context is clear."
+                    ),
+                    required=True,
+                    severity="hard",
+                    expected_before_ms=None,
+                    matcher_hint="product_tag_presence",
+                ).model_dump(mode="json")
+            )
+            concept["must_show"] = must_show_items
+        normalized_concepts.append(concept)
+
+    payload.update(
+        {
+            "id": str(viral_kit_id),
+            "workspace_id": str(workspace_id),
+            "version": version,
+            "status": "ready_for_review",
+            "product": ViralKitProductSnapshotV1(
+                product_id=UUID(str(product_snapshot["product_id"])),
+                product_context_schema_version=str(
+                    product_snapshot["context_schema_version"]
+                ),
+                product_context_version=request.expected_product_context_version,
+                snapshot_json=product_context,
+                captured_at=created_at,
+            ).model_dump(mode="json"),
+            "objective": request.objective,
+            "platform": request.platform,
+            "target_market": request.target_market,
+            "constraints": constraints.model_dump(mode="json"),
+            "concepts": normalized_concepts,
+            "provenance": ViralKitProvenanceV1(
+                pattern_kit_version_ids=pattern_version_ids,
+                adaptation_schema_version=ADAPTATION_SCHEMA_VERSION,
+                model_run_id=model_run_id,
+                prompt_version=VIRAL_KIT_PROMPT_VERSION,
+            ).model_dump(mode="json"),
+            "created_by": str(created_by),
+            "created_at": created_at,
+        }
+    )
+    return ViralKitV1.model_validate(payload)
+
+
+def _merge_required_strings(
+    current: object,
+    required: list[str],
+) -> list[str]:
+    values = list(current) if isinstance(current, list) else []
+    return _unique([str(value) for value in values] + required)
+
+
+def _separate_buyer_and_creator_persona(
+    concept: dict[str, object],
+    context: ProductContextV1,
+    constraints: ViralKitConstraintsV1,
+) -> None:
+    buyer_label = str(concept.get("buyer_persona_label") or "").strip()
+    creator = str(concept.get("creator_persona") or "").strip()
+    if not buyer_label or creator.casefold() != buyer_label.casefold():
+        return
+    concept["creator_persona"] = _creator_persona(context, constraints, buyer_label)
 
 
 def _validate_native_viral_kit_business_rules(

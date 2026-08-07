@@ -1,0 +1,11 @@
+{
+  "failure_stage": "quick_score",
+  "golden_case": null,
+  "mode": "live",
+  "model_runs_verified": false,
+  "run_id": "live-product-run-20260806T021014Z",
+  "safe_error_code": "SMOKE_FLOW_FAILED",
+  "safe_error_type": "KeyError",
+  "status": "error",
+  "workspace_deletion_status": "succeeded"
+}

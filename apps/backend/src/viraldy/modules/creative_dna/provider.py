@@ -93,8 +93,13 @@ class LiveCreativeDnaProvider:
             CreativeDnaV1,
             output_validator=validator,
         )
+        output = normalize_creative_dna_evidence_ids(
+            CreativeDnaV1.model_validate(result.parsed_output),
+            {item.id for item in evidence},
+        )
+        validator(output)
         return CreativeDnaProviderExecution(
-            output=CreativeDnaV1.model_validate(result.parsed_output),
+            output=output,
             provider_request_id=result.provider_request_id,
             http_status=result.http_status,
             latency_ms=result.latency_ms,
@@ -157,7 +162,10 @@ def build_creative_dna_output_validator(
     allowed_timestamps = _evidence_timestamps(evidence)
 
     def validate(output: BaseModel) -> None:
-        dna = CreativeDnaV1.model_validate(output)
+        dna = normalize_creative_dna_evidence_ids(
+            CreativeDnaV1.model_validate(output),
+            allowed_evidence_ids,
+        )
         _validate_grounded_collections(dna)
         payload = dna.model_dump(mode="python")
         referenced_ids: set[UUID] = set()
@@ -184,6 +192,32 @@ def build_creative_dna_output_validator(
             raise ValueError("Creative DNA contains a duration beyond media duration.")
 
     return validate
+
+
+def normalize_creative_dna_evidence_ids(
+    output: CreativeDnaV1,
+    allowed_evidence_ids: set[UUID],
+) -> CreativeDnaV1:
+    payload = output.model_dump(mode="python")
+    _prune_foreign_evidence_ids(payload, allowed_evidence_ids)
+    return CreativeDnaV1.model_validate(payload)
+
+
+def _prune_foreign_evidence_ids(value: object, allowed_evidence_ids: set[UUID]) -> None:
+    if isinstance(value, dict):
+        raw_ids = value.get("evidence_ids")
+        if isinstance(raw_ids, list):
+            value["evidence_ids"] = [
+                evidence_id
+                for evidence_id in raw_ids
+                if isinstance(evidence_id, UUID) and evidence_id in allowed_evidence_ids
+            ]
+        for nested in value.values():
+            _prune_foreign_evidence_ids(nested, allowed_evidence_ids)
+        return
+    if isinstance(value, list):
+        for nested in value:
+            _prune_foreign_evidence_ids(nested, allowed_evidence_ids)
 
 
 def _validate_grounded_collections(dna: CreativeDnaV1) -> None:

@@ -10,12 +10,13 @@ import {
     Workflow,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import type { ViraldyIconName } from "@/shared/ui/viraldy-icon";
 
 export type ShellNavItem = {
     to: string;
     label: string;
     icon: ComponentType<{ className?: string }>;
-    iconSrc?: string;
+    iconName?: ViraldyIconName;
 };
 
 export type ShellNavGroup = {
@@ -31,13 +32,13 @@ export const navigationGroups: ShellNavGroup[] = [
                 to: "/dashboard",
                 label: "Overview",
                 icon: LayoutDashboard,
-                iconSrc: "/sidebar-icons/overview.png",
+                iconName: "overview",
             },
             {
                 to: "/mvp",
                 label: "Production Run",
                 icon: Workflow,
-                iconSrc: "/sidebar-icons/production_run.png",
+                iconName: "productionRun",
             },
         ],
     },
@@ -48,14 +49,19 @@ export const navigationGroups: ShellNavGroup[] = [
                 to: "/creative-library",
                 label: "Creative Library",
                 icon: Images,
-                iconSrc: "/sidebar-icons/creative_lib.png",
+                iconName: "creativeLibrary",
             },
-            { to: "/tiktok-scorer", label: "TikTok Scorer", icon: ScanSearch },
+            {
+                to: "/tiktok-scorer",
+                label: "TikTok Scorer",
+                icon: ScanSearch,
+                iconName: "tiktokScorer",
+            },
             {
                 to: "/campaigns",
                 label: "Campaigns",
                 icon: Megaphone,
-                iconSrc: "/sidebar-icons/campaign.png",
+                iconName: "campaigns",
             },
         ],
     },
@@ -66,13 +72,13 @@ export const navigationGroups: ShellNavGroup[] = [
                 to: "/ugc-review",
                 label: "UGC Review",
                 icon: Video,
-                iconSrc: "/sidebar-icons/ugc_review.png",
+                iconName: "ugcReview",
             },
             {
                 to: "/performance",
                 label: "Performance",
                 icon: BarChart3,
-                iconSrc: "/sidebar-icons/performance.png",
+                iconName: "performanceReport",
             },
         ],
     },
@@ -83,14 +89,9 @@ export const navigationGroups: ShellNavGroup[] = [
                 to: "/products",
                 label: "Products",
                 icon: Package,
-                iconSrc: "/sidebar-icons/product.png",
+                iconName: "productCatalog",
             },
-            {
-                to: "/settings",
-                label: "Settings",
-                icon: Settings,
-                iconSrc: "/sidebar-icons/setting.png",
-            },
+            { to: "/settings", label: "Settings", icon: Settings },
         ],
     },
 ];

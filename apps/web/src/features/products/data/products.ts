@@ -10,6 +10,8 @@ export const seedProducts: SeedProduct[] = [
         fulfillmentRisk: "Low",
         linkedCampaignCount: 2,
         colorSeed: "#ff9a8b",
+        imageUrl: "/demo-media/kitchen_organizer.jpg",
+        imageAlt: "White minimalist compact kitchen organizer rack sitting on a clean marble countertop",
     },
     {
         id: "p-2",
@@ -20,6 +22,8 @@ export const seedProducts: SeedProduct[] = [
         fulfillmentRisk: "Medium",
         linkedCampaignCount: 1,
         colorSeed: "#a0c4ff",
+        imageUrl: "/demo-media/dog_mom_blanket.jpg",
+        imageAlt: "Cozy beige knitted throw blanket with 'Best Dog Mom' lettering and paw prints draped over a grey sofa with a sleeping dog",
     },
     {
         id: "p-3",
@@ -30,6 +34,8 @@ export const seedProducts: SeedProduct[] = [
         fulfillmentRisk: "Low",
         linkedCampaignCount: 1,
         colorSeed: "#ffc6ff",
+        imageUrl: "/demo-media/beauty_mirror.jpg",
+        imageAlt: "Premium round lighted beauty makeup vanity mirror with LED ring light on a wooden table with cosmetics",
     },
     {
         id: "p-4",
@@ -40,6 +46,8 @@ export const seedProducts: SeedProduct[] = [
         fulfillmentRisk: "Low",
         linkedCampaignCount: 1,
         colorSeed: "#caffbf",
+        imageUrl: "/demo-media/pet_hair_roller.jpg",
+        imageAlt: "Green and white ergonomic pet hair removal lint roller on a neutral background",
     },
     {
         id: "p-5",
@@ -50,6 +58,8 @@ export const seedProducts: SeedProduct[] = [
         fulfillmentRisk: "High",
         linkedCampaignCount: 0,
         colorSeed: "#ffd6a5",
+        imageUrl: "/demo-media/family_name_sign.jpg",
+        imageAlt: "Rustic engraved wooden family name sign saying 'The Millers Est. 2024' hanging on a beige wall in a decorated living space",
     },
     {
         id: "p-sofa-cover",

@@ -803,6 +803,8 @@ function ProductionRunRoute() {
                         product?.product_context.commercial?.product_tag_required ?? true,
                     shipping_claim_policy: "use_product_context_only",
                 },
+                applicability_override_reason:
+                    "User confirmed this PatternKit inside the MVP Product Run workflow.",
                 concept_count: 3,
             }),
         onSuccess: (created) => {

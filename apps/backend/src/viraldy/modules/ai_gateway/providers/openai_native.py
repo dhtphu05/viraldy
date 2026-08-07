@@ -124,11 +124,21 @@ class OpenAINativeProvider:
             request.developer_prompt,
         )
         repair_attempt_count = 0
+        incomplete_retry_count = 0
+        current_max_output_tokens = (
+            request.max_output_tokens or self._settings.openai_max_output_tokens
+        )
         started = time.monotonic()
 
         while True:
             raw_response = None
             try:
+                idempotency_key = request.idempotency_key
+                if incomplete_retry_count:
+                    idempotency_key = (
+                        f"{request.idempotency_key or request.request_id}"
+                        f"-incomplete-retry-{incomplete_retry_count}"
+                    )
                 raw_response = self._client.responses.with_raw_response.parse(
                     model=request.model,
                     input=messages,
@@ -137,10 +147,8 @@ class OpenAINativeProvider:
                     reasoning={
                         "effort": request.reasoning_effort or self._settings.openai_reasoning_effort
                     },
-                    max_output_tokens=(
-                        request.max_output_tokens or self._settings.openai_max_output_tokens
-                    ),
-                    extra_headers=_request_headers(request.request_id, request.idempotency_key),
+                    max_output_tokens=current_max_output_tokens,
+                    extra_headers=_request_headers(request.request_id, idempotency_key),
                     timeout=self._settings.openai_request_timeout_seconds,
                 )
                 response = raw_response.parse()
@@ -201,6 +209,26 @@ class OpenAINativeProvider:
 
             if response.status != "completed":
                 incomplete_reason = _incomplete_reason(response)
+                expanded_max_output_tokens = max(
+                    current_max_output_tokens,
+                    self._settings.openai_max_output_tokens,
+                )
+                if (
+                    response.status == "incomplete"
+                    and incomplete_reason == "max_output_tokens"
+                    and incomplete_retry_count == 0
+                    and expanded_max_output_tokens > current_max_output_tokens
+                ):
+                    incomplete_retry_count += 1
+                    current_max_output_tokens = expanded_max_output_tokens
+                    logger.warning(
+                        "openai_structured_output_incomplete_retry",
+                        operation=request.operation,
+                        incomplete_reason=incomplete_reason,
+                        retry_attempt_count=incomplete_retry_count,
+                        max_output_tokens=current_max_output_tokens,
+                    )
+                    continue
                 raise _provider_error(
                     ProviderErrorCode.INCOMPLETE,
                     "OpenAI did not complete the structured generation request.",

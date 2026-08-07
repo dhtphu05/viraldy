@@ -1,0 +1,2213 @@
+{
+  "run_id": "live-product-run-20260806T021318Z",
+  "workspace_id": "cb53ecaa-6fc1-4dfa-af17-00468185f6de",
+  "source_media": "/Users/mac/Desktop/Viraldy/apps/web/public/demo-media/download (95) copy.mp4",
+  "model_runs": [
+    {
+      "id": "e2e14f92-5de2-47e3-95b9-dbe941c949df",
+      "operation": "audio_transcription",
+      "capability": "audio_transcription",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "whisper-1",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 3540,
+      "usage_json": {
+        "input_tokens": null,
+        "total_tokens": null,
+        "output_tokens": null,
+        "cached_input_tokens": null
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "tiktok_score_run",
+        "audio_artifact": "audio.wav",
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5"
+      },
+      "output_summary_json": {
+        "language": "english",
+        "text_length": 720,
+        "segment_count": 12
+      },
+      "created_at": "2026-08-06 02:13:20.269735+00:00",
+      "completed_at": "2026-08-06 02:13:25.814536+00:00"
+    },
+    {
+      "id": "7dda1ef2-ec14-49d1-8f54-4cafefa8ddd1",
+      "operation": "media_observation",
+      "capability": "visual_observations",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 1,
+      "latency_ms": 113744,
+      "usage_json": {
+        "input_tokens": 17839,
+        "total_tokens": 23583,
+        "output_tokens": 5744,
+        "cached_input_tokens": 17664
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "tiktok_score_run",
+        "frame_count": 12,
+        "ocr_segments": 0,
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+        "transcript_segments": 12
+      },
+      "output_summary_json": {
+        "cta_count": 1,
+        "hook_count": 1,
+        "claim_count": 5,
+        "demo_detected": true,
+        "product_appearance_count": 4
+      },
+      "created_at": "2026-08-06 02:13:20.269735+00:00",
+      "completed_at": "2026-08-06 02:15:19.585728+00:00"
+    },
+    {
+      "id": "f2971082-1694-4a43-974c-30cbe469329b",
+      "operation": "audio_transcription",
+      "capability": "audio_transcription",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "whisper-1",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 4216,
+      "usage_json": {
+        "input_tokens": null,
+        "total_tokens": null,
+        "output_tokens": null,
+        "cached_input_tokens": null
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "creative_dna_build",
+        "audio_artifact": "audio.wav",
+        "asset_version_id": "c41273f6-3964-42ed-99aa-2b9fccd4f1a6"
+      },
+      "output_summary_json": {
+        "language": "english",
+        "text_length": 720,
+        "segment_count": 12
+      },
+      "created_at": "2026-08-06 02:15:20.138173+00:00",
+      "completed_at": "2026-08-06 02:15:26.236649+00:00"
+    },
+    {
+      "id": "e08d8b13-579f-4877-b0bf-7313e43742c1",
+      "operation": "media_observation",
+      "capability": "visual_observations",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 65494,
+      "usage_json": {
+        "input_tokens": 17749,
+        "total_tokens": 22837,
+        "output_tokens": 5088,
+        "cached_input_tokens": 4224
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "creative_dna_build",
+        "frame_count": 12,
+        "ocr_segments": 0,
+        "asset_version_id": "c41273f6-3964-42ed-99aa-2b9fccd4f1a6",
+        "transcript_segments": 12
+      },
+      "output_summary_json": {
+        "cta_count": 1,
+        "hook_count": 1,
+        "claim_count": 5,
+        "demo_detected": true,
+        "product_appearance_count": 4
+      },
+      "created_at": "2026-08-06 02:15:20.138173+00:00",
+      "completed_at": "2026-08-06 02:16:31.761699+00:00"
+    },
+    {
+      "id": "a211e12d-71fc-407e-baa0-9a6d25860978",
+      "operation": "creative_dna_build",
+      "capability": "creative_dna_build",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 1,
+      "latency_ms": 152287,
+      "usage_json": {
+        "input_tokens": 19267,
+        "total_tokens": 25166,
+        "output_tokens": 5899,
+        "cached_input_tokens": 14848
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "asset_id": "7fbee43e-e367-46ef-b9da-4b7384aab378",
+        "evidence_ids": [
+          "19e36390-8ebf-4acb-a6bb-050fdee3657a",
+          "676d846d-d38e-4163-9e0d-d87137d93c1d",
+          "df61d425-a8f3-41a6-8917-4890bf663f10",
+          "64b2905e-3677-4c2b-bcaf-7e3ad2b88b3a",
+          "92352bc8-09a8-4d29-b14a-594f750aed44",
+          "97abd5fe-454b-4fe0-8d98-aa9cb4219abf",
+          "33d7c37f-efb1-49be-aea2-c94ec8fcff0d",
+          "118a9282-be2a-4428-86c6-63d663614069",
+          "f8c19a8a-0620-41ae-83a1-c46bb4d6f9e5",
+          "65a6309e-cb84-4678-ad3e-e3995ddaae88",
+          "358fc291-8ecb-4e7b-a9da-85df182be3c1",
+          "c4105844-216a-4dd2-81c0-74ed42166a18",
+          "8bbd1630-1df3-4065-ae3c-9ee193883685",
+          "df904f82-fe95-496b-8959-357783d874f8",
+          "454ce52d-3a4f-47e3-8040-1b431e1854cd",
+          "cc0bf5ac-3a1a-4ace-84ab-553a5d000dd1",
+          "30ef2a91-7313-4f57-8746-e12ebf357546",
+          "4ce094ca-ced9-4ceb-997c-85cbd45f1964",
+          "5eb7dd7b-6d4d-44f6-9da2-c90d01663ad2",
+          "958a0454-020d-4ff2-9f66-e9e5a773be14",
+          "219f6c94-f612-4904-b6de-a19f22a99e17",
+          "6b171d56-69c5-4114-a8e9-3f471e6088f9",
+          "330b3aa7-4b82-44ce-97ff-db7874e33016",
+          "e3001a12-e9b2-44d6-94ad-ec21b78c06eb",
+          "b936eb5e-b830-4ab1-be73-c2054da0a0e6",
+          "0eee1bbd-bf5e-4e90-93fb-8eb9d794d12c",
+          "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc",
+          "a847889b-49d6-4bb6-a463-643d2e4105d5",
+          "5784de8c-7ad1-4dd5-a9fe-d6863215807c",
+          "e4ee6126-f268-4359-ac5b-40219627deee",
+          "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2",
+          "15c72186-6903-44f7-a4e0-bb8d4711c3b5",
+          "4cb910d0-5f2b-431c-9442-aac874ae2b95",
+          "5041f229-a177-46de-937e-db46a4bea1b5",
+          "c7e2110b-742a-4f53-9444-94a92a4956bf",
+          "f895b427-b51d-4923-a466-4dc182bf3eec",
+          "143a66ed-38de-4925-a834-c21381d9f291",
+          "ee47c757-a1d1-4c2d-b289-b667304b9ef8",
+          "750763c0-527b-4d19-aadf-e91d5793dfa7",
+          "b94e649e-9c4c-42d2-a2cb-4685bbc90500"
+        ],
+        "reference_id": "54190a29-bb4d-4cf2-971c-a598543052c9",
+        "evidence_count": 40,
+        "evidence_types": [
+          "claim_signal",
+          "creator_signal",
+          "cta_signal",
+          "demo_step",
+          "demo_summary",
+          "editing_signal",
+          "hook_signal",
+          "on_screen_text",
+          "platform_signal",
+          "product_appearance",
+          "product_visibility_summary",
+          "proof_signal",
+          "transcript_segment"
+        ],
+        "asset_version_id": "c41273f6-3964-42ed-99aa-2b9fccd4f1a6",
+        "media_duration_ms": 47553,
+        "creative_dna_version_id": "e0ffe97d-d726-4fe4-bb4c-f102eac2a6eb",
+        "product_context_version": 1
+      },
+      "output_summary_json": {
+        "risk_count": 4,
+        "claim_count": 5,
+        "uncertainty_count": 5,
+        "overall_confidence": "medium",
+        "complete_section_count": 8,
+        "reusable_mechanism_count": 5
+      },
+      "created_at": "2026-08-06 02:16:31.918895+00:00",
+      "completed_at": "2026-08-06 02:19:04.279931+00:00"
+    },
+    {
+      "id": "4d88d70f-c1a0-41e9-8602-83fdc247f2d9",
+      "operation": "audio_transcription",
+      "capability": "audio_transcription",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "whisper-1",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 5053,
+      "usage_json": {
+        "input_tokens": null,
+        "total_tokens": null,
+        "output_tokens": null,
+        "cached_input_tokens": null
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "creative_dna_build",
+        "audio_artifact": "audio.wav",
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5"
+      },
+      "output_summary_json": {
+        "language": "english",
+        "text_length": 715,
+        "segment_count": 12
+      },
+      "created_at": "2026-08-06 02:19:05.405249+00:00",
+      "completed_at": "2026-08-06 02:19:13.264784+00:00"
+    },
+    {
+      "id": "477a8c3b-41dd-4aaf-866c-9e897b96e4b0",
+      "operation": "media_observation",
+      "capability": "visual_observations",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 1,
+      "latency_ms": 157373,
+      "usage_json": {
+        "input_tokens": 22857,
+        "total_tokens": 28405,
+        "output_tokens": 5548,
+        "cached_input_tokens": 22656
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "creative_dna_build",
+        "frame_count": 17,
+        "ocr_segments": 0,
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+        "transcript_segments": 12
+      },
+      "output_summary_json": {
+        "cta_count": 1,
+        "hook_count": 2,
+        "claim_count": 5,
+        "demo_detected": true,
+        "product_appearance_count": 4
+      },
+      "created_at": "2026-08-06 02:19:05.405249+00:00",
+      "completed_at": "2026-08-06 02:21:50.673211+00:00"
+    },
+    {
+      "id": "5a821d69-594a-4d15-9334-cf57128174de",
+      "operation": "creative_dna_build",
+      "capability": "creative_dna_build",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 56132,
+      "usage_json": {
+        "input_tokens": 15420,
+        "total_tokens": 22256,
+        "output_tokens": 6836,
+        "cached_input_tokens": 4352
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "asset_id": "5dd0e892-ff31-48fe-b4bc-5da208123d5a",
+        "evidence_ids": [
+          "68d07f1b-1ade-4758-b2f6-4ba91033c584",
+          "183bc30f-775d-45bb-b1c6-137604e45bac",
+          "a5e76680-9907-4372-b57c-b2348a5154ad",
+          "0d2dacd9-fb87-45bd-8899-9dae6396a732",
+          "13759924-08f5-45f1-bfbc-b6356388d452",
+          "0bfb72c8-9979-45d4-bc1b-93a2e07d7563",
+          "541e65dd-0656-4792-a80b-bc13476b2a5e",
+          "1db8d220-36a5-45e6-892d-cf90f3229cff",
+          "b0fcdda4-efd9-4985-9761-347a08e42fdb",
+          "28bbe6cc-763c-4137-bb9f-2eaad92857c3",
+          "2039a6a7-6ac5-4140-9ad4-5ce45e19e048",
+          "00fc9507-35f0-4837-becc-ca595007aa7a",
+          "52303d2b-54d0-4360-b3c6-feeabb401d8f",
+          "91505d93-4bd1-4a27-89fd-b2826b57224f",
+          "0a42b26b-578c-49cf-b07c-5bc1653e87c3",
+          "0e7f368d-ac17-441d-be35-5ba7cea716a7",
+          "a0232732-88c4-47f0-99be-c132a4a97309",
+          "54c53eaf-f36f-460d-8cb5-bff4d6d400c7",
+          "c9c699d7-eab1-4508-8bf7-5d758fa8d221",
+          "3c5bef06-dc3b-481d-906f-54b63031f1d5",
+          "ac4ee471-f587-40d2-8f5d-b4c68e180312",
+          "e323c07b-b331-4cbc-9f00-7f259e0b2939",
+          "c0882e56-a659-4d20-8372-93ac7376ea91",
+          "ac47304a-0539-4b1c-bcb7-41e73905c520",
+          "a59cb163-10f5-4213-8f00-24ae4edbc2d4",
+          "5eb0ffd1-a48c-4c94-8d98-45c00639277c",
+          "22b44160-58e3-4748-91b5-7ae653e75ddd",
+          "6a268324-74ce-4946-a782-a31c6638d0ad",
+          "9ea4fafa-d2cf-43d2-9088-5cf31fa1ec4a",
+          "e9fc0319-23fc-4d4d-a381-638489a08c24",
+          "ad821c2a-ae35-4f99-a772-b1f804153b9c",
+          "d610b671-ec64-438c-9c65-24505be4f50d",
+          "5b7e6a9b-4bbf-4b12-983e-5d0276089e51",
+          "bc6b4ccf-82fb-4612-8cb1-b0ea57988274",
+          "ba3b5523-ad31-4430-b292-f12cb63b9bec",
+          "41bd76d8-323f-4c23-bb5c-65bc1b2d5cb9",
+          "4fb0da87-eab8-48a2-88f8-dd0e0af4cebe",
+          "f2ceead8-8780-4e7e-9cd1-f0b7f3213e97",
+          "c99814ee-4b3a-4025-b221-fe39f744884e",
+          "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+        ],
+        "reference_id": "c095c6fd-add0-46ce-828e-0cb000b06c07",
+        "evidence_count": 40,
+        "evidence_types": [
+          "claim_signal",
+          "creator_signal",
+          "cta_signal",
+          "demo_step",
+          "demo_summary",
+          "editing_signal",
+          "hook_signal",
+          "on_screen_text",
+          "platform_signal",
+          "product_appearance",
+          "product_visibility_summary",
+          "proof_signal",
+          "transcript_segment"
+        ],
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+        "media_duration_ms": 47553,
+        "creative_dna_version_id": "87e3ced6-329a-4fab-ae69-5a9e9ef2a79a",
+        "product_context_version": 1
+      },
+      "output_summary_json": {
+        "risk_count": 4,
+        "claim_count": 5,
+        "uncertainty_count": 5,
+        "overall_confidence": "high",
+        "complete_section_count": 8,
+        "reusable_mechanism_count": 5
+      },
+      "created_at": "2026-08-06 02:21:50.907668+00:00",
+      "completed_at": "2026-08-06 02:22:47.079291+00:00"
+    },
+    {
+      "id": "8015b3b8-4d3d-47d0-a929-878c226331c4",
+      "operation": "media_observation",
+      "capability": "visual_observations",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 51679,
+      "usage_json": {
+        "input_tokens": 13801,
+        "total_tokens": 18248,
+        "output_tokens": 4447,
+        "cached_input_tokens": 4224
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "tiktok_score_run",
+        "frame_count": 12,
+        "ocr_segments": 0,
+        "asset_version_id": "948dd736-6eba-4fad-9d0e-31ad21705768",
+        "transcript_segments": 1
+      },
+      "output_summary_json": {
+        "cta_count": 1,
+        "hook_count": 1,
+        "claim_count": 1,
+        "demo_detected": true,
+        "product_appearance_count": 3
+      },
+      "created_at": "2026-08-06 02:22:47.157812+00:00",
+      "completed_at": "2026-08-06 02:23:44.828017+00:00"
+    },
+    {
+      "id": "c03d1486-5e27-43ce-aa75-aedb178a034b",
+      "operation": "audio_transcription",
+      "capability": "audio_transcription",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "whisper-1",
+      "status": "completed",
+      "http_status": 200,
+      "error_code": null,
+      "safe_error_message": null,
+      "repair_attempt_count": 0,
+      "latency_ms": 4305,
+      "usage_json": {
+        "input_tokens": null,
+        "total_tokens": null,
+        "output_tokens": null,
+        "cached_input_tokens": null
+      },
+      "estimated_cost": null,
+      "input_summary_json": {
+        "run_type": "tiktok_score_run",
+        "audio_artifact": "audio.wav",
+        "asset_version_id": "948dd736-6eba-4fad-9d0e-31ad21705768"
+      },
+      "output_summary_json": {
+        "language": "korean",
+        "text_length": 28,
+        "segment_count": 1
+      },
+      "created_at": "2026-08-06 02:22:47.157812+00:00",
+      "completed_at": "2026-08-06 02:22:53.086256+00:00"
+    },
+    {
+      "id": "062190cb-c29b-471c-a672-d3069ae9b936",
+      "operation": "adaptation_generate",
+      "capability": "generate_adaptation",
+      "analysis_mode": "live",
+      "provider": "openai",
+      "model": "gpt-5",
+      "status": "failed",
+      "http_status": 200,
+      "error_code": "OPENAI_INCOMPLETE",
+      "safe_error_message": "OpenAI did not complete the structured generation request.",
+      "repair_attempt_count": 0,
+      "latency_ms": null,
+      "usage_json": {},
+      "estimated_cost": null,
+      "input_summary_json": {
+        "objective": "tiktok_shop_affiliate_test",
+        "product_id": "781220c2-0108-46e0-a92f-f085fec40611",
+        "target_market": "US",
+        "creative_dna_version_id": "e0ffe97d-d726-4fe4-bb4c-f102eac2a6eb"
+      },
+      "output_summary_json": {},
+      "created_at": "2026-08-06 02:22:47.619786+00:00",
+      "completed_at": "2026-08-06 02:24:46.307564+00:00"
+    }
+  ],
+  "processing_jobs": [
+    {
+      "id": "b6b128dd-d304-44c3-92ab-69f18c8321b0",
+      "job_type": "tiktok_score_run",
+      "status": "succeeded",
+      "stage": "succeeded",
+      "progress": 100,
+      "error_code": null,
+      "error_message": null,
+      "subject_type": "tiktok_score_run",
+      "subject_id": "fd08acbc-55b8-4122-bd65-845decbfa127",
+      "input_json": {
+        "asset_id": "5dd0e892-ff31-48fe-b4bc-5da208123d5a",
+        "objective": "generic_structure",
+        "product_id": "781220c2-0108-46e0-a92f-f085fec40611",
+        "score_mode": "quick",
+        "intended_use": "tiktok_organic",
+        "score_run_id": "fd08acbc-55b8-4122-bd65-845decbfa127",
+        "target_query": null,
+        "actor_user_id": "b432345e-0472-482f-9ff4-e8ad03b30993",
+        "score_profile": "general_tiktok_v1",
+        "search_context": {
+          "target_query": null,
+          "content_gap_topic": null,
+          "selected_search_topic": null,
+          "target_buyer_question": null
+        },
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+        "content_gap_topic": null,
+        "score_profile_version": 1,
+        "selected_search_topic": null,
+        "target_buyer_question": null,
+        "creative_direction_context_id": null
+      },
+      "output_json": {
+        "action": "structurally_ready",
+        "confidence": "medium",
+        "score_run_id": "fd08acbc-55b8-4122-bd65-845decbfa127",
+        "analysis_mode": "live",
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+        "structural_score": 87,
+        "primary_model_run_id": "7dda1ef2-ec14-49d1-8f54-4cafefa8ddd1"
+      },
+      "created_at": "2026-08-06 02:13:20.173824+00:00",
+      "completed_at": "2026-08-06 02:15:19.827974+00:00"
+    },
+    {
+      "id": "2910a9be-92d9-43f4-8cb3-62947465edf7",
+      "job_type": "creative_dna_build",
+      "status": "succeeded",
+      "stage": "succeeded",
+      "progress": 100,
+      "error_code": null,
+      "error_message": null,
+      "subject_type": "reference",
+      "subject_id": "54190a29-bb4d-4cf2-971c-a598543052c9",
+      "input_json": {
+        "asset_id": "7fbee43e-e367-46ef-b9da-4b7384aab378",
+        "reference_id": "54190a29-bb4d-4cf2-971c-a598543052c9",
+        "actor_user_id": "b432345e-0472-482f-9ff4-e8ad03b30993",
+        "asset_version_id": "c41273f6-3964-42ed-99aa-2b9fccd4f1a6"
+      },
+      "output_json": {
+        "reference_id": "54190a29-bb4d-4cf2-971c-a598543052c9",
+        "analysis_mode": "live",
+        "evidence_count": 40,
+        "asset_version_id": "c41273f6-3964-42ed-99aa-2b9fccd4f1a6",
+        "primary_model_run_id": "a211e12d-71fc-407e-baa0-9a6d25860978",
+        "creative_dna_version_id": "e0ffe97d-d726-4fe4-bb4c-f102eac2a6eb"
+      },
+      "created_at": "2026-08-06 02:15:20.095282+00:00",
+      "completed_at": "2026-08-06 02:19:04.296137+00:00"
+    },
+    {
+      "id": "d8803860-fab5-4788-a5c3-2c65464a852c",
+      "job_type": "creative_dna_build",
+      "status": "succeeded",
+      "stage": "succeeded",
+      "progress": 100,
+      "error_code": null,
+      "error_message": null,
+      "subject_type": "reference",
+      "subject_id": "c095c6fd-add0-46ce-828e-0cb000b06c07",
+      "input_json": {
+        "asset_id": "5dd0e892-ff31-48fe-b4bc-5da208123d5a",
+        "reference_id": "c095c6fd-add0-46ce-828e-0cb000b06c07",
+        "actor_user_id": "b432345e-0472-482f-9ff4-e8ad03b30993",
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5"
+      },
+      "output_json": {
+        "reference_id": "c095c6fd-add0-46ce-828e-0cb000b06c07",
+        "analysis_mode": "live",
+        "evidence_count": 40,
+        "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+        "primary_model_run_id": "5a821d69-594a-4d15-9334-cf57128174de",
+        "creative_dna_version_id": "87e3ced6-329a-4fab-ae69-5a9e9ef2a79a"
+      },
+      "created_at": "2026-08-06 02:19:05.314052+00:00",
+      "completed_at": "2026-08-06 02:22:47.108024+00:00"
+    },
+    {
+      "id": "bce37c38-b5b4-43ed-ba6c-f118ada1824f",
+      "job_type": "tiktok_score_run",
+      "status": "succeeded",
+      "stage": "succeeded",
+      "progress": 100,
+      "error_code": null,
+      "error_message": null,
+      "subject_type": "tiktok_score_run",
+      "subject_id": "25ae97d6-208d-4a0c-a715-4aab03db4d91",
+      "input_json": {
+        "asset_id": "7a867853-4b8c-470a-ba96-824741c5a4bc",
+        "objective": "generic_structure",
+        "product_id": "791513ff-2f06-40fb-9074-f70b515e5859",
+        "score_mode": "product_aware",
+        "intended_use": "tiktok_organic",
+        "score_run_id": "25ae97d6-208d-4a0c-a715-4aab03db4d91",
+        "target_query": null,
+        "actor_user_id": "b432345e-0472-482f-9ff4-e8ad03b30993",
+        "score_profile": "general_tiktok_v1",
+        "search_context": {
+          "target_query": null,
+          "content_gap_topic": null,
+          "selected_search_topic": null,
+          "target_buyer_question": null
+        },
+        "asset_version_id": "948dd736-6eba-4fad-9d0e-31ad21705768",
+        "content_gap_topic": null,
+        "score_profile_version": 1,
+        "selected_search_topic": null,
+        "target_buyer_question": null,
+        "creative_direction_context_id": null
+      },
+      "output_json": {
+        "action": "structurally_ready",
+        "confidence": "medium",
+        "score_run_id": "25ae97d6-208d-4a0c-a715-4aab03db4d91",
+        "analysis_mode": "live",
+        "asset_version_id": "948dd736-6eba-4fad-9d0e-31ad21705768",
+        "structural_score": 94,
+        "primary_model_run_id": "8015b3b8-4d3d-47d0-a929-878c226331c4"
+      },
+      "created_at": "2026-08-06 02:21:45.386280+00:00",
+      "completed_at": "2026-08-06 02:23:45.035700+00:00"
+    }
+  ],
+  "creative_dna_versions": [
+    {
+      "id": "e0ffe97d-d726-4fe4-bb4c-f102eac2a6eb",
+      "reference_id": "54190a29-bb4d-4cf2-971c-a598543052c9",
+      "asset_version_id": "c41273f6-3964-42ed-99aa-2b9fccd4f1a6",
+      "status": "completed",
+      "confidence": "medium",
+      "analysis_mode": "live",
+      "primary_model_run_id": "a211e12d-71fc-407e-baa0-9a6d25860978",
+      "dna_json": {
+        "cta": {
+          "present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "15c72186-6903-44f7-a4e0-bb8d4711c3b5"
+            ]
+          },
+          "cta_types": {
+            "value": [
+              "generic"
+            ],
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "15c72186-6903-44f7-a4e0-bb8d4711c3b5"
+            ]
+          },
+          "spoken_text": {
+            "value": "You can find the Fabreeze plug scent booster, my hosting must have, at your local retailer.",
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "15c72186-6903-44f7-a4e0-bb8d4711c3b5"
+            ]
+          },
+          "overlay_text": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "first_appearance_ms": {
+            "value": 38880,
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "15c72186-6903-44f7-a4e0-bb8d4711c3b5"
+            ]
+          },
+          "product_tag_visible": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "15c72186-6903-44f7-a4e0-bb8d4711c3b5",
+              "b94e649e-9c4c-42d2-a2cb-4685bbc90500"
+            ]
+          }
+        },
+        "demo": {
+          "steps": {
+            "value": [
+              {
+                "action": "Shows device body in hands before placement.",
+                "end_ms": 24520,
+                "start_ms": 20960,
+                "step_index": 1
+              },
+              {
+                "action": "Places device on table and connects power; blue light ring turns on.",
+                "end_ms": 31966,
+                "start_ms": 24520,
+                "step_index": 2
+              },
+              {
+                "action": "Indicates/presses top control for intensity/boost.",
+                "end_ms": 34766,
+                "start_ms": 29966,
+                "step_index": 3
+              }
+            ],
+            "status": "observed",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "a847889b-49d6-4bb6-a463-643d2e4105d5",
+              "5784de8c-7ad1-4dd5-a9fe-d6863215807c",
+              "e4ee6126-f268-4359-ac5b-40219627deee"
+            ]
+          },
+          "detected": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.73,
+            "evidence_ids": [
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc"
+            ]
+          },
+          "demo_type": {
+            "value": "usage",
+            "status": "observed",
+            "confidence": 0.73,
+            "evidence_ids": [
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc"
+            ]
+          },
+          "result_clarity": {
+            "value": "no visual result; relies on testimonial",
+            "status": "inferred",
+            "confidence": 0.73,
+            "evidence_ids": [
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc",
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ]
+          },
+          "mechanism_clarity": {
+            "value": "partial",
+            "status": "observed",
+            "confidence": 0.73,
+            "evidence_ids": [
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc",
+              "5784de8c-7ad1-4dd5-a9fe-d6863215807c",
+              "e4ee6126-f268-4359-ac5b-40219627deee"
+            ]
+          },
+          "after_state_visible": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.73,
+            "evidence_ids": [
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc"
+            ]
+          },
+          "before_state_visible": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.73,
+            "evidence_ids": [
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc"
+            ]
+          }
+        },
+        "offer": {
+          "present": {
+            "value": false,
+            "status": "not_present",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "19e36390-8ebf-4acb-a6bb-050fdee3657a",
+              "c4105844-216a-4dd2-81c0-74ed42166a18",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ]
+          },
+          "price_text": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "offer_types": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "discount_text": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "urgency_present": {
+            "value": false,
+            "status": "not_present",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "19e36390-8ebf-4acb-a6bb-050fdee3657a",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ]
+          }
+        },
+        "proof": {
+          "proof_types": {
+            "value": [
+              "testimonial"
+            ],
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ]
+          },
+          "verifiability": {
+            "value": "not_observable",
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ]
+          },
+          "strongest_proof": {
+            "value": "Guest says the room smells fresh",
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ]
+          },
+          "proof_strength_label": {
+            "value": "weak_to_moderate",
+            "status": "inferred",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2",
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc"
+            ]
+          }
+        },
+        "risks": [
+          {
+            "code": "off_platform_cta",
+            "message": "CTA directs viewers to buy at a local retailer; no TikTok Shop tag visible.",
+            "severity": "medium",
+            "evidence_ids": [
+              "15c72186-6903-44f7-a4e0-bb8d4711c3b5",
+              "b94e649e-9c4c-42d2-a2cb-4685bbc90500"
+            ]
+          },
+          {
+            "code": "performance_claim_unverified",
+            "message": "\"Long lasting scent\" is asserted without measurable or visual proof.",
+            "severity": "medium",
+            "evidence_ids": [
+              "ee47c757-a1d1-4c2d-b289-b667304b9ef8",
+              "6a6f9f80-d07c-46bc-b963-4fd22f83b5dc"
+            ]
+          },
+          {
+            "code": "brand_spelling_inconsistency",
+            "message": "Spoken brand name appears as \"Fabreeze\" while disclosure uses \"#FEBREZE_PARTNER\".",
+            "severity": "low",
+            "evidence_ids": [
+              "358fc291-8ecb-4e7b-a9da-85df182be3c1",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ]
+          },
+          {
+            "code": "product_context_mismatch",
+            "message": "Observed creative promotes a Febreze plug scent booster; provided Product Context is for a different item.",
+            "severity": "high",
+            "evidence_ids": [
+              "df61d425-a8f3-41a6-8917-4890bf663f10",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ]
+          }
+        ],
+        "claims": [
+          {
+            "risk": "low",
+            "text": "Product has 3 intensity settings.",
+            "category": "other",
+            "evidence_ids": [
+              "c7e2110b-742a-4f53-9444-94a92a4956bf"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "low",
+            "text": "Product includes a cord for flexible placement.",
+            "category": "other",
+            "evidence_ids": [
+              "f895b427-b51d-4923-a466-4dc182bf3eec"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "low",
+            "text": "Product has a boost button for an extra burst of scent.",
+            "category": "other",
+            "evidence_ids": [
+              "143a66ed-38de-4925-a834-c21381d9f291"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "medium",
+            "text": "Provides long lasting scent.",
+            "category": "performance",
+            "evidence_ids": [
+              "ee47c757-a1d1-4c2d-b289-b667304b9ef8",
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "none",
+            "text": "Creator partnered with Febreze for this video.",
+            "category": "other",
+            "evidence_ids": [
+              "750763c0-527b-4d19-aadf-e91d5793dfa7",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ],
+            "qualification_present": true
+          }
+        ],
+        "creator": {
+          "pacing": {
+            "value": "moderate",
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95",
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "emotion": {
+            "value": "confident",
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95"
+            ]
+          },
+          "face_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95"
+            ]
+          },
+          "delivery_style": {
+            "value": "testimonial",
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95"
+            ]
+          },
+          "creator_persona": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "authenticity_cues": {
+            "value": [
+              "home setting",
+              "friends arrive on camera",
+              "pet presence",
+              "sponsored disclosure on-screen"
+            ],
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ]
+          },
+          "sales_language_intensity": {
+            "value": "medium",
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95"
+            ]
+          }
+        },
+        "editing": {
+          "pacing": {
+            "value": "moderate",
+            "status": "observed",
+            "confidence": 0.62,
+            "evidence_ids": [
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "cut_count": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "caption_density": {
+            "value": "high",
+            "status": "observed",
+            "confidence": 0.62,
+            "evidence_ids": [
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "dead_air_ranges": {
+            "value": [],
+            "status": "observed",
+            "confidence": 0.62,
+            "evidence_ids": [
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "dead_air_present": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.62,
+            "evidence_ids": [
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "transition_types": {
+            "value": [
+              "straight_cuts"
+            ],
+            "status": "observed",
+            "confidence": 0.62,
+            "evidence_ids": [
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "pattern_interrupts": {
+            "value": [],
+            "status": "observed",
+            "confidence": 0.62,
+            "evidence_ids": [
+              "5041f229-a177-46de-937e-db46a4bea1b5"
+            ]
+          },
+          "average_shot_duration_ms": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "first_three_second_cut_count": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          }
+        },
+        "opening": {
+          "hook_text": {
+            "value": "Usually hosting is really fun, it's just the first 5 minutes before everyone gets here that's a little hectic.",
+            "status": "observed",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "19e36390-8ebf-4acb-a6bb-050fdee3657a",
+              "676d846d-d38e-4163-9e0d-d87137d93c1d"
+            ]
+          },
+          "buyer_pain": {
+            "value": "Pre-guest hosting rush feels hectic.",
+            "status": "observed",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17"
+            ]
+          },
+          "face_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "4cb910d0-5f2b-431c-9442-aac874ae2b95"
+            ]
+          },
+          "opening_visual": {
+            "value": "Creator in home entry holding a blue product box.",
+            "status": "observed",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17"
+            ]
+          },
+          "product_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "6b171d56-69c5-4114-a8e9-3f471e6088f9"
+            ]
+          },
+          "primary_hook_type": {
+            "value": "problem_first",
+            "status": "observed",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17"
+            ]
+          },
+          "pattern_interrupts": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "first_three_second_structure": {
+            "value": "Problem statement with product visible",
+            "status": "inferred",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17",
+              "6b171d56-69c5-4114-a8e9-3f471e6088f9"
+            ]
+          }
+        },
+        "product": {
+          "product_match": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "usage_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.88,
+            "evidence_ids": [
+              "e3001a12-e9b2-44d6-94ad-ec21b78c06eb",
+              "0eee1bbd-bf5e-4e90-93fb-8eb9d794d12c"
+            ]
+          },
+          "close_up_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "330b3aa7-4b82-44ce-97ff-db7874e33016",
+              "0eee1bbd-bf5e-4e90-93fb-8eb9d794d12c"
+            ]
+          },
+          "total_visible_ms": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "hero_shot_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "b936eb5e-b830-4ab1-be73-c2054da0a0e6"
+            ]
+          },
+          "screen_time_ratio": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          },
+          "appearance_sequence": {
+            "value": [
+              {
+                "end_ms": 15000,
+                "start_ms": 500,
+                "shot_type": "medium",
+                "visibility": "clear"
+              },
+              {
+                "end_ms": 27617,
+                "start_ms": 23917,
+                "shot_type": "close_up",
+                "visibility": "clear"
+              },
+              {
+                "end_ms": 41366,
+                "start_ms": 31966,
+                "shot_type": "in_use",
+                "visibility": "clear"
+              },
+              {
+                "end_ms": 47500,
+                "start_ms": 45000,
+                "shot_type": "hero",
+                "visibility": "clear"
+              }
+            ],
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "6b171d56-69c5-4114-a8e9-3f471e6088f9",
+              "330b3aa7-4b82-44ce-97ff-db7874e33016",
+              "e3001a12-e9b2-44d6-94ad-ec21b78c06eb",
+              "b936eb5e-b830-4ab1-be73-c2054da0a0e6"
+            ]
+          },
+          "first_appearance_ms": {
+            "value": 500,
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "0eee1bbd-bf5e-4e90-93fb-8eb9d794d12c"
+            ]
+          }
+        },
+        "platform": {
+          "format": {
+            "value": "9:16",
+            "status": "observed",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "b94e649e-9c4c-42d2-a2cb-4685bbc90500"
+            ]
+          },
+          "vertical": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "b94e649e-9c4c-42d2-a2cb-4685bbc90500"
+            ]
+          },
+          "shop_signals": {
+            "value": [],
+            "status": "observed",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "b94e649e-9c4c-42d2-a2cb-4685bbc90500"
+            ]
+          },
+          "native_signals": {
+            "value": [
+              "hashtag_disclosure"
+            ],
+            "status": "observed",
+            "confidence": 0.76,
+            "evidence_ids": [
+              "b94e649e-9c4c-42d2-a2cb-4685bbc90500",
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ]
+          },
+          "safe_zone_risk": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.0,
+            "evidence_ids": []
+          }
+        },
+        "narrative": {
+          "angle": {
+            "value": "Hosting prep made easier with a plug-in scent booster",
+            "status": "inferred",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "19e36390-8ebf-4acb-a6bb-050fdee3657a",
+              "64b2905e-3677-4c2b-bcaf-7e3ad2b88b3a",
+              "c7e2110b-742a-4f53-9444-94a92a4956bf"
+            ]
+          },
+          "structure": {
+            "value": "Problem → solution intro → feature rundown → social proof → CTA",
+            "status": "inferred",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17",
+              "df61d425-a8f3-41a6-8917-4890bf663f10",
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ]
+          },
+          "buyer_pain": {
+            "value": "Stressful minutes before guests arrive",
+            "status": "observed",
+            "confidence": 0.78,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17"
+            ]
+          },
+          "awareness_stage": {
+            "value": "problem_aware",
+            "status": "inferred",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17"
+            ]
+          },
+          "desired_outcome": {
+            "value": "Home smells fresh when guests enter",
+            "status": "inferred",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "65a6309e-cb84-4678-ad3e-e3995ddaae88",
+              "358fc291-8ecb-4e7b-a9da-85df182be3c1"
+            ]
+          },
+          "emotional_drivers": {
+            "value": [
+              "social approval",
+              "confidence in hosting"
+            ],
+            "status": "inferred",
+            "confidence": 0.74,
+            "evidence_ids": [
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ]
+          }
+        },
+        "completeness": {
+          "cta": true,
+          "demo": true,
+          "proof": true,
+          "creator": true,
+          "editing": true,
+          "opening": true,
+          "product": true,
+          "platform": true
+        },
+        "uncertainties": [
+          "Actual scent longevity is not measured or shown visually.",
+          "Exact function of intensity vs. boost control isn’t clearly explained.",
+          "Availability and price on TikTok Shop are not shown.",
+          "No offer or discount is presented.",
+          "Whether a product tag was ever displayed in other cuts is unknown."
+        ],
+        "schema_version": "creative_dna_v1",
+        "overall_confidence": "medium",
+        "reusable_mechanisms": [
+          {
+            "description": "Opens with the stress of the pre-guest hosting rush while product is already visible.",
+            "evidence_ids": [
+              "219f6c94-f612-4904-b6de-a19f22a99e17",
+              "6b171d56-69c5-4114-a8e9-3f471e6088f9"
+            ],
+            "mechanism_type": "problem_first_hook"
+          },
+          {
+            "description": "Quick list of differentiating features (3 settings, cord, boost) paired with close-ups and captions.",
+            "evidence_ids": [
+              "97abd5fe-454b-4fe0-8d98-aa9cb4219abf",
+              "33d7c37f-efb1-49be-aea2-c94ec8fcff0d",
+              "30ef2a91-7313-4f57-8746-e12ebf357546",
+              "4ce094ca-ced9-4ceb-997c-85cbd45f1964"
+            ],
+            "mechanism_type": "feature_rundown_with_overlays"
+          },
+          {
+            "description": "Shows placement, power-on light, and pressing the boost/intensity control in a home setting.",
+            "evidence_ids": [
+              "a847889b-49d6-4bb6-a463-643d2e4105d5",
+              "5784de8c-7ad1-4dd5-a9fe-d6863215807c",
+              "e4ee6126-f268-4359-ac5b-40219627deee"
+            ],
+            "mechanism_type": "in_home_demo"
+          },
+          {
+            "description": "A guest remarks the room smells fresh upon arrival.",
+            "evidence_ids": [
+              "ccc1c5a8-2286-4c84-9335-3cdb7773a1c2"
+            ],
+            "mechanism_type": "social_proof_guest_reaction"
+          },
+          {
+            "description": "On-screen #FEBREZE_PARTNER appears early and persists.",
+            "evidence_ids": [
+              "8bbd1630-1df3-4065-ae3c-9ee193883685"
+            ],
+            "mechanism_type": "sponsored_disclosure_hashtag"
+          }
+        ]
+      },
+      "created_at": "2026-08-06 02:19:04.245131+00:00"
+    },
+    {
+      "id": "87e3ced6-329a-4fab-ae69-5a9e9ef2a79a",
+      "reference_id": "c095c6fd-add0-46ce-828e-0cb000b06c07",
+      "asset_version_id": "5ef40d9e-cfe6-4803-91db-9f08b53987d5",
+      "status": "completed",
+      "confidence": "high",
+      "analysis_mode": "live",
+      "primary_model_run_id": "5a821d69-594a-4d15-9334-cf57128174de",
+      "dna_json": {
+        "cta": {
+          "present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          },
+          "cta_types": {
+            "value": [
+              "generic"
+            ],
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          },
+          "spoken_text": {
+            "value": "You can find the Febreze plug scent booster, my hosting must have, at your local retailer.",
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "00fc9507-35f0-4837-becc-ca595007aa7a",
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          },
+          "overlay_text": {
+            "value": null,
+            "status": "not_present",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+            ]
+          },
+          "first_appearance_ms": {
+            "value": 38880,
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          },
+          "product_tag_visible": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4",
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          }
+        },
+        "demo": {
+          "steps": {
+            "value": [
+              {
+                "action": "Show device close-up in hands before placement.",
+                "end_ms": 24520,
+                "start_ms": 19200,
+                "step_index": 1
+              },
+              {
+                "action": "Place device on table with power cord visible; blue light ring on.",
+                "end_ms": 31966,
+                "start_ms": 29966,
+                "step_index": 2
+              },
+              {
+                "action": "Gesture near control area while mentioning boost button.",
+                "end_ms": 34500,
+                "start_ms": 31966,
+                "step_index": 3
+              },
+              {
+                "action": "Device operating on table while guests socialize in background.",
+                "end_ms": 45500,
+                "start_ms": 41000,
+                "step_index": 4
+              }
+            ],
+            "status": "observed",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "22b44160-58e3-4748-91b5-7ae653e75ddd",
+              "6a268324-74ce-4946-a782-a31c6638d0ad",
+              "9ea4fafa-d2cf-43d2-9088-5cf31fa1ec4a",
+              "e9fc0319-23fc-4d4d-a381-638489a08c24"
+            ]
+          },
+          "detected": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.79,
+            "evidence_ids": [
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c"
+            ]
+          },
+          "demo_type": {
+            "value": "usage",
+            "status": "observed",
+            "confidence": 0.79,
+            "evidence_ids": [
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c"
+            ]
+          },
+          "result_clarity": {
+            "value": "low",
+            "status": "inferred",
+            "confidence": 0.79,
+            "evidence_ids": [
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c",
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c"
+            ]
+          },
+          "mechanism_clarity": {
+            "value": "partial",
+            "status": "observed",
+            "confidence": 0.79,
+            "evidence_ids": [
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c",
+              "22b44160-58e3-4748-91b5-7ae653e75ddd",
+              "6a268324-74ce-4946-a782-a31c6638d0ad",
+              "9ea4fafa-d2cf-43d2-9088-5cf31fa1ec4a"
+            ]
+          },
+          "after_state_visible": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.79,
+            "evidence_ids": [
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c"
+            ]
+          },
+          "before_state_visible": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.79,
+            "evidence_ids": [
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c"
+            ]
+          }
+        },
+        "offer": {
+          "present": {
+            "value": false,
+            "status": "not_present",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "68d07f1b-1ade-4758-b2f6-4ba91033c584",
+              "00fc9507-35f0-4837-becc-ca595007aa7a",
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          },
+          "price_text": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "offer_types": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "discount_text": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "urgency_present": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          }
+        },
+        "proof": {
+          "proof_types": {
+            "value": [
+              "testimonial"
+            ],
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c",
+              "54c53eaf-f36f-460d-8cb5-bff4d6d400c7"
+            ]
+          },
+          "verifiability": {
+            "value": "not_observable",
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c"
+            ]
+          },
+          "strongest_proof": {
+            "value": "Guest remark: \"Wow it smells so fresh in here.\"",
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c",
+              "54c53eaf-f36f-460d-8cb5-bff4d6d400c7"
+            ]
+          },
+          "proof_strength_label": {
+            "value": "weak",
+            "status": "inferred",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c"
+            ]
+          }
+        },
+        "risks": [
+          {
+            "code": "no_product_tag",
+            "message": "No TikTok Shop product tag visible; CTA sends viewers to a local retailer instead of in-app purchase.",
+            "severity": "medium",
+            "evidence_ids": [
+              "d610b671-ec64-438c-9c65-24505be4f50d",
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+            ]
+          },
+          {
+            "code": "unsubstantiated_performance",
+            "message": "\"Long lasting scent\" performance claim lacks measurable proof or before/after.",
+            "severity": "medium",
+            "evidence_ids": [
+              "f2ceead8-8780-4e7e-9cd1-f0b7f3213e97",
+              "5eb0ffd1-a48c-4c94-8d98-45c00639277c"
+            ]
+          },
+          {
+            "code": "limited_verifiability",
+            "message": "Testimonial proof (guest remark) is not verifiable on-screen.",
+            "severity": "low",
+            "evidence_ids": [
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c"
+            ]
+          },
+          {
+            "code": "off_brief_product",
+            "message": "Creative features Febreze Plug Scent Booster, which does not match the provided product context (CounterSpace Rack).",
+            "severity": "high",
+            "evidence_ids": [
+              "a5e76680-9907-4372-b57c-b2348a5154ad",
+              "52303d2b-54d0-4360-b3c6-feeabb401d8f",
+              "00fc9507-35f0-4837-becc-ca595007aa7a"
+            ]
+          }
+        ],
+        "claims": [
+          {
+            "risk": "medium",
+            "text": "The Febreze plug scent booster has 3 intensity settings.",
+            "category": "other",
+            "evidence_ids": [
+              "ba3b5523-ad31-4430-b292-f12cb63b9bec",
+              "0bfb72c8-9979-45d4-bc1b-93a2e07d7563"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "low",
+            "text": "It has a cord for flexible placement.",
+            "category": "other",
+            "evidence_ids": [
+              "41bd76d8-323f-4c23-bb5c-65bc1b2d5cb9",
+              "0e7f368d-ac17-441d-be35-5ba7cea716a7"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "low",
+            "text": "There is a boost button for an extra burst of scent.",
+            "category": "other",
+            "evidence_ids": [
+              "4fb0da87-eab8-48a2-88f8-dd0e0af4cebe",
+              "a0232732-88c4-47f0-99be-c132a4a97309"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "medium",
+            "text": "It gives long lasting scent.",
+            "category": "performance",
+            "evidence_ids": [
+              "f2ceead8-8780-4e7e-9cd1-f0b7f3213e97",
+              "1db8d220-36a5-45e6-892d-cf90f3229cff"
+            ],
+            "qualification_present": false
+          },
+          {
+            "risk": "low",
+            "text": "\"It smells so fresh in here.\"",
+            "category": "performance",
+            "evidence_ids": [
+              "c99814ee-4b3a-4025-b221-fe39f744884e",
+              "28bbe6cc-763c-4137-bb9f-2eaad92857c3"
+            ],
+            "qualification_present": false
+          }
+        ],
+        "creator": {
+          "pacing": {
+            "value": "moderate",
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51",
+              "bc6b4ccf-82fb-4612-8cb1-b0ea57988274"
+            ]
+          },
+          "emotion": {
+            "value": "confident",
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51"
+            ]
+          },
+          "face_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51"
+            ]
+          },
+          "delivery_style": {
+            "value": "testimonial",
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51",
+              "a5e76680-9907-4372-b57c-b2348a5154ad",
+              "0d2dacd9-fb87-45bd-8899-9dae6396a732"
+            ]
+          },
+          "creator_persona": {
+            "value": "home host entertaining friends",
+            "status": "inferred",
+            "confidence": 0.7,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51",
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221"
+            ]
+          },
+          "authenticity_cues": {
+            "value": [
+              "home setting",
+              "handheld shots",
+              "friends/guests appear",
+              "pets visible"
+            ],
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51"
+            ]
+          },
+          "sales_language_intensity": {
+            "value": "medium",
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51",
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          }
+        },
+        "editing": {
+          "pacing": {
+            "value": "moderate",
+            "status": "observed",
+            "confidence": 0.68,
+            "evidence_ids": [
+              "bc6b4ccf-82fb-4612-8cb1-b0ea57988274"
+            ]
+          },
+          "cut_count": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "caption_density": {
+            "value": "medium",
+            "status": "observed",
+            "confidence": 0.68,
+            "evidence_ids": [
+              "bc6b4ccf-82fb-4612-8cb1-b0ea57988274",
+              "0a42b26b-578c-49cf-b07c-5bc1653e87c3",
+              "0e7f368d-ac17-441d-be35-5ba7cea716a7",
+              "a0232732-88c4-47f0-99be-c132a4a97309",
+              "54c53eaf-f36f-460d-8cb5-bff4d6d400c7"
+            ]
+          },
+          "dead_air_ranges": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "dead_air_present": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "transition_types": {
+            "value": [
+              "straight_cut"
+            ],
+            "status": "observed",
+            "confidence": 0.68,
+            "evidence_ids": [
+              "bc6b4ccf-82fb-4612-8cb1-b0ea57988274"
+            ]
+          },
+          "pattern_interrupts": {
+            "value": [],
+            "status": "not_present",
+            "confidence": 0.68,
+            "evidence_ids": [
+              "bc6b4ccf-82fb-4612-8cb1-b0ea57988274"
+            ]
+          },
+          "average_shot_duration_ms": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "first_three_second_cut_count": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          }
+        },
+        "opening": {
+          "hook_text": {
+            "value": "Usually hosting is really fun... it's just the first 5 minutes before everyone gets here that's a little hectic.",
+            "status": "observed",
+            "confidence": 0.84,
+            "evidence_ids": [
+              "68d07f1b-1ade-4758-b2f6-4ba91033c584",
+              "183bc30f-775d-45bb-b1c6-137604e45bac"
+            ]
+          },
+          "buyer_pain": {
+            "value": "Pre-guest hosting rush feels hectic.",
+            "status": "observed",
+            "confidence": 0.84,
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221"
+            ]
+          },
+          "face_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51"
+            ]
+          },
+          "opening_visual": {
+            "value": "Creator in home, on camera, holding a blue Febreze box while prepping the space.",
+            "status": "observed",
+            "confidence": 0.84,
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221",
+              "ac4ee471-f587-40d2-8f5d-b4c68e180312"
+            ]
+          },
+          "product_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.83,
+            "evidence_ids": [
+              "ac4ee471-f587-40d2-8f5d-b4c68e180312"
+            ]
+          },
+          "primary_hook_type": {
+            "value": "problem_first",
+            "status": "observed",
+            "confidence": 0.84,
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221"
+            ]
+          },
+          "pattern_interrupts": {
+            "value": [],
+            "status": "not_present",
+            "confidence": 0.68,
+            "evidence_ids": [
+              "bc6b4ccf-82fb-4612-8cb1-b0ea57988274"
+            ]
+          },
+          "first_three_second_structure": {
+            "value": "Problem setup with creator on camera holding product box.",
+            "status": "observed",
+            "confidence": 0.84,
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221"
+            ]
+          }
+        },
+        "product": {
+          "product_match": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": []
+          },
+          "usage_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.88,
+            "evidence_ids": [
+              "c0882e56-a659-4d20-8372-93ac7376ea91"
+            ]
+          },
+          "close_up_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.9,
+            "evidence_ids": [
+              "e323c07b-b331-4cbc-9f00-7f259e0b2939"
+            ]
+          },
+          "total_visible_ms": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": [
+              "a59cb163-10f5-4213-8f00-24ae4edbc2d4"
+            ]
+          },
+          "hero_shot_present": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "ac47304a-0539-4b1c-bcb7-41e73905c520"
+            ]
+          },
+          "screen_time_ratio": {
+            "value": null,
+            "status": "unknown",
+            "confidence": 0.5,
+            "evidence_ids": [
+              "a59cb163-10f5-4213-8f00-24ae4edbc2d4"
+            ]
+          },
+          "appearance_sequence": {
+            "value": [
+              {
+                "end_ms": 16620,
+                "start_ms": 0,
+                "shot_type": "medium",
+                "visibility": "partial"
+              },
+              {
+                "end_ms": 25333,
+                "start_ms": 19200,
+                "shot_type": "close_up",
+                "visibility": "clear"
+              },
+              {
+                "end_ms": 34500,
+                "start_ms": 29966,
+                "shot_type": "in_use",
+                "visibility": "clear"
+              },
+              {
+                "end_ms": 45500,
+                "start_ms": 41000,
+                "shot_type": "hero",
+                "visibility": "clear"
+              }
+            ],
+            "status": "observed",
+            "confidence": 0.88,
+            "evidence_ids": [
+              "ac4ee471-f587-40d2-8f5d-b4c68e180312",
+              "e323c07b-b331-4cbc-9f00-7f259e0b2939",
+              "c0882e56-a659-4d20-8372-93ac7376ea91",
+              "ac47304a-0539-4b1c-bcb7-41e73905c520"
+            ]
+          },
+          "first_appearance_ms": {
+            "value": 0,
+            "status": "observed",
+            "confidence": 0.86,
+            "evidence_ids": [
+              "a59cb163-10f5-4213-8f00-24ae4edbc2d4"
+            ]
+          }
+        },
+        "platform": {
+          "format": {
+            "value": "9:16 vertical with burned-in captions",
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+            ]
+          },
+          "vertical": {
+            "value": true,
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+            ]
+          },
+          "shop_signals": {
+            "value": [],
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+            ]
+          },
+          "native_signals": {
+            "value": [
+              "on-screen disclosure hashtag #FEBREZE_PARTNER"
+            ],
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4",
+              "52303d2b-54d0-4360-b3c6-feeabb401d8f"
+            ]
+          },
+          "safe_zone_risk": {
+            "value": false,
+            "status": "observed",
+            "confidence": 0.77,
+            "evidence_ids": [
+              "b6b84e03-6341-4556-a28c-02ee45f7cdd4"
+            ]
+          }
+        },
+        "narrative": {
+          "angle": {
+            "value": "Hosting prep made easier with a scent booster device that offers control and quick boosts.",
+            "status": "inferred",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "a5e76680-9907-4372-b57c-b2348a5154ad",
+              "0d2dacd9-fb87-45bd-8899-9dae6396a732",
+              "1db8d220-36a5-45e6-892d-cf90f3229cff"
+            ]
+          },
+          "structure": {
+            "value": "problem-solution-demo-testimonial-cta",
+            "status": "inferred",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221",
+              "a5e76680-9907-4372-b57c-b2348a5154ad",
+              "0d2dacd9-fb87-45bd-8899-9dae6396a732",
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c",
+              "d610b671-ec64-438c-9c65-24505be4f50d"
+            ]
+          },
+          "buyer_pain": {
+            "value": "Stressful minutes before guests arrive; wanting the home to smell fresh.",
+            "status": "observed",
+            "confidence": 0.84,
+            "evidence_ids": [
+              "68d07f1b-1ade-4758-b2f6-4ba91033c584",
+              "183bc30f-775d-45bb-b1c6-137604e45bac"
+            ]
+          },
+          "awareness_stage": {
+            "value": "problem_aware",
+            "status": "inferred",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221"
+            ]
+          },
+          "desired_outcome": {
+            "value": "Home smells fresh when guests arrive.",
+            "status": "inferred",
+            "confidence": 0.82,
+            "evidence_ids": [
+              "28bbe6cc-763c-4137-bb9f-2eaad92857c3",
+              "2039a6a7-6ac5-4140-9ad4-5ce45e19e048"
+            ]
+          },
+          "emotional_drivers": {
+            "value": [
+              "social_approval",
+              "calm_and_control"
+            ],
+            "status": "inferred",
+            "confidence": 0.8,
+            "evidence_ids": [
+              "28bbe6cc-763c-4137-bb9f-2eaad92857c3",
+              "2039a6a7-6ac5-4140-9ad4-5ce45e19e048",
+              "5b7e6a9b-4bbf-4b12-983e-5d0276089e51"
+            ]
+          }
+        },
+        "completeness": {
+          "cta": true,
+          "demo": true,
+          "proof": true,
+          "creator": true,
+          "editing": true,
+          "opening": true,
+          "product": true,
+          "platform": true
+        },
+        "uncertainties": [
+          "Exact duration/measure of \"long lasting\" is unspecified.",
+          "No measurable before/after scent outcome is shown.",
+          "Whether the boost button is physically pressed on-camera is unclear.",
+          "Specific product variant/scents used are mentioned but not visually confirmed by packaging.",
+          "Any price or promotional offer is unknown."
+        ],
+        "schema_version": "creative_dna_v1",
+        "overall_confidence": "high",
+        "reusable_mechanisms": [
+          {
+            "description": "Opens with relatable hosting stress to set context before introducing solution.",
+            "evidence_ids": [
+              "c9c699d7-eab1-4508-8bf7-5d758fa8d221",
+              "68d07f1b-1ade-4758-b2f6-4ba91033c584"
+            ],
+            "mechanism_type": "problem_first_opening"
+          },
+          {
+            "description": "Rapid feature list (intensity settings, cord, boost button) supported by close-up shots and captions.",
+            "evidence_ids": [
+              "0bfb72c8-9979-45d4-bc1b-93a2e07d7563",
+              "541e65dd-0656-4792-a80b-bc13476b2a5e",
+              "0e7f368d-ac17-441d-be35-5ba7cea716a7",
+              "a0232732-88c4-47f0-99be-c132a4a97309",
+              "e323c07b-b331-4cbc-9f00-7f259e0b2939"
+            ],
+            "mechanism_type": "feature_rundown_with_closeups"
+          },
+          {
+            "description": "A guest’s on-camera remark provides testimonial validation of freshness.",
+            "evidence_ids": [
+              "ad821c2a-ae35-4f99-a772-b1f804153b9c",
+              "54c53eaf-f36f-460d-8cb5-bff4d6d400c7"
+            ],
+            "mechanism_type": "in_situ_social_proof"
+          },
+          {
+            "description": "Device shown operating in a lived-in home setting while guests arrive.",
+            "evidence_ids": [
+              "c0882e56-a659-4d20-8372-93ac7376ea91",
+              "e9fc0319-23fc-4d4d-a381-638489a08c24"
+            ],
+            "mechanism_type": "home_environment_demo"
+          },
+          {
+            "description": "On-screen hashtag disclosure present from start (#FEBREZE_PARTNER).",
+            "evidence_ids": [
+              "52303d2b-54d0-4360-b3c6-feeabb401d8f"
+            ],
+            "mechanism_type": "clear_sponsorship_disclosure"
+          }
+        ]
+      },
+      "created_at": "2026-08-06 02:22:47.069492+00:00"
+    }
+  ],
+  "adaptation_runs": [
+    {
+      "id": "98a973ba-b89e-49de-9e26-810d3ebc935b",
+      "status": "failed",
+      "analysis_mode": "live",
+      "primary_model_run_id": "062190cb-c29b-471c-a672-d3069ae9b936",
+      "result_json": {},
+      "created_at": "2026-08-06 02:22:47.619786+00:00"
+    }
+  ]
+}

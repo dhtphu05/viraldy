@@ -1,0 +1,11 @@
+{
+  "failure_stage": "presentation_draft_1",
+  "golden_case": "home_travel_steamer",
+  "mode": "live",
+  "model_runs_verified": false,
+  "run_id": "product-run-live-upload-viral-cap-20260806T044050Z",
+  "safe_error_code": "SMOKE_FLOW_FAILED",
+  "safe_error_type": "SmokeFailure",
+  "status": "error",
+  "workspace_deletion_status": "succeeded"
+}

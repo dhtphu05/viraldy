@@ -7,52 +7,46 @@ import {
     CommandList,
 } from "@/shared/ui/command";
 import { useNavigate } from "@tanstack/react-router";
-import {
-    Images,
-    Megaphone,
-    BarChart3,
-    Package,
-    Workflow,
-    Plus,
-    Upload,
-    BarChart2,
-    VideoIcon,
-    Sparkles,
-    SearchX,
-} from "lucide-react";
+import { BarChart3, Images, Megaphone, Package, Plus, SearchX, VideoIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAllCampaigns, useAppStore } from "@/app/store/app-store";
 import { seedProducts } from "@/features/products/data/products";
 import { seedCreators } from "@/features/ugc-review/mocks/creators";
 import type { PerfRecommendation } from "@/features/performance/types/performance";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { navigationItems } from "./navigation";
 
 const quickActions = [
     {
         label: "Start production run",
         hint: "Analyze, adapt, brief, validate",
-        icon: Workflow,
+        iconName: "startProductionRun",
         to: "/mvp",
     },
-    { label: "New campaign", hint: "Create campaign shell", icon: Plus, to: "/campaigns/new" },
+    {
+        label: "New campaign",
+        hint: "Create campaign shell",
+        iconName: "newCampaign",
+        to: "/campaigns/new",
+    },
     {
         label: "Upload UGC",
         hint: "Open review upload dialog",
-        icon: Upload,
+        iconName: "uploadVideo",
         to: "/ugc-review",
         search: { campaignId: undefined, upload: true },
     },
     {
         label: "Import creative",
         hint: "Add a creative reference",
-        icon: Sparkles,
+        iconName: "importCreative",
         to: "/creative-library",
         search: { import: true },
     },
     {
         label: "Import performance data",
         hint: "Map campaign metrics",
-        icon: BarChart2,
+        iconName: "importPerformance",
         to: "/performance",
         search: { import: true },
     },
@@ -160,7 +154,6 @@ export function SearchCommand({
                 {quickActionResults.length > 0 && (
                     <CommandGroup heading="Quick actions">
                         {quickActionResults.map((action) => {
-                            const Icon = action.icon;
                             return (
                                 <CommandItem
                                     key={action.label}
@@ -187,7 +180,11 @@ export function SearchCommand({
                                         }
                                     }}
                                 >
-                                    <Icon className="mr-2 h-4 w-4" />
+                                    <ViraldyIcon
+                                        name={action.iconName}
+                                        size="sm"
+                                        className="mr-2"
+                                    />
                                     <span className="min-w-0 flex-1">{action.label}</span>
                                     <span className="hidden min-w-0 max-w-[45%] truncate text-xs text-text-tertiary sm:block">
                                         {action.hint}
@@ -210,7 +207,11 @@ export function SearchCommand({
                                         navigate({ to: n.to });
                                     }}
                                 >
-                                    <Icon className="mr-2 h-4 w-4" />
+                                    {n.iconName ? (
+                                        <ViraldyIcon name={n.iconName} size="sm" className="mr-2" />
+                                    ) : (
+                                        <Icon className="mr-2 h-4 w-4" />
+                                    )}
                                     <span>{n.label}</span>
                                 </CommandItem>
                             );

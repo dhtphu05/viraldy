@@ -153,8 +153,8 @@ _PROMPT_PACKAGES = (
         developer_prompt=VIRAL_KIT_DEVELOPER_PROMPT_V2,
         example_ids=ALL_FEW_SHOT_EXAMPLE_IDS,
         output_schema_version=VIRAL_KIT_SCHEMA_VERSION,
-        default_reasoning_effort="high",
-        default_max_output_tokens=10_000,
+        default_reasoning_effort="medium",
+        default_max_output_tokens=16_000,
     ),
     PromptPackage(
         operation=ADAPTATION_OPERATION,
@@ -164,8 +164,8 @@ _PROMPT_PACKAGES = (
         developer_prompt=ADAPTATION_DEVELOPER_PROMPT_V2,
         example_ids=ALL_FEW_SHOT_EXAMPLE_IDS,
         output_schema_version=ADAPTATION_SCHEMA_VERSION,
-        default_reasoning_effort="high",
-        default_max_output_tokens=8_000,
+        default_reasoning_effort="low",
+        default_max_output_tokens=6_000,
     ),
     PromptPackage(
         operation=CAMPAIGN_PACK_OPERATION,
@@ -187,7 +187,7 @@ _PROMPT_PACKAGES = (
         example_ids=ALL_FEW_SHOT_EXAMPLE_IDS,
         output_schema_version=REVISION_MESSAGE_SCHEMA_VERSION,
         default_reasoning_effort="low",
-        default_max_output_tokens=2_000,
+        default_max_output_tokens=6_000,
     ),
     PromptPackage(
         operation=UGC_EXECUTION_BRIEF_OPERATION,

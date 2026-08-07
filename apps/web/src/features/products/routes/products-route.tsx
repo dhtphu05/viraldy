@@ -13,6 +13,7 @@ import { EmptyState } from "@/shared/ui/empty-state";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
 import { MetricStrip } from "@/shared/ui/metric-strip";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { hasConfiguredApiBaseUrl } from "@/shared/api/client";
 import { queryKeys } from "@/shared/api/query-keys";
 import { listProducts, listProductWorkspaces, type Product } from "@/shared/api/products";
@@ -35,7 +36,6 @@ import {
     Megaphone,
     Package,
     Search,
-    Sparkles,
     Video,
     type LucideIcon,
 } from "lucide-react";
@@ -162,7 +162,7 @@ function ProductsPage() {
                                 }}
                                 disabled={catalog.length === 0}
                             >
-                                <Sparkles className="h-4 w-4" />
+                                <ViraldyIcon name="startProductionRun" size="sm" />
                                 Start production run
                             </Button>
                         </>
@@ -500,7 +500,7 @@ function ProductDrawer({
                         Close
                     </Button>
                     <Button onClick={onStartProduction}>
-                        <Sparkles className="h-4 w-4" />
+                        <ViraldyIcon name="startProductionRun" size="sm" />
                         Start production run
                     </Button>
                 </div>

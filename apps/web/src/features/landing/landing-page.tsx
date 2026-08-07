@@ -13,6 +13,7 @@ import { PatternApplicability } from "./components/pattern-applicability";
 import { CreativeDirections } from "./components/creative-directions";
 import { CreatorPlan } from "./components/creator-plan";
 import { ReviewBeforeYouSpend } from "./components/review-before-you-spend";
+import { SofaLiveProof } from "./components/sofa-live-proof";
 import { RevisionCompare } from "./components/revision-compare";
 import { SellerDecisions } from "./components/seller-decisions";
 import { PerformanceLearning } from "./components/performance-learning";
@@ -66,28 +67,31 @@ export function LandingPage() {
                 {/* 13 Quality Control: Draft 1 Score & Fix */}
                 <ReviewBeforeYouSpend />
 
-                {/* 14 Quality Control: V2 Revision Compare */}
+                {/* 14 Live TikTok Scorer Proof */}
+                <SofaLiveProof />
+
+                {/* 15 Quality Control: V2 Revision Compare */}
                 <RevisionCompare />
 
-                {/* 15 Commerce Decisions beyond the core loop */}
+                {/* 16 Commerce Decisions beyond the core loop */}
                 <SellerDecisions />
 
-                {/* 16 Performance Learning & Next Test Recommender */}
+                {/* 17 Performance Learning & Next Test Recommender */}
                 <PerformanceLearning />
 
-                {/* 17 Interactive Use Case Tabs */}
+                {/* 18 Interactive Use Case Tabs */}
                 <UseCases />
 
-                {/* 18 Nuanced Why Viraldy Matrix */}
+                {/* 19 Nuanced Why Viraldy Matrix */}
                 <WhyViraldy />
 
-                {/* 19 Trust & Grounding Methodology */}
+                {/* 20 Trust & Grounding Methodology */}
                 <TrustSection />
 
-                {/* 20 FAQ */}
+                {/* 21 FAQ */}
                 <FaqSection />
 
-                {/* 21 Final CTA */}
+                {/* 22 Final CTA */}
                 <EarlyAccessCta />
             </main>
             <LandingFooter />
