@@ -7,6 +7,7 @@ import {
     Settings,
     ScanSearch,
     Video,
+    Wand2,
     Workflow,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -50,6 +51,11 @@ export const navigationGroups: ShellNavGroup[] = [
                 label: "Creative Library",
                 icon: Images,
                 iconName: "creativeLibrary",
+            },
+            {
+                to: "/smart-remake",
+                label: "Smart Remake",
+                icon: Wand2,
             },
             {
                 to: "/tiktok-scorer",
