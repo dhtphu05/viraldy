@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from viraldy.api.middleware.errors import (
     app_error_handler,
@@ -41,6 +42,8 @@ from viraldy.modules.products.router import router as products_router
 from viraldy.modules.recommendations.router import router as recommendations_router
 from viraldy.modules.reference_boards.router import router as reference_boards_router
 from viraldy.modules.references.router import router as references_router
+from viraldy.modules.smart_remake.router import router as smart_remake_router
+from viraldy.modules.smart_remake.runtime_paths import RENDERS_DIR
 from viraldy.modules.tiktok_scorer.router import router as tiktok_scorer_router
 from viraldy.modules.ugc_review.router import router as ugc_review_router
 from viraldy.modules.ugc_review.video_ingestion import S3UGCVideoIngestion
@@ -71,6 +74,7 @@ def create_app() -> FastAPI:
         license_info={"name": "MIT", "identifier": "MIT"},
     )
     app.state.ugc_review_video_ingestion = S3UGCVideoIngestion(settings)
+    app.mount("/outputs/renders", StaticFiles(directory=RENDERS_DIR), name="smart-remake-renders")
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
     app.add_middleware(
@@ -111,6 +115,7 @@ def create_app() -> FastAPI:
     app.include_router(adaptations_router, prefix=api_v1)
     app.include_router(campaign_packs_router, prefix=api_v1)
     app.include_router(preflight_router, prefix=api_v1)
+    app.include_router(smart_remake_router, prefix=api_v1)
 
     @app.get("/health", response_model=Envelope)
     async def health(request: Request) -> Envelope:
