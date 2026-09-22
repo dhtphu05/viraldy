@@ -56,7 +56,10 @@ export function compileSmartRemake(
         prompt: string;
         description: string;
         referenceVideo: File;
-        productImage: File;
+        productImage?: File;
+        productUrl?: string;
+        productTitle?: string;
+        productDescription?: string;
     },
 ) {
     const body = new FormData();
@@ -67,7 +70,10 @@ export function compileSmartRemake(
     body.set("prompt", input.prompt);
     body.set("description", input.description);
     body.set("referenceVideo", input.referenceVideo);
-    body.set("productImage", input.productImage);
+    if (input.productImage) body.set("productImage", input.productImage);
+    if (input.productUrl) body.set("productUrl", input.productUrl);
+    if (input.productTitle) body.set("productTitle", input.productTitle);
+    if (input.productDescription) body.set("productDescription", input.productDescription);
     return apiPostForm<SmartRemakeCompileResult>(
         `/workspaces/${workspaceId}/smart-remake/compile`,
         body,
