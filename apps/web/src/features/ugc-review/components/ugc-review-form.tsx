@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown, FileVideo2, Loader2, Sparkles, UploadCloud, X } from "lucide-react";
+import { ChevronDown, FileVideo2, Loader2, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 
 import { useUgcWorkspace } from "../hooks/use-ugc-workspace";
@@ -18,6 +18,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Progress } from "@/shared/ui/progress";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { SurfaceCard } from "@/shared/ui/surface-card";
 import { Textarea } from "@/shared/ui/textarea";
@@ -188,7 +189,7 @@ export function UgcReviewForm({ preferredWorkspaceId }: { preferredWorkspaceId?:
                             onDrop={handleDrop}
                             className="mt-5 rounded-2xl border border-dashed border-control-border bg-surface-soft px-6 py-10 text-center transition-colors duration-[180ms] hover:border-primary/50"
                         >
-                            <UploadCloud className="mx-auto h-8 w-8 text-primary" />
+                            <ViraldyIcon name="uploadVideo" size="2xl" className="mx-auto" />
                             <p className="mt-3 text-sm font-medium text-text-primary">
                                 Drop your draft here
                             </p>

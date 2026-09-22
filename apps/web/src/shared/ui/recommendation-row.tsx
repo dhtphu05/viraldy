@@ -1,24 +1,24 @@
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
-import { Sparkles, Wrench, RefreshCcw, Ban } from "lucide-react";
 import type { Recommendation, RecommendationKind, MetricTone } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
+import { ViraldyIcon, type ViraldyIconName } from "@/shared/ui/viraldy-icon";
 
 const kindMeta: Record<
     RecommendationKind,
     {
         tone: MetricTone;
-        icon: React.ComponentType<{ className?: string }>;
+        iconName: ViraldyIconName;
         label: string;
         action: string;
     }
 > = {
-    Scale: { tone: "ok", icon: Sparkles, label: "Scale", action: "Create variants" },
-    Fix: { tone: "warn", icon: Wrench, label: "Fix", action: "Apply fix" },
-    Rehire: { tone: "info", icon: RefreshCcw, label: "Rehire", action: "Draft outreach" },
+    Scale: { tone: "ok", iconName: "scale", label: "Scale", action: "Create variants" },
+    Fix: { tone: "warn", iconName: "fix", label: "Fix", action: "Apply fix" },
+    Rehire: { tone: "info", iconName: "rehire", label: "Rehire", action: "Draft outreach" },
     "Stop testing": {
         tone: "destructive",
-        icon: Ban,
+        iconName: "stopTesting",
         label: "Stop",
         action: "Reallocate",
     },
@@ -36,7 +36,6 @@ export function RecommendationRow({
     className?: string;
 }) {
     const meta = kindMeta[rec.kind];
-    const Icon = meta.icon;
     return (
         <div
             className={cn(
@@ -47,13 +46,13 @@ export function RecommendationRow({
             <span
                 className={cn(
                     "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                    meta.tone === "ok" && "bg-ok-soft text-ok",
-                    meta.tone === "warn" && "bg-warn-soft text-warn",
-                    meta.tone === "info" && "bg-info-soft text-info",
-                    meta.tone === "destructive" && "bg-destructive-soft text-destructive",
+                    meta.tone === "ok" && "bg-ok-soft/50",
+                    meta.tone === "warn" && "bg-warn-soft/50",
+                    meta.tone === "info" && "bg-info-soft/50",
+                    meta.tone === "destructive" && "bg-destructive-soft/50",
                 )}
             >
-                <Icon className="h-4 w-4" />
+                <ViraldyIcon name={meta.iconName} size="xl" />
             </span>
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">

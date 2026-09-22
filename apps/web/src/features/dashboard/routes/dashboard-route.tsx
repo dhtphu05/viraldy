@@ -11,6 +11,7 @@ import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { RelativeTime } from "@/shared/ui/relative-time";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { AnalyzeCreativeDialog } from "@/features/dashboard/components/analyze-creative-dialog";
 import { overviewMetrics, decisionQueue } from "@/features/dashboard/mocks/dashboard";
 import { recommendations as seedRecs } from "@/features/dashboard/mocks/recommendations";
@@ -26,7 +27,6 @@ import {
     ShieldCheck,
     Lightbulb,
     ArrowRight,
-    Workflow,
 } from "lucide-react";
 import type { DecisionItem, Recommendation } from "@/shared/types";
 
@@ -147,11 +147,11 @@ function DashboardPage() {
                     actions={
                         <>
                             <Button variant="secondary" onClick={() => setAnalyzeOpen(true)}>
-                                <Sparkles className="h-4 w-4" />
+                                <ViraldyIcon name="analyzeCreative" size="sm" />
                                 Analyze creative
                             </Button>
                             <Button onClick={() => navigate({ to: "/mvp" })}>
-                                <Workflow className="h-4 w-4" />
+                                <ViraldyIcon name="startProductionRun" size="md" />
                                 Start production run
                             </Button>
                         </>
@@ -330,7 +330,7 @@ function DashboardPage() {
                                 description="Start a production run to connect a product, creative reference, and creator-ready Campaign Pack."
                                 action={
                                     <Button size="sm" onClick={() => navigate({ to: "/mvp" })}>
-                                        <Workflow className="h-4 w-4" />
+                                        <ViraldyIcon name="startProductionRun" size="sm" />
                                         Start production run
                                     </Button>
                                 }

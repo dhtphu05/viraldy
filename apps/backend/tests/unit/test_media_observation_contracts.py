@@ -60,6 +60,43 @@ def test_media_observation_rejects_timestamps_outside_duration() -> None:
         MediaObservationBundleV1.model_validate(payload)
 
 
+def test_media_observation_normalizes_first_appearance_summary() -> None:
+    payload = _minimal_bundle()
+    payload["product_appearances"] = [
+        {
+            "observation_id": "product_late",
+            "time_range": {"start_ms": 700, "end_ms": 900},
+            "visibility": "clear",
+            "shot_type": "close_up",
+            "usage_visible": False,
+            "product_match_confidence": 0.8,
+            "confidence": 0.8,
+            "frame_storage_keys": [],
+        },
+        {
+            "observation_id": "product_early",
+            "time_range": {"start_ms": 300, "end_ms": 500},
+            "visibility": "partial",
+            "shot_type": "medium",
+            "usage_visible": True,
+            "product_match_confidence": 0.7,
+            "confidence": 0.7,
+            "frame_storage_keys": [],
+        },
+    ]
+    payload["product_visibility"] = {
+        "first_appearance_ms": 700,
+        "total_visible_ms": 400,
+        "screen_time_ratio": 0.4,
+        "clear_close_up_present": True,
+        "usage_present": True,
+    }
+
+    bundle = MediaObservationBundleV1.model_validate(payload)
+
+    assert bundle.product_visibility.first_appearance_ms == 300
+
+
 def test_native_openai_live_settings_do_not_require_legacy_ai_fields() -> None:
     settings = Settings(
         ai_mode="live",

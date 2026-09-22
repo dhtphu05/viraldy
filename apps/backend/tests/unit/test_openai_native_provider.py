@@ -192,6 +192,28 @@ def test_non_completed_response_statuses_fail_safely(status: str) -> None:
     assert "provider failure detail" not in str(exc_info.value)
 
 
+def test_incomplete_max_output_tokens_retries_once_with_larger_budget() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        if len(captured) == 1:
+            return _response_http(None, status="incomplete")
+        return _response_http('{"answer":"completed after larger budget"}')
+
+    provider = _provider(handler)
+    result = provider.generate_structured(_generation_request())
+
+    assert result.parsed_output == SampleOutput(answer="completed after larger budget")
+    assert len(captured) == 2
+    first_body = json.loads(captured[0].content)
+    second_body = json.loads(captured[1].content)
+    assert first_body["max_output_tokens"] == 321
+    assert second_body["max_output_tokens"] == 16000
+    assert captured[0].headers["idempotency-key"] == "idempotency-key"
+    assert captured[1].headers["idempotency-key"] == "idempotency-key-incomplete-retry-1"
+
+
 def test_refusal_is_not_treated_as_structured_output() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return _response_http(None, refusal="private provider refusal")

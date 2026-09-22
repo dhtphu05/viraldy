@@ -334,6 +334,61 @@ const analysisSofa = sofaCreative
       }
     : undefined;
 
+const humidifierCreative = seedCreatives.find((c) => c.id === "cr-antigravity-humidifier");
+const analysisHumidifier = humidifierCreative
+    ? {
+          ...buildMockAnalysis(humidifierCreative),
+          decision: "Strong reference" as const,
+          reason: "Defies gravity visual cue creates a powerful visual hook in the first 2 seconds, high potential for viral TikTok conversion.",
+          dnaScore: 85,
+          confidence: "High" as const,
+      }
+    : undefined;
+
+const sunsetLampCreative = seedCreatives.find((c) => c.id === "cr-sunset-lamp");
+const analysisSunsetLamp = sunsetLampCreative
+    ? {
+          ...buildMockAnalysis(sunsetLampCreative),
+          decision: "Useful with adaptation" as const,
+          reason: "Excellent visual aesthetic. Pacing could be improved by moving the transition reveal earlier in the hook.",
+          dnaScore: 80,
+          confidence: "High" as const,
+      }
+    : undefined;
+
+const frezeCreative = seedCreatives.find((c) => c.id === "cr-freze");
+const analysisFreze = frezeCreative
+    ? {
+          ...buildMockAnalysis(frezeCreative),
+          decision: "Strong reference" as const,
+          reason: "Highly engaging product demonstration showing step-by-step usage with a fast, satisfying payoff.",
+          dnaScore: 85,
+          confidence: "High" as const,
+      }
+    : undefined;
+
+const lemonDusterCreative = seedCreatives.find((c) => c.id === "cr-lemon-duster");
+const analysisLemonDuster = lemonDusterCreative
+    ? {
+          ...buildMockAnalysis(lemonDusterCreative),
+          decision: "Strong reference" as const,
+          reason: "Extremely satisfying home cleaning hook, clear before/after comparison and high screen time of the product in action.",
+          dnaScore: 88,
+          confidence: "High" as const,
+      }
+    : undefined;
+
+const sonyHeadphonesCreative = seedCreatives.find((c) => c.id === "cr-sony-headphones");
+const analysisSonyHeadphones = sonyHeadphonesCreative
+    ? {
+          ...buildMockAnalysis(sonyHeadphonesCreative),
+          decision: "Useful with adaptation" as const,
+          reason: "Good travel vlog hook, strong personal testimony, but needs clearer text call-outs for key specs.",
+          dnaScore: 82,
+          confidence: "Medium" as const,
+      }
+    : undefined;
+
 export const seedAnalyses: Record<string, CreativeAnalysis> = {
     "cr-1": analysis1,
     "cr-2": analysis2,
@@ -343,4 +398,9 @@ export const seedAnalyses: Record<string, CreativeAnalysis> = {
     "cr-6": analysis6,
     "cr-7": analysis7,
     ...(analysisSofa ? { "cr-sofa-cover": analysisSofa } : {}),
+    ...(analysisHumidifier ? { "cr-antigravity-humidifier": analysisHumidifier } : {}),
+    ...(analysisSunsetLamp ? { "cr-sunset-lamp": analysisSunsetLamp } : {}),
+    ...(analysisFreze ? { "cr-freze": analysisFreze } : {}),
+    ...(analysisLemonDuster ? { "cr-lemon-duster": analysisLemonDuster } : {}),
+    ...(analysisSonyHeadphones ? { "cr-sony-headphones": analysisSonyHeadphones } : {}),
 };

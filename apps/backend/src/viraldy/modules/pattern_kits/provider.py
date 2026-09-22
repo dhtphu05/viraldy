@@ -154,12 +154,26 @@ class LivePatternKitProvider:
                     pattern_kit_id,
                     workspace_id,
                     version,
+                    created_by,
+                    created_at,
                     request,
                     source_payloads,
+                    model_run_id,
                 ),
             )
+            output = normalize_pattern_kit_output(
+                result.parsed_output,
+                pattern_kit_id=pattern_kit_id,
+                workspace_id=workspace_id,
+                version=version,
+                created_by=created_by,
+                created_at=created_at,
+                request=request,
+                source_payloads=source_payloads,
+                model_run_id=model_run_id,
+            )
             return PatternKitProviderExecution(
-                output=PatternKitV1.model_validate(result.parsed_output),
+                output=output,
                 provider_result=result,
             )
 
@@ -198,9 +212,23 @@ class LivePatternKitProvider:
                 pattern_kit_id,
                 workspace_id,
                 version,
+                created_by,
+                created_at,
                 request,
                 source_payloads,
+                model_run_id,
             )(output)
+            output = normalize_pattern_kit_output(
+                output,
+                pattern_kit_id=pattern_kit_id,
+                workspace_id=workspace_id,
+                version=version,
+                created_by=created_by,
+                created_at=created_at,
+                request=request,
+                source_payloads=source_payloads,
+                model_run_id=model_run_id,
+            )
             return PatternKitProviderExecution(
                 output=output,
                 provider_result=None,
@@ -216,8 +244,11 @@ def _native_output_validator(
     pattern_kit_id: UUID,
     workspace_id: UUID,
     version: int,
+    created_by: UUID,
+    created_at: str,
     request: CreatePatternKitRequest,
     source_payloads: list[dict[str, object]],
+    model_run_id: UUID,
 ) -> Callable[[BaseModel], None]:
     expected_source_ids = [
         str(source["creative_dna_version_id"])
@@ -226,7 +257,17 @@ def _native_output_validator(
     ]
 
     def validate(output: BaseModel) -> None:
-        pattern = PatternKitV1.model_validate(output)
+        pattern = normalize_pattern_kit_output(
+            output,
+            pattern_kit_id=pattern_kit_id,
+            workspace_id=workspace_id,
+            version=version,
+            created_by=created_by,
+            created_at=created_at,
+            request=request,
+            source_payloads=source_payloads,
+            model_run_id=model_run_id,
+        )
         if (
             pattern.id != pattern_kit_id
             or pattern.workspace_id != workspace_id
@@ -254,6 +295,64 @@ def _native_output_validator(
         _validate_native_anti_copy(pattern, source_payloads)
 
     return validate
+
+
+def normalize_pattern_kit_output(
+    output: BaseModel | dict[str, object],
+    *,
+    pattern_kit_id: UUID,
+    workspace_id: UUID,
+    version: int,
+    created_by: UUID,
+    created_at: str,
+    request: CreatePatternKitRequest,
+    source_payloads: list[dict[str, object]],
+    model_run_id: UUID,
+) -> PatternKitV1:
+    payload = PatternKitV1.model_validate(output).model_dump(mode="json")
+    source = payload.get("source")
+    if isinstance(source, dict):
+        source["creative_dna_version_ids"] = [
+            str(source_payload["creative_dna_version_id"])
+            for source_payload in source_payloads
+            if "creative_dna_version_id" in source_payload
+        ]
+        source["source_asset_count"] = len(
+            {
+                str(source_payload["asset_version_id"])
+                for source_payload in source_payloads
+                if "asset_version_id" in source_payload
+            }
+        )
+        source["source_category_count"] = 1
+        source["extraction_mode"] = request.extraction_mode
+    provenance = payload.get("provenance")
+    if isinstance(provenance, dict):
+        provenance["model_run_id"] = str(model_run_id)
+        provenance["prompt_version"] = PATTERN_KIT_PROMPT_VERSION
+        provenance.setdefault("taxonomy_version", _taxonomy_version_from_payloads(source_payloads))
+    payload.update(
+        {
+            "id": str(pattern_kit_id),
+            "workspace_id": str(workspace_id),
+            "version": version,
+            "name": request.name,
+            "kind": request.kind,
+            "scope": request.scope,
+            "status": "candidate",
+            "created_by": str(created_by),
+            "created_at": created_at,
+        }
+    )
+    return PatternKitV1.model_validate(payload)
+
+
+def _taxonomy_version_from_payloads(source_payloads: list[dict[str, object]]) -> str:
+    for source_payload in source_payloads:
+        taxonomy_version = source_payload.get("taxonomy_version")
+        if isinstance(taxonomy_version, str) and taxonomy_version:
+            return taxonomy_version
+    return "unknown"
 
 
 def _validate_native_pattern_evidence(

@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
-import { Bell } from "lucide-react";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { useState } from "react";
 
 const items = [
@@ -38,7 +38,7 @@ export function NotificationPopover() {
                     aria-label="Notifications"
                     className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                    <Bell className="h-4 w-4" />
+                    <ViraldyIcon name="notifications" size="md" />
                     {!allRead && (
                         <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" />
                     )}

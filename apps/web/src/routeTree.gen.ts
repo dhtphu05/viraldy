@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UgcReviewRouteImport } from './routes/ugc-review'
 import { Route as TiktokScorerRouteImport } from './routes/tiktok-scorer'
+import { Route as SmartRemakeRouteImport } from './routes/smart-remake'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProductsRouteImport } from './routes/products'
@@ -50,6 +51,11 @@ const UgcReviewRoute = UgcReviewRouteImport.update({
 const TiktokScorerRoute = TiktokScorerRouteImport.update({
   id: '/tiktok-scorer',
   path: '/tiktok-scorer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SmartRemakeRoute = SmartRemakeRouteImport.update({
+  id: '/smart-remake',
+  path: '/smart-remake',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
+  '/smart-remake': typeof SmartRemakeRoute
   '/tiktok-scorer': typeof TiktokScorerRouteWithChildren
   '/ugc-review': typeof UgcReviewRouteWithChildren
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
@@ -249,6 +256,7 @@ export interface FileRoutesByTo {
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
+  '/smart-remake': typeof SmartRemakeRoute
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
@@ -282,6 +290,7 @@ export interface FileRoutesById {
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
+  '/smart-remake': typeof SmartRemakeRoute
   '/tiktok-scorer': typeof TiktokScorerRouteWithChildren
   '/ugc-review': typeof UgcReviewRouteWithChildren
   '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
@@ -318,6 +327,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/register'
     | '/settings'
+    | '/smart-remake'
     | '/tiktok-scorer'
     | '/ugc-review'
     | '/campaigns/$campaignId'
@@ -349,6 +359,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/register'
     | '/settings'
+    | '/smart-remake'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
     | '/creative-library/$creativeId'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/register'
     | '/settings'
+    | '/smart-remake'
     | '/tiktok-scorer'
     | '/ugc-review'
     | '/campaigns/$campaignId'
@@ -416,6 +428,7 @@ export interface RootRouteChildren {
   ProductsRoute: typeof ProductsRoute
   RegisterRoute: typeof RegisterRoute
   SettingsRoute: typeof SettingsRoute
+  SmartRemakeRoute: typeof SmartRemakeRoute
   TiktokScorerRoute: typeof TiktokScorerRouteWithChildren
   UgcReviewRoute: typeof UgcReviewRouteWithChildren
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -439,6 +452,13 @@ declare module '@tanstack/react-router' {
       path: '/tiktok-scorer'
       fullPath: '/tiktok-scorer'
       preLoaderRoute: typeof TiktokScorerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/smart-remake': {
+      id: '/smart-remake'
+      path: '/smart-remake'
+      fullPath: '/smart-remake'
+      preLoaderRoute: typeof SmartRemakeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -753,6 +773,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductsRoute: ProductsRoute,
   RegisterRoute: RegisterRoute,
   SettingsRoute: SettingsRoute,
+  SmartRemakeRoute: SmartRemakeRoute,
   TiktokScorerRoute: TiktokScorerRouteWithChildren,
   UgcReviewRoute: UgcReviewRouteWithChildren,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,

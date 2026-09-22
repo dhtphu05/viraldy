@@ -4,20 +4,15 @@ import { useAppStore } from "@/app/store/app-store";
 import { cn } from "@/shared/lib/utils";
 import { BrandLogo } from "@/shared/ui/brand-logo";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/shared/ui/tooltip";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { navigationGroups, type ShellNavItem } from "./navigation";
 
 function NavLinkRow({ item, collapsed }: { item: ShellNavItem; collapsed: boolean }) {
     const pathname = useRouterState({ select: (s) => s.location.pathname });
     const active = pathname === item.to || pathname.startsWith(item.to + "/");
     const Icon = item.icon;
-    const icon = item.iconSrc ? (
-        <img
-            src={item.iconSrc}
-            alt=""
-            aria-hidden
-            className="h-[22px] w-[22px] shrink-0 object-contain"
-            draggable={false}
-        />
+    const icon = item.iconName ? (
+        <ViraldyIcon name={item.iconName} size={collapsed ? "nav" : "md"} />
     ) : (
         <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-primary")} />
     );
@@ -150,14 +145,8 @@ export function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }
                                 const active =
                                     pathname === item.to || pathname.startsWith(item.to + "/");
                                 const Icon = item.icon;
-                                const icon = item.iconSrc ? (
-                                    <img
-                                        src={item.iconSrc}
-                                        alt=""
-                                        aria-hidden
-                                        className="h-[22px] w-[22px] shrink-0 object-contain"
-                                        draggable={false}
-                                    />
+                                const icon = item.iconName ? (
+                                    <ViraldyIcon name={item.iconName} size="md" />
                                 ) : (
                                     <Icon
                                         className={cn(

@@ -12,6 +12,7 @@ import { RelativeTime } from "@/shared/ui/relative-time";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { DemoMediaTile } from "@/shared/ui/demo-media-tile";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { RecommendationCardPerf } from "@/features/performance/components/recommendation-card-perf";
 import { EvidenceDrawer } from "@/features/performance/components/evidence-drawer";
 import { ImportPerformanceDialog } from "@/features/performance/components/import-performance-dialog";
@@ -32,15 +33,7 @@ import {
 } from "@/features/performance/lib/performanceEngine";
 import { isWithinDemoDays } from "@/shared/mocks/time";
 import type { PerfRecommendation, DecisionGroup } from "@/features/performance/types/performance";
-import {
-    BarChart3,
-    TrendingUp,
-    Sparkles,
-    Search,
-    FileDown,
-    Upload,
-    ChevronRight,
-} from "lucide-react";
+import { BarChart3, TrendingUp, Search, FileDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/performance/")({
@@ -248,7 +241,8 @@ function PerformancePage() {
                                 <FileDown className="h-4 w-4" /> View reports
                             </Button>
                             <Button size="sm" onClick={() => setOpenImport(true)}>
-                                <Upload className="h-4 w-4" /> Import performance data
+                                <ViraldyIcon name="importPerformance" size="sm" />
+                                Import performance data
                             </Button>
                         </>
                     }
@@ -299,7 +293,7 @@ function PerformancePage() {
                                     size="sm"
                                     onClick={() => onCreateVariants(topRecommendation)}
                                 >
-                                    <Sparkles className="h-4 w-4" />
+                                    <ViraldyIcon name="createVariants" size="sm" />
                                     Create variants
                                 </Button>
                             ) : (
@@ -503,7 +497,10 @@ function PerformancePage() {
                                                     size="sm"
                                                     onClick={() => setOpenImport(true)}
                                                 >
-                                                    <Upload className="h-4 w-4" />
+                                                    <ViraldyIcon
+                                                        name="importPerformance"
+                                                        size="sm"
+                                                    />
                                                     Import performance data
                                                 </Button>
                                             </>
@@ -624,7 +621,7 @@ function PerformancePage() {
                             </p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => setOpenImport(true)}>
-                            <Upload className="h-4 w-4" /> Import metrics
+                            <ViraldyIcon name="importPerformance" size="sm" /> Import metrics
                         </Button>
                     </div>
                     <div className="grid gap-3 p-3 sm:hidden">

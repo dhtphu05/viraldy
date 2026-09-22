@@ -3,6 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { useAppStore } from "@/app/store/app-store";
 import { workspaces } from "@/shared/mocks/workspaces";
 import { cn } from "@/shared/lib/utils";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { useState } from "react";
 
 export function WorkspaceSwitcher() {
@@ -18,13 +19,7 @@ export function WorkspaceSwitcher() {
                     type="button"
                     className="inline-flex h-9 max-w-[220px] items-center gap-2 rounded-md px-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                    <span
-                        aria-hidden
-                        className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[10px] font-semibold text-primary-foreground"
-                        style={{ backgroundColor: current.color }}
-                    >
-                        {current.name[0]}
-                    </span>
+                    <ViraldyIcon name="workspace" size="md" />
                     <span className="min-w-0 truncate">{current.name}</span>
                     <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
                 </button>

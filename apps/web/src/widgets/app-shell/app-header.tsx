@@ -12,9 +12,9 @@ import {
     DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { Link, useRouteContext } from "@tanstack/react-router";
-import { Menu, Search } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useState } from "react";
-import { profileInitials } from "@/features/auth/lib/auth-contract";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 
 export function AppHeader() {
     const [searchOpen, setSearchOpen] = useState(false);
@@ -48,7 +48,7 @@ export function AppHeader() {
                     onClick={() => setSearchOpen(true)}
                     className="inline-flex h-9 w-full items-center gap-2 rounded-md bg-surface-soft px-3 text-sm text-text-tertiary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                    <Search className="h-4 w-4 shrink-0" />
+                    <ViraldyIcon name="search" size="md" />
                     <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
                         Search products, campaigns, assets…
                     </span>
@@ -65,7 +65,7 @@ export function AppHeader() {
                     aria-label="Search"
                     className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft lg:hidden"
                 >
-                    <Search className="h-4 w-4" />
+                    <ViraldyIcon name="search" size="md" />
                 </button>
                 <NotificationPopover />
                 <DropdownMenu>
@@ -73,9 +73,9 @@ export function AppHeader() {
                         <button
                             type="button"
                             aria-label="Account"
-                            className="ml-1 grid h-8 w-8 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary-active ring-1 ring-inset ring-primary/10 transition-colors hover:bg-primary-softer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            className="ml-1 grid h-9 w-9 place-items-center rounded-md text-text-secondary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         >
-                            {user ? profileInitials(user) : "U"}
+                            <ViraldyIcon name="account" size="md" />
                         </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">

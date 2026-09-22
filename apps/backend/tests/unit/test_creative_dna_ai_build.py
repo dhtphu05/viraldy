@@ -18,6 +18,7 @@ from viraldy.modules.creative_dna.provider import (
     LiveCreativeDnaProvider,
     build_creative_dna_evidence_catalog,
     build_creative_dna_output_validator,
+    normalize_creative_dna_evidence_ids,
 )
 from viraldy.modules.creative_dna.service import (
     SyncCreativeDnaBuilder,
@@ -243,7 +244,7 @@ def test_creative_dna_validator_rejects_foreign_evidence_and_fabricated_timestam
 
     foreign_payload = expected.model_dump(mode="json")
     foreign_payload["opening"]["hook_text"]["evidence_ids"] = [str(uuid4())]
-    with pytest.raises(ValueError, match="outside the supplied catalog"):
+    with pytest.raises(ValueError, match="require evidence IDs"):
         validator(CreativeDnaV1.model_validate(foreign_payload))
 
     timestamp_payload = expected.model_dump(mode="json")
@@ -254,6 +255,24 @@ def test_creative_dna_validator_rejects_foreign_evidence_and_fabricated_timestam
     ]
     with pytest.raises(ValueError, match="timestamp"):
         validator(CreativeDnaV1.model_validate(timestamp_payload))
+
+
+def test_creative_dna_provider_prunes_mixed_foreign_evidence_ids() -> None:
+    workspace_id = uuid4()
+    asset_version_id = uuid4()
+    evidence = _evidence(workspace_id, asset_version_id)
+    payload = _dna(evidence).model_dump(mode="json")
+    valid_id = str(evidence[0].id)
+    payload["opening"]["hook_text"]["evidence_ids"] = [valid_id, str(uuid4())]
+    payload["reusable_mechanisms"][0]["evidence_ids"] = [str(uuid4()), valid_id]
+    dna = CreativeDnaV1.model_validate(payload)
+    validator = build_creative_dna_output_validator(evidence, media_duration_ms=5_000)
+
+    validator(dna)
+    normalized = normalize_creative_dna_evidence_ids(dna, {item.id for item in evidence})
+
+    assert normalized.opening.hook_text.evidence_ids == [evidence[0].id]
+    assert normalized.reusable_mechanisms[0].evidence_ids == [evidence[0].id]
 
 
 def test_creative_dna_validator_accepts_grounded_derived_durations() -> None:

@@ -109,8 +109,13 @@ class LiveAdaptationProvider:
                     dna_json,
                 ),
             )
+            output = normalize_adaptation_output(
+                AdaptationOutputV2.model_validate(result.parsed_output),
+                ProductContextV1.model_validate(product["context"]),
+                dna_json,
+            )
             return AdaptationProviderExecution(
-                output=AdaptationOutputV2.model_validate(result.parsed_output),
+                output=output,
                 provider_result=result,
             )
 
@@ -192,7 +197,11 @@ def _native_adaptation_validator(
     product_name = product_context.identity.name.casefold()
 
     def validate(output: BaseModel) -> None:
-        adaptation = AdaptationOutputV2.model_validate(output)
+        adaptation = normalize_adaptation_output(
+            AdaptationOutputV2.model_validate(output),
+            product_context,
+            dna_json,
+        )
         referenced_evidence_ids = {
             evidence_id
             for guidance in adaptation.guidance
@@ -225,6 +234,91 @@ def _native_adaptation_validator(
                 raise ValueError("Adaptation concept omitted the supplied product name.")
 
     return validate
+
+
+def normalize_adaptation_output(
+    output: AdaptationOutputV2,
+    product_context: ProductContextV1,
+    dna_json: dict[str, object],
+) -> AdaptationOutputV2:
+    allowed_evidence_ids = _evidence_ids(dna_json)
+    required_guardrails = {
+        claim.text
+        for claim in product_context.governance.claims
+        if claim.rule_type == "prohibited"
+    }.union(product_context.governance.prohibited_content)
+    payload = output.model_dump(mode="python")
+    _prune_foreign_evidence_ids(payload, allowed_evidence_ids)
+    _preserve_required_guardrails(payload, required_guardrails)
+    _preserve_product_name(payload, product_context.identity.name)
+    return AdaptationOutputV2.model_validate(payload)
+
+
+def _prune_foreign_evidence_ids(value: object, allowed_evidence_ids: set[UUID]) -> None:
+    if isinstance(value, dict):
+        for key in ("evidence_ids", "source_evidence_ids"):
+            raw_ids = value.get(key)
+            if isinstance(raw_ids, list):
+                value[key] = [
+                    evidence_id
+                    for evidence_id in raw_ids
+                    if isinstance(evidence_id, UUID) and evidence_id in allowed_evidence_ids
+                ]
+        for nested in value.values():
+            _prune_foreign_evidence_ids(nested, allowed_evidence_ids)
+        return
+    if isinstance(value, list):
+        for nested in value:
+            _prune_foreign_evidence_ids(nested, allowed_evidence_ids)
+
+
+def _preserve_required_guardrails(
+    payload: dict[str, object],
+    required_guardrails: set[str],
+) -> None:
+    if not required_guardrails:
+        return
+    concepts = payload.get("concepts")
+    if not isinstance(concepts, list):
+        return
+    for concept in concepts:
+        if not isinstance(concept, dict):
+            continue
+        guardrails = concept.get("claim_guardrails")
+        if not isinstance(guardrails, list):
+            concept["claim_guardrails"] = sorted(required_guardrails)
+            continue
+        existing = {item for item in guardrails if isinstance(item, str)}
+        concept["claim_guardrails"] = [
+            item for item in guardrails if isinstance(item, str)
+        ] + sorted(required_guardrails - existing)
+
+
+def _preserve_product_name(payload: dict[str, object], product_name: str) -> None:
+    product_name = product_name.strip()
+    if not product_name:
+        return
+    concepts = payload.get("concepts")
+    if not isinstance(concepts, list):
+        return
+    for concept in concepts:
+        if not isinstance(concept, dict):
+            continue
+        rendered = " ".join(
+            str(concept.get(key) or "")
+            for key in (
+                "name",
+                "angle",
+                "opening_visual",
+                "demo_mechanism",
+                "proof_mechanism",
+                "cta_strategy",
+            )
+        ).casefold()
+        if product_name.casefold() in rendered:
+            continue
+        current_name = str(concept.get("name") or "").strip()
+        concept["name"] = f"{product_name} - {current_name}" if current_name else product_name
 
 
 def _evidence_ids(payload: dict[str, object]) -> set[UUID]:

@@ -11,7 +11,6 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from viraldy.modules.ai_gateway.public import StructuredOutputValidationError
 from viraldy.modules.creative_dna.contracts import CreativeDnaV1
 from viraldy.modules.creative_dna.models import CreativeDnaVersionModel
 from viraldy.modules.creative_dna.service import _build_creative_dna, _evidence_by_type
@@ -35,6 +34,7 @@ from viraldy.modules.pattern_kits.provider import (
     PatternSourceInput,
     _native_output_validator,
     build_fixture_pattern_kit,
+    normalize_pattern_kit_output,
 )
 from viraldy.modules.pattern_kits.schemas import (
     CreatePatternKitFeedbackRequest,
@@ -133,15 +133,18 @@ def test_native_pattern_validator_rejects_evidence_outside_catalog() -> None:
     dna, evidence = _dna_model(workspace_id)
     source = _source_input(dna, evidence)
     request = _create_request([dna.id], kind="single_asset_abstraction")
+    created_by = uuid4()
+    model_run_id = uuid4()
+    created_at = utc_now()
     pattern = build_fixture_pattern_kit(
         pattern_kit_id=uuid4(),
         workspace_id=workspace_id,
         version=1,
-        created_by=uuid4(),
-        created_at=utc_now(),
+        created_by=created_by,
+        created_at=created_at,
         request=request,
         sources=[source],
-        model_run_id=uuid4(),
+        model_run_id=model_run_id,
     )
     payload = pattern.model_dump(mode="json")
     payload["opening"]["evidence_refs"][0]["evidence_id"] = str(uuid4())  # type: ignore[index]
@@ -150,42 +153,65 @@ def test_native_pattern_validator_rejects_evidence_outside_catalog() -> None:
         pattern.id,
         workspace_id,
         1,
+        created_by,
+        created_at.isoformat(),
         request,
         _source_payloads([source]),
+        model_run_id,
     )
 
     with pytest.raises(ValueError, match="outside the request"):
         validator(invalid)
 
 
-def test_native_pattern_validator_returns_a_safe_repair_reason() -> None:
+def test_normalize_pattern_kit_preserves_system_identity_fields() -> None:
     workspace_id = uuid4()
     dna, evidence = _dna_model(workspace_id)
     source = _source_input(dna, evidence)
     request = _create_request([dna.id], kind="single_asset_abstraction")
+    pattern_kit_id = uuid4()
+    created_by = uuid4()
+    model_run_id = uuid4()
+    created_at = utc_now()
     pattern = build_fixture_pattern_kit(
         pattern_kit_id=uuid4(),
         workspace_id=workspace_id,
         version=1,
         created_by=uuid4(),
-        created_at=utc_now(),
+        created_at=created_at,
         request=request,
         sources=[source],
         model_run_id=uuid4(),
     )
-    invalid = pattern.model_copy(update={"status": "reviewed"})
-    validator = _native_output_validator(
-        pattern.id,
-        workspace_id,
-        1,
-        request,
-        _source_payloads([source]),
+    payload = pattern.model_dump(mode="json")
+    payload.update(
+        {
+            "id": str(uuid4()),
+            "name": "Model-mutated name",
+            "status": "reviewed",
+            "created_by": str(uuid4()),
+            "workspace_id": str(uuid4()),
+        }
     )
 
-    with pytest.raises(StructuredOutputValidationError) as exc_info:
-        validator(invalid)
+    normalized = normalize_pattern_kit_output(
+        PatternKitV1.model_validate(payload),
+        pattern_kit_id=pattern_kit_id,
+        workspace_id=workspace_id,
+        version=1,
+        created_by=created_by,
+        created_at=created_at.isoformat(),
+        request=request,
+        source_payloads=_source_payloads([source]),
+        model_run_id=model_run_id,
+    )
 
-    assert exc_info.value.issue.summary == "New PatternKits must start as candidate."
+    assert normalized.id == pattern_kit_id
+    assert normalized.workspace_id == workspace_id
+    assert normalized.name == request.name
+    assert normalized.status == "candidate"
+    assert normalized.created_by == created_by
+    assert normalized.provenance.model_run_id == model_run_id
 
 
 def test_pattern_source_payload_catalogs_exact_paths_by_evidence_id() -> None:

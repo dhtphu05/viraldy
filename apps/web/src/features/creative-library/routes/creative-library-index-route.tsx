@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
-import { FolderInput, Images, Megaphone, PanelLeft, Plus, Sparkles, X } from "lucide-react";
+import { FolderInput, Images, Megaphone, PanelLeft, Sparkles, X } from "lucide-react";
 import { useAppStore } from "@/app/store/app-store";
 import { useEffect, useMemo, useState } from "react";
 import { BoardRail } from "@/features/creative-library/components/board-rail";
@@ -27,6 +27,7 @@ import type {
 import { emptyFilterState } from "@/features/creative-library/types/creative";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 
 export const Route = createFileRoute("/creative-library/")({
     validateSearch: (search: Record<string, unknown>) => ({
@@ -241,7 +242,7 @@ function CreativeLibraryPage() {
                     description="Save, decode, and reuse creative patterns for your products and campaigns."
                     actions={
                         <Button size="sm" onClick={() => setImportOpen(true)}>
-                            <Plus className="h-4 w-4" />
+                            <ViraldyIcon name="importCreative" size="sm" />
                             Import creative
                         </Button>
                     }
@@ -384,7 +385,7 @@ function CreativeLibraryPage() {
                                     description="Import a reference or creator video, then analyze its Creative DNA."
                                     action={
                                         <Button size="sm" onClick={() => setImportOpen(true)}>
-                                            <Plus className="h-4 w-4" />
+                                            <ViraldyIcon name="importCreative" size="sm" />
                                             Import creative
                                         </Button>
                                     }

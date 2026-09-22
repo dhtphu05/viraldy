@@ -1,16 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import {
-    ArrowLeft,
-    CheckCircle2,
-    FileVideo,
-    Loader2,
-    Package,
-    Sparkles,
-    Upload,
-    X,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileVideo, Loader2, Package, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 
 import { ScorerErrorState, ScorerLoadingState } from "../components/scorer-route-state";
 import { useScorerWorkspace } from "../hooks/use-scorer-workspace";
@@ -289,7 +281,7 @@ function TikTokScorerNewRoute() {
                             </>
                         ) : (
                             <>
-                                <Upload className="h-8 w-8 text-primary" />
+                                <ViraldyIcon name="uploadVideo" size="2xl" />
                                 <p className="mt-3 font-medium text-text-primary">
                                     Drop a video here or choose a file
                                 </p>

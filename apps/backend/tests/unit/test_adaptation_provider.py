@@ -5,7 +5,10 @@ from uuid import uuid4
 import pytest
 
 from viraldy.modules.adaptations.contracts import AdaptationOutputV2
-from viraldy.modules.adaptations.provider import _native_adaptation_validator
+from viraldy.modules.adaptations.provider import (
+    _native_adaptation_validator,
+    normalize_adaptation_output,
+)
 from viraldy.modules.adaptations.service import _fixture_adaptation
 from viraldy.modules.products.contracts import (
     ClaimRuleV1,
@@ -16,31 +19,56 @@ from viraldy.modules.products.contracts import (
 from viraldy.modules.products.public import ProductContextSnapshot
 
 
-def test_native_adaptation_validator_rejects_unknown_evidence() -> None:
+def test_native_adaptation_validator_prunes_unknown_evidence() -> None:
     product = _product()
     allowed_evidence_id = uuid4()
     dna = {"opening": {"hook_text": {"evidence_ids": [str(allowed_evidence_id)]}}}
     output = _fixture_output(product, dna)
     payload = output.model_dump(mode="json")
-    payload["concepts"][0]["source_evidence_ids"] = [str(uuid4())]  # type: ignore[index]
+    payload["concepts"][0]["source_evidence_ids"] = [  # type: ignore[index]
+        str(allowed_evidence_id),
+        str(uuid4()),
+    ]
 
-    with pytest.raises(ValueError, match="outside Creative DNA"):
-        _native_adaptation_validator(product, dna)(
-            AdaptationOutputV2.model_validate(payload)
-        )
+    adaptation = AdaptationOutputV2.model_validate(payload)
+    _native_adaptation_validator(product, dna)(adaptation)
+    normalized = normalize_adaptation_output(adaptation, product, dna)
+
+    assert normalized.concepts[0].source_evidence_ids == [allowed_evidence_id]
 
 
-def test_native_adaptation_validator_rejects_dropped_product_guardrail() -> None:
+def test_native_adaptation_validator_preserves_product_guardrails() -> None:
     product = _product()
     dna: dict[str, object] = {}
     output = _fixture_output(product, dna)
     payload = output.model_dump(mode="json")
     payload["concepts"][0]["claim_guardrails"] = []  # type: ignore[index]
 
-    with pytest.raises(ValueError, match="claim guardrails"):
-        _native_adaptation_validator(product, dna)(
-            AdaptationOutputV2.model_validate(payload)
-        )
+    adaptation = AdaptationOutputV2.model_validate(payload)
+    _native_adaptation_validator(product, dna)(adaptation)
+    normalized = normalize_adaptation_output(adaptation, product, dna)
+
+    assert "Works perfectly on every fabric" in normalized.concepts[0].claim_guardrails
+
+
+def test_native_adaptation_validator_preserves_product_name() -> None:
+    product = _product()
+    dna: dict[str, object] = {}
+    output = _fixture_output(product, dna)
+    payload = output.model_dump(mode="json")
+    concept = payload["concepts"][0]  # type: ignore[index]
+    concept["name"] = "Result opener"
+    concept["angle"] = "Lead with the visible result"
+    concept["opening_visual"] = "Show the result first"
+    concept["demo_mechanism"] = "Demonstrate the core action"
+    concept["proof_mechanism"] = "Show observed proof"
+    concept["cta_strategy"] = "Ask viewers to check the product card"
+
+    adaptation = AdaptationOutputV2.model_validate(payload)
+    _native_adaptation_validator(product, dna)(adaptation)
+    normalized = normalize_adaptation_output(adaptation, product, dna)
+
+    assert normalized.concepts[0].name.startswith("SwiftPress Mini Garment Steamer - ")
 
 
 def test_adaptation_risks_use_a_typed_strict_schema() -> None:

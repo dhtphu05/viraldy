@@ -1,0 +1,11 @@
+{
+  "failure_stage": "adaptation",
+  "golden_case": null,
+  "mode": "live",
+  "model_runs_verified": false,
+  "run_id": "product-run-only-fix3-20260806T031804Z",
+  "safe_error_code": "SMOKE_FLOW_FAILED",
+  "safe_error_type": "SmokeFailure",
+  "status": "error",
+  "workspace_deletion_status": "succeeded"
+}

@@ -47,6 +47,7 @@ from viraldy.modules.viral_kits.models import (
 from viraldy.modules.viral_kits.provider import (
     _native_output_validator,
     build_fixture_viral_kit,
+    normalize_viral_kit_output,
 )
 from viraldy.modules.viral_kits.schemas import (
     CreateViralKitCampaignPackRequest,
@@ -123,7 +124,7 @@ class FakeAiModelRunRepository:
         return run
 
 
-def test_native_viral_kit_validator_rejects_dropped_required_disclosure() -> None:
+def test_native_viral_kit_validator_repairs_dropped_required_disclosure() -> None:
     workspace_id = uuid4()
     product = _product_snapshot(workspace_id)
     pattern = _pattern_snapshot(workspace_id)
@@ -152,13 +153,110 @@ def test_native_viral_kit_validator_rejects_dropped_required_disclosure() -> Non
         viral_kit.id,
         workspace_id,
         1,
+        uuid4(),
+        utc_now(),
         request,
         product.model_dump(mode="json"),
         [pattern.pattern_kit_version_id],
+        uuid4(),
     )
 
-    with pytest.raises(ValueError, match="required disclosures"):
-        validator(invalid)
+    validator(invalid)
+
+
+def test_normalize_viral_kit_preserves_required_concept_guardrails() -> None:
+    workspace_id = uuid4()
+    created_by = uuid4()
+    model_run_id = uuid4()
+    created_at = utc_now()
+    product = _product_snapshot(workspace_id)
+    pattern = _pattern_snapshot(workspace_id)
+    request = _create_request(product.product_id, [pattern.pattern_kit_version_id])
+    matches = match_patterns(
+        product_context=product.product_context,
+        patterns=[pattern],
+        request=request,
+    )
+    viral_kit = build_fixture_viral_kit(
+        viral_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=created_by,
+        created_at=created_at,
+        request=request,
+        product=product,
+        patterns=[pattern],
+        pattern_matches=matches,
+        model_run_id=model_run_id,
+    )
+    payload = viral_kit.model_dump(mode="json")
+    for concept in payload["concepts"]:
+        concept["claims_to_avoid"] = []
+        concept["required_disclosures"] = []
+
+    normalized = normalize_viral_kit_output(
+        payload,
+        viral_kit_id=viral_kit.id,
+        workspace_id=workspace_id,
+        version=1,
+        created_by=created_by,
+        created_at=created_at,
+        request=request,
+        product_snapshot=product.model_dump(mode="json"),
+        pattern_version_ids=[pattern.pattern_kit_version_id],
+        model_run_id=model_run_id,
+    )
+
+    assert all("cure acne" in concept.claims_to_avoid for concept in normalized.concepts)
+    assert all("#ad" in concept.required_disclosures for concept in normalized.concepts)
+
+
+def test_normalize_viral_kit_separates_buyer_and_creator_persona() -> None:
+    workspace_id = uuid4()
+    created_by = uuid4()
+    model_run_id = uuid4()
+    created_at = utc_now()
+    product = _product_snapshot(workspace_id)
+    pattern = _pattern_snapshot(workspace_id)
+    request = _create_request(product.product_id, [pattern.pattern_kit_version_id])
+    matches = match_patterns(
+        product_context=product.product_context,
+        patterns=[pattern],
+        request=request,
+    )
+    viral_kit = build_fixture_viral_kit(
+        viral_kit_id=uuid4(),
+        workspace_id=workspace_id,
+        version=1,
+        created_by=created_by,
+        created_at=created_at,
+        request=request,
+        product=product,
+        patterns=[pattern],
+        pattern_matches=matches,
+        model_run_id=model_run_id,
+    )
+    payload = viral_kit.model_dump(mode="json")
+    for concept in payload["concepts"]:
+        concept["creator_persona"] = concept["buyer_persona_label"]
+
+    normalized = normalize_viral_kit_output(
+        payload,
+        viral_kit_id=viral_kit.id,
+        workspace_id=workspace_id,
+        version=1,
+        created_by=created_by,
+        created_at=created_at,
+        request=request,
+        product_snapshot=product.model_dump(mode="json"),
+        pattern_version_ids=[pattern.pattern_kit_version_id],
+        model_run_id=model_run_id,
+    )
+
+    assert all(
+        concept.creator_persona.casefold() != concept.buyer_persona_label.casefold()
+        for concept in normalized.concepts
+    )
 
 
 class FakeProductQueries:

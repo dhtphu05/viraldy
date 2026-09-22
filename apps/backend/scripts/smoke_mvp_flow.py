@@ -1142,9 +1142,11 @@ def run_quick_scorer(
     )
     job = poll_job(client, ctx.workspace_id, result["job"]["id"], args.timeout_seconds)
     completed_job_ids.append(job["id"])
-    score_run = client.get(
+    score_detail = client.get(
         f"/workspaces/{ctx.workspace_id}/tiktok-scores/{result['score_run']['id']}"
     )
+    score_run = dict(score_detail["score_run"])
+    score_run["_detail"] = score_detail
     assert_equal(score_run["analysis_mode"], args.expect_mode, "Quick scorer mode")
     assert_range(score_run["structural_score"], 0, 100, "Quick scorer structural score")
     return score_run, job["id"]
@@ -1276,6 +1278,10 @@ def run_viral_kit(
                     "product_tag_required": True,
                     "shipping_claim_policy": "use_product_context_only",
                 },
+                "applicability_override_reason": (
+                    "Automated MVP Product Run validation continued after PatternKit "
+                    "extraction to verify downstream ViralKit and Campaign Pack wiring."
+                ),
                 "notes": f"Private beta {args.expect_mode} E2E {args.run_id}.",
             },
         ),

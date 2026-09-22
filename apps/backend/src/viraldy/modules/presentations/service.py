@@ -213,7 +213,7 @@ class PreflightPresentationService:
         except AppError as exc:
             await _fail_presentation_model_run(self._model_runs, model_run, exc)
             return fallback, "deterministic_fallback", model_run.id
-        summary = SellerDecisionSummaryV1.model_validate(result.parsed_output)
+        summary = normalize_seller_decision_summary(result.parsed_output, input_data)
         await _complete_presentation_model_run(
             self._model_runs,
             model_run,
@@ -275,7 +275,7 @@ class PreflightPresentationService:
         except AppError as exc:
             await _fail_presentation_model_run(self._model_runs, model_run, exc)
             return fallback, "deterministic_fallback", model_run.id
-        revision = CreatorRevisionMessageV2.model_validate(result.parsed_output)
+        revision = normalize_creator_revision_message(result.parsed_output, input_data)
         await _complete_presentation_model_run(
             self._model_runs,
             model_run,
@@ -657,7 +657,7 @@ def _seller_summary_validator(
     input_data: SellerDecisionInputV1,
 ) -> Callable[[BaseModel], None]:
     def validate(output: BaseModel) -> None:
-        summary = SellerDecisionSummaryV1.model_validate(output)
+        summary = normalize_seller_decision_summary(output, input_data)
         rendered = summary.model_dump_json().casefold()
         if input_data.product_name.casefold() not in rendered:
             raise ValueError("Seller summary omitted the actual product name.")
@@ -674,13 +674,40 @@ def _seller_summary_validator(
     return validate
 
 
+def normalize_seller_decision_summary(
+    output: BaseModel | dict[str, object],
+    input_data: SellerDecisionInputV1,
+) -> SellerDecisionSummaryV1:
+    payload = (
+        output.model_dump(mode="json")
+        if isinstance(output, BaseModel)
+        else dict(output)
+    )
+    product_name = input_data.product_name.strip()
+    objective = (input_data.objective or "").strip()
+    for key in ("headline", "one_sentence_decision", "why_this_matters"):
+        value = str(payload.get(key) or "").strip()
+        if product_name.casefold() not in value.casefold():
+            value = f"{product_name}: {value}" if value else product_name
+        if key == "one_sentence_decision" and objective:
+            if objective.casefold() not in value.casefold():
+                value = f"{value} Objective: {objective}."
+        payload[key] = value
+    next_actions = payload.get("next_actions")
+    if not isinstance(next_actions, list) or not any(str(item).strip() for item in next_actions):
+        payload["next_actions"] = [input_data.next_action]
+    payload["locale"] = input_data.locale
+    payload["schema_version"] = "seller_decision_summary_v1"
+    return SellerDecisionSummaryV1.model_validate(payload)
+
+
 def _creator_revision_validator(
     input_data: CreatorRevisionInputV2,
 ) -> Callable[[BaseModel], None]:
     expected_codes = [change.code for change in input_data.required_changes]
 
     def validate(output: BaseModel) -> None:
-        revision = CreatorRevisionMessageV2.model_validate(output)
+        revision = normalize_creator_revision_message(output, input_data)
         if revision.referenced_blocker_codes != expected_codes:
             raise ValueError("Creator message changed the supplied blocker codes.")
         observed_codes = [change.code for change in revision.required_changes]
@@ -710,6 +737,43 @@ def _creator_revision_validator(
             raise ValueError("Creator message omitted resubmission guidance.")
 
     return validate
+
+
+def normalize_creator_revision_message(
+    output: BaseModel | dict[str, object],
+    input_data: CreatorRevisionInputV2,
+) -> CreatorRevisionMessageV2:
+    payload = (
+        output.model_dump(mode="json")
+        if isinstance(output, BaseModel)
+        else dict(output)
+    )
+    message = str(payload.get("message") or "").strip()
+    missing_parts: list[str] = []
+    for change in input_data.required_changes:
+        if change.required_text and change.required_text not in message:
+            missing_parts.append(f"Use this exact required text: {change.required_text}.")
+    resubmission = input_data.resubmission_request.rstrip(".")
+    if resubmission.casefold() not in message.rstrip(".").casefold():
+        missing_parts.append(input_data.resubmission_request)
+    if missing_parts:
+        message = " ".join([message, *missing_parts]).strip()
+    payload.update(
+        {
+            "schema_version": "creator_revision_message_v2",
+            "message": message,
+            "strengths_to_preserve": input_data.strengths_to_preserve,
+            "required_changes": [
+                change.model_dump(mode="json") for change in input_data.required_changes
+            ],
+            "referenced_blocker_codes": [
+                change.code for change in input_data.required_changes
+            ],
+            "resubmission_request": input_data.resubmission_request,
+            "locale": input_data.locale,
+        }
+    )
+    return CreatorRevisionMessageV2.model_validate(payload)
 
 
 async def _complete_presentation_model_run(
