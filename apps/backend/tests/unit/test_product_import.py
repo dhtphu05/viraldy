@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from viraldy.modules.product_import import service as product_import_service
 from viraldy.modules.product_import.mapper import build_product_import_preview
 from viraldy.modules.product_import.schemas import ProductCrawlRequest
 from viraldy.modules.product_import.security import (
@@ -195,6 +196,54 @@ def test_generic_website_uses_observed_markdown_heading() -> None:
 
     assert preview.product_draft.name == "Observed Website Product"
     assert preview.product_draft.external_source == "website"
+
+
+def test_product_link_image_reuses_crawl_preview_and_validates_downloaded_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preview = build_product_import_preview(
+        "https://shop.example.com/products/observed",
+        {
+            "title": "Observed Product",
+            "description": "A product from the page.",
+            "image": "https://images.example.com/product.png",
+            "sourceType": "website",
+            "markdown": "# Observed Product",
+        },
+    )
+
+    class ImageResponse:
+        def __enter__(self) -> ImageResponse:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self, limit: int) -> bytes:
+            assert limit == 1_001
+            return b"\x89PNG\r\n\x1a\nproduct-image"
+
+    monkeypatch.setattr(
+        product_import_service,
+        "create_product_import_preview",
+        lambda _url: preview,
+    )
+    monkeypatch.setattr(
+        product_import_service,
+        "open_public_url",
+        lambda _request, *, timeout: ImageResponse(),
+    )
+
+    image = product_import_service.fetch_product_link_image(
+        "https://shop.example.com/products/observed",
+        max_bytes=1_000,
+    )
+
+    assert image.source_url == preview.source_url
+    assert image.title == "Observed Product"
+    assert image.description == "A product from the page."
+    assert image.mime_type == "image/png"
+    assert image.file_name == "product-image.png"
 
 
 def test_deal_source_and_target_asin_are_preserved() -> None:

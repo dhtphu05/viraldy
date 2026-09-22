@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import UploadFile
 from pydantic import ValidationError
 
+from viraldy.modules.product_import.service import fetch_product_link_image
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
@@ -101,6 +102,19 @@ async def compile_request(
         raise AppError("INVALID_SMART_REMAKE_ASPECT_RATIO", "Smart Remake supports 9:16 only.")
     reference = await read_media(reference_video, "video/mp4")
     product = await read_media(product_image, "image/png")
+    resolved_product_url = product_url.strip() if product_url else None
+    resolved_product_title = product_title
+    resolved_product_description = product_description
+    if product is None and resolved_product_url:
+        linked_product = await _read_product_link_image(resolved_product_url)
+        product = UploadedMedia(
+            bytes=linked_product.bytes,
+            mime_type=linked_product.mime_type,
+            file_name=linked_product.file_name,
+        )
+        resolved_product_url = linked_product.source_url
+        resolved_product_title = resolved_product_title or linked_product.title
+        resolved_product_description = resolved_product_description or linked_product.description
     if reference is None or product is None:
         raise AppError(
             "SMART_REMAKE_MEDIA_REQUIRED", "Reference video and product image are required."
@@ -112,11 +126,16 @@ async def compile_request(
         language=language,
         prompt=prompt,
         description=description,
-        productUrl=product_url,
+        productUrl=resolved_product_url,
         referenceVideo=reference,
         productImage=product,
-        productMetadata=ProductMetadata(title=product_title, description=product_description),
-        productSource="url_and_upload" if product_url else "upload",
+        productMetadata=ProductMetadata(
+            title=resolved_product_title,
+            description=resolved_product_description,
+        ),
+        productSource="url_and_upload" if resolved_product_url and product_image else "url"
+        if resolved_product_url
+        else "upload",
     )
     gemini = (
         FixtureGeminiClient() if settings.ai_mode.strip().lower() in {"fixture", "mock"} else None
@@ -125,6 +144,16 @@ async def compile_request(
         return await compile_smart_remake(request, gemini=gemini)
     except SmartRemakeError as exc:
         raise _error(exc) from exc
+
+
+async def _read_product_link_image(product_url: str):
+    from starlette.concurrency import run_in_threadpool
+
+    return await run_in_threadpool(
+        fetch_product_link_image,
+        product_url,
+        max_bytes=get_max_product_image_bytes(),
+    )
 
 
 async def render_request(

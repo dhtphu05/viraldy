@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
+from types import SimpleNamespace
 
 import httpx
 import pytest
+from fastapi import UploadFile
 
+from viraldy.modules.product_import.service import ProductLinkImage
+from viraldy.modules.smart_remake import service as smart_remake_service
 from viraldy.modules.smart_remake.engine.compiler import (
     compile_smart_remake_scene_map_with_diagnostics,
 )
@@ -89,6 +94,52 @@ def test_fixture_gemini_returns_analysis_and_product_lock_shapes() -> None:
 def test_render_guard_rejects_reference_video_fields() -> None:
     with pytest.raises(SmartRemakeSecurityError, match="Reference video"):
         assert_no_reference_video_in_render_payload({"sceneMap": {"referenceVideoUrl": "secret"}})
+
+
+@pytest.mark.asyncio
+async def test_compile_uses_the_product_image_resolved_from_a_product_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def capture_compile(request: object, *, gemini: object) -> dict[str, bool]:
+        captured["request"] = request
+        return {"success": True}
+
+    monkeypatch.setattr(
+        smart_remake_service,
+        "fetch_product_link_image",
+        lambda _url, *, max_bytes: ProductLinkImage(
+            source_url="https://shop.example.com/products/observed",
+            title="Observed Product",
+            description="Observed description",
+            bytes=b"\x89PNG\r\n\x1a\nproduct-image",
+            mime_type="image/png",
+            file_name="product-image.png",
+        ),
+    )
+    monkeypatch.setattr(smart_remake_service, "compile_smart_remake", capture_compile)
+
+    result = await smart_remake_service.compile_request(
+        settings=SimpleNamespace(ai_mode="fixture"),
+        mode="smart_remake",
+        target_duration="8",
+        aspect_ratio="9:16",
+        language="Vietnamese",
+        prompt="",
+        description="",
+        product_url="https://shop.example.com/products/observed",
+        product_title=None,
+        product_description=None,
+        reference_video=UploadFile(filename="reference.mp4", file=BytesIO(b"video")),
+        product_image=None,
+    )
+
+    request = captured["request"]
+    assert result == {"success": True}
+    assert request.productSource == "url"  # type: ignore[attr-defined]
+    assert request.productImage.mime_type == "image/png"  # type: ignore[attr-defined]
+    assert request.productMetadata.title == "Observed Product"  # type: ignore[attr-defined]
 
 
 def test_live_gemini_timeout_is_reported_as_smart_remake_error(
