@@ -1,39 +1,132 @@
 # Viraldy
 
-Viraldy là nền tảng Vertical Creative Intelligence & Iteration OS cho seller TikTok Shop US, POD, dropshipping và cross-border ecommerce. Repo này chứa backend API, worker xử lý nền, hạ tầng local và frontend dashboard phục vụ các luồng phân tích creative như TikTok Scorer và UGC Review.
+Viraldy là nền tảng hỗ trợ đội ngũ thương mại điện tử phân tích creative và phát triển nội dung quảng cáo sản phẩm. Tính năng **Smart Remake** giúp biến một video tham khảo thành hướng triển khai video mới, tập trung vào sản phẩm và thương hiệu của bạn.
 
-ViralScore là hệ thống legacy/frozen. Dự án này không phụ thuộc runtime vào ViralScore.
+## Smart Remake
 
-## Nội Dung Repo
+Smart Remake dành cho những lúc bạn đã tìm được một video có cách mở đầu, nhịp dựng hoặc cách trình bày đáng học hỏi, nhưng cần chuyển ý tưởng đó thành creative phù hợp với sản phẩm của mình.
 
-| Khu vực | Mục đích |
-| --- | --- |
-| `apps/backend` | FastAPI API, Celery worker, domain modules, Alembic migrations, test/evaluation scripts |
-| `apps/web` | TanStack Start + Vite frontend |
-| `docs` | ADR, kiến trúc, runbook vận hành và hướng dẫn phát triển |
-| `infrastructure/docker` | Dockerfile backend |
-| `docker-compose.yml` | PostgreSQL, Redis, MinIO và các service backend local |
-| `Makefile` | Lệnh tắt cho install, dev, test, lint, migration, smoke |
+### Giá trị mang lại
 
-## Tech Stack
+- Rút ngắn quá trình từ video tham khảo đến một kịch bản quảng cáo có thể duyệt và triển khai.
+- Giữ sản phẩm làm trọng tâm, đồng thời đưa các yêu cầu về thương hiệu, thông điệp và phong cách vào cùng một brief.
+- Xem trước cấu trúc từng cảnh và toàn bộ prompt trước khi tạo video để dễ kiểm tra, chỉnh hướng sáng tạo và phối hợp trong nhóm.
+- Tạo nội dung video dọc 9:16 theo hai lựa chọn thời lượng: 8 giây hoặc 16 giây.
 
-| Layer | Công nghệ chính |
-| --- | --- |
-| Backend | Python 3.12, FastAPI, Pydantic, SQLAlchemy async, Alembic |
-| Worker | Celery, Redis |
-| Database | PostgreSQL 16 |
-| Object storage | MinIO/S3-compatible storage |
-| Frontend | React 19, TanStack Start/Router, Vite, Tailwind CSS 4 |
-| Tooling | `uv`, `pnpm`, Ruff, mypy, pytest, Vitest, ESLint |
+Smart Remake hỗ trợ quá trình sáng tạo; kết quả quảng cáo và hiệu quả kinh doanh vẫn phụ thuộc vào sản phẩm, nội dung, đối tượng và chiến dịch.
 
-## Yêu Cầu Cài Đặt
+### Ai sẽ dùng Smart Remake?
 
-Cần có các công cụ sau trên máy local:
+- **Seller và chủ thương hiệu thương mại điện tử** cần thường xuyên làm nội dung quảng cáo cho danh mục sản phẩm.
+- **Performance marketer** muốn thử nhiều hướng creative dựa trên cấu trúc video đang thu hút sự chú ý.
+- **Đội ngũ social và content** cần chuyển brief sản phẩm thành kịch bản video ngắn dễ xem và dễ duyệt.
+- **Agency và đội ngũ creative** cần một quy trình thống nhất để xử lý video tham khảo, yêu cầu thương hiệu và đầu ra cho nhiều khách hàng.
 
-- Docker Desktop hoặc Docker Engine có Docker Compose v2.
-- Python 3.12.
-- `uv` cho backend Python.
-- Node.js và `pnpm` cho frontend.
+### Luồng sử dụng
+
+1. **Chọn video tham khảo** — tải video bạn muốn phân tích lên Smart Remake.
+2. **Thêm sản phẩm** — tải ảnh sản phẩm lên hoặc dán đường dẫn trang sản phẩm để lấy thông tin và hình ảnh phù hợp.
+3. **Định hướng nội dung** — chọn thời lượng 8 hoặc 16 giây, ngôn ngữ, hướng sáng tạo và các yêu cầu cần giữ cho sản phẩm/thương hiệu.
+4. **Phân tích và xem kịch bản** — Smart Remake phân tích video cùng thông tin sản phẩm, sau đó trình bày cấu trúc cảnh, thông tin sản phẩm cần giữ và prompt đầy đủ ở dạng dễ đọc lẫn JSON.
+5. **Tạo và xem video** — sau khi duyệt kịch bản, bắt đầu tạo video và xem kết quả ngay trong luồng làm việc.
+
+Đầu ra được trình bày theo khung hình dọc 9:16. Bản 8 giây gồm một phần nội dung; bản 16 giây gồm hai phần liên tiếp.
+
+### Kiến trúc phân tích AI
+
+Smart Remake tách việc hiểu video tham khảo khỏi việc nhận diện sản phẩm. Backend ghép hai kết quả này ở bước biên dịch kịch bản:
+
+```mermaid
+flowchart TD
+    UI[Smart Remake] --> API[POST /workspaces/{id}/smart-remake/compile]
+    Video[Video tham khảo] --> API
+    Product[Ảnh sản phẩm] --> API
+    URL[Link sản phẩm] --> Crawl[Product Import: lấy ảnh và metadata]
+    Crawl --> API
+    API --> Validate[Kiểm tra loại file, dung lượng và đầu vào]
+    Validate --> VideoAI[Gemini: phân tích video]
+    VideoAI --> Cuts[FFmpeg: bổ sung mốc cắt cảnh]
+    Cuts --> LockAI[Gemini: tạo Product Lock]
+    Product --> LockAI
+    LockAI --> Compile[Creative Router + Timeline Compiler]
+    Cuts --> Compile
+    Compile --> Guard[Chuẩn hóa, lọc prompt và kiểm tra payload]
+    Guard --> Result[Product Lock + Scene Map + prompts + warnings]
+    Result -. payload compile .-> Render[POST /workspaces/{id}/smart-remake/render]
+    Product --> Render
+    Render --> Provider[FlowKit hoặc Unifically]
+    Provider --> Assemble[Ghép các cảnh, xử lý âm thanh và lưu video]
+```
+
+#### 1. Tiếp nhận và kiểm tra đầu vào
+
+API kiểm tra quyền truy cập workspace, thời lượng đầu ra 8/16 giây, tỷ lệ đầu ra 9:16, loại file và dung lượng. Ảnh sản phẩm có thể được tải trực tiếp hoặc lấy từ đường dẫn sản phẩm qua module Product Import; tiêu đề và mô tả của trang được dùng làm metadata bổ sung.
+
+#### 2. Phân tích video tham khảo
+
+Gemini nhận video tham khảo cùng brief và trả về JSON có cấu trúc. Phân tích tập trung vào những gì quan sát được: hook mở đầu, loại creative, thứ tự cảnh, nhịp/cut, góc máy, chuyển động camera, hành động vật lý, hiện diện của người, trạng thái trước/sau, kết quả trình diễn và kế hoạch âm thanh. Nội dung gốc như danh tính người thật, thương hiệu, logo, caption hoặc câu thoại nguyên văn không được dùng làm nội dung cần sao chép.
+
+FFmpeg bổ sung thông tin ranh giới cảnh khi cần để bù các cut Gemini bỏ sót. Backend chuẩn hóa JSON, kiểm tra các trường và enum, rồi tạo cảnh báo nếu cấu trúc nguồn khó chuyển thể. Nếu thông tin thiếu, các giá trị mặc định an toàn được dùng; nếu cấu trúc không phù hợp, lỗi được trả về thay vì đưa payload sai sang bước tiếp theo.
+
+#### 3. Product Lock — khóa danh tính và cách dùng sản phẩm
+
+Gemini phân tích ảnh sản phẩm riêng, kết hợp với metadata và các yêu cầu người dùng để tạo `Product Lock`. Đây là hợp đồng mô tả sản phẩm được truyền xuyên suốt vào từng prompt/cảnh:
+
+| Nhóm thuộc tính        | Nội dung được giữ hoặc kiểm soát                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Nhận diện hình ảnh     | Tên, loại sản phẩm, màu, hình dáng, tỷ lệ, hoa văn, chất liệu, kết cấu, thành phần và branding nhìn thấy được |
+| Những gì phải giữ      | `mustPreserve` liệt kê các chi tiết quan trọng có căn cứ trong ảnh hoặc brief                                 |
+| Những gì được thay đổi | `canChange` ghi nhận các yếu tố người dùng cho phép thay đổi                                                  |
+| Cách sử dụng           | Điểm cầm/tiếp xúc, bề mặt phù hợp, tỷ lệ, hướng thao tác và giới hạn vật lý hợp lý                            |
+| Lỗi cần tránh          | Ví dụ: đổi màu, sai tỷ lệ, thiếu/lặp bộ phận, tự thêm logo hoặc thao tác không khả thi                        |
+
+Thứ tự ưu tiên được thiết kế rõ ràng: **ảnh sản phẩm quyết định sản phẩm nào xuất hiện; video tham khảo quyết định cách trình diễn và kết quả cần thể hiện; metadata/brief bổ sung thông tin nhưng không được phép bịa thuộc tính ẩn, giá, chứng nhận hay tuyên bố hiệu quả.** Khi công dụng chưa rõ, ràng buộc cách dùng được giữ thận trọng thay vì tự nghĩ ra một công dụng mới. Backend hỗ trợ chế độ `off`, `auto`, `strict`; luồng giao diện hiện dùng `auto` mặc định. `off` bỏ các danh sách `mustPreserve` và `forbiddenErrors` do AI tạo, nhưng ảnh sản phẩm vẫn là ảnh tham chiếu cho danh tính sản phẩm.
+
+Product Lock là một hợp đồng dữ liệu và ràng buộc bằng ngôn ngữ tự nhiên gửi tới model, không phải bảo đảm đồng nhất tuyệt đối từng pixel. Các prompt render nhấn trực tiếp vào ảnh tham chiếu, nhận diện hình ảnh, `mustPreserve` và hướng dẫn sử dụng; các trường như `canChange` và `forbiddenErrors` cũng được trả về để xem xét nhưng không phải trường nào cũng được renderer áp thành một luật độc lập. Vì vậy, đầu ra cuối vẫn cần được kiểm tra bằng mắt.
+
+#### 4. Chọn cấu trúc và biên dịch cảnh
+
+Creative Router phân loại cấu trúc như trình diễn sản phẩm, vấn đề–giải pháp, trước–sau, biến đổi, mở hộp, so sánh hoặc quay liên tục rồi chọn chiến lược phù hợp. Timeline Compiler chuyển kết quả thành các cảnh dọc 8 giây: bản 8 giây có một cảnh, bản 16 giây chia thành hai cảnh theo đúng thứ tự nguồn.
+
+Khi có shot boundary, thời lượng các shot được co giãn để vừa timeline mà vẫn giữ thứ tự và hành động nguồn. Khi chỉ có motion beats, compiler ưu tiên hook và các hành động/kết quả bắt buộc; beat phụ có thể được gộp hoặc bỏ để phù hợp thời lượng. Nếu vẫn quá dày hoặc nguồn có bố cục khó xử lý như split-screen, screen recording, nhiều sản phẩm, hook phụ thuộc caption/thoại hay comparison, hệ thống chọn cách chuyển thể gần nhất và trả về cảnh báo giải thích phần cần đơn giản hóa.
+
+Mỗi cảnh có shot plan cùng các prompt riêng cho nội dung, tạo khung hình và chuyển động video. Prompt Sanitizer kiểm tra các nội dung bị cấm sao chép; renderer còn xác thực scene count, product identity reference và payload trước khi gửi tới dịch vụ tạo video.
+
+#### 5. Tạo video và kiểm soát Product Lock
+
+Backend tách hai API: `/compile` trả về phân tích, `Product Lock`, `Scene Map`, prompt và cảnh báo; `/render` nhận kết quả compile cùng ảnh sản phẩm và nhà cung cấp render. Toàn bộ file video tham khảo không được đưa vào payload tạo video. Nhà cung cấp nhận ảnh sản phẩm làm nguồn nhận diện, cùng scene plan/prompt đã biên dịch; các ràng buộc về hình dáng, màu, thành phần, thao tác và tính nhất quán được lặp lại trong prompt từng cảnh.
+
+- **FlowKit:** tạo project/character từ ảnh sản phẩm, tạo ảnh cho các cảnh, sau đó tạo video theo scene và ghép kết quả theo thứ tự.
+- **Unifically:** gửi prompt và ảnh sản phẩm cho từng scene, chờ trạng thái hoàn tất rồi ghép các đoạn video; kế hoạch âm thanh và lưu trữ được xử lý ở bước hoàn thiện.
+
+Các lỗi định dạng JSON có bước yêu cầu Gemini sửa lại theo schema; lỗi quota hoặc lỗi máy chủ tạm thời được retry có giới hạn. Mọi cảnh báo về cấu trúc, độ dày shot hoặc yêu cầu không thể giữ nguyên được trả về cùng kết quả để người dùng xem trước.
+
+## Các thành phần chính
+
+| Khu vực                 | Vai trò                                                               |
+| ----------------------- | --------------------------------------------------------------------- |
+| `apps/web`              | Giao diện Viraldy, xây dựng bằng React, TanStack Start/Router và Vite |
+| `apps/backend`          | API FastAPI, các module nghiệp vụ, migration và Celery worker         |
+| `docs`                  | Tài liệu kiến trúc, phát triển và vận hành                            |
+| `infrastructure/docker` | Dockerfile backend                                                    |
+| `docker-compose.yml`    | PostgreSQL, Redis, MinIO và các dịch vụ local                         |
+
+### Công nghệ
+
+- Backend: Python 3.12, FastAPI, Pydantic, SQLAlchemy async và Alembic
+- Background jobs: Celery và Redis
+- Database: PostgreSQL 16
+- Object storage: MinIO / S3-compatible storage
+- Frontend: React 19, TanStack Start/Router, Vite và Tailwind CSS 4
+- Tooling: `uv`, `pnpm`, Ruff, mypy, pytest, Vitest và ESLint
+
+## Chạy Viraldy local
+
+### Yêu cầu
+
+- Docker Desktop hoặc Docker Engine với Docker Compose v2
+- Python 3.12 và `uv`
+- Node.js và `pnpm`
 
 Cài `uv` trên macOS/Linux:
 
@@ -41,42 +134,34 @@ Cài `uv` trên macOS/Linux:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Cài hoặc bật `pnpm` bằng Corepack:
+Bật `pnpm` bằng Corepack nếu máy chưa có:
 
 ```bash
 corepack enable pnpm
 ```
 
-Kiểm tra nhanh:
+### Cài đặt
 
-```bash
-docker compose version
-python3.12 --version
-uv --version
-node --version
-pnpm --version
-```
-
-Tham khảo chính thức: [uv installation](https://docs.astral.sh/uv/getting-started/installation/) và [pnpm installation](https://pnpm.io/installation).
-
-## Cài Đặt Local
-
-Từ thư mục root của repo:
-
-```bash
-cd /Users/mac/Desktop/Viraldy
-```
-
-Tạo file môi trường cho backend:
+Tạo file cấu hình backend lần đầu. Nếu `apps/backend/.env` đã tồn tại, bỏ qua bước sao chép và cập nhật file hiện tại:
 
 ```bash
 cp .env.example apps/backend/.env
 ```
 
-Tạo file môi trường cho frontend:
+Để bật phân tích Smart Remake bằng Gemini, cấu hình các mục sau trong `apps/backend/.env`:
 
-```bash
-printf "VITE_API_BASE_URL=http://localhost:8000/api/v1\n" > apps/web/.env
+```env
+AI_MODE=live
+SMART_REMAKE_ENABLED=true
+GEMINI_API_KEY=your-gemini-api-key
+```
+
+Giữ API key trong file môi trường local và không đưa file này lên Git. Có thể cấu hình model qua `SMART_REMAKE_GEMINI_MODEL`; mặc định backend sử dụng `gemini-2.5-flash`.
+
+Tạo cấu hình frontend trong `apps/web/.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 Cài dependencies:
@@ -86,32 +171,22 @@ make backend-install
 make web-install
 ```
 
-Mặc định `.env.example` dùng:
+### Khởi động
 
-- `AUTH_MODE=local_test`
-- PostgreSQL local tại `localhost:5432`
-- Redis local tại `localhost:6379`
-- MinIO local tại `localhost:9000`
-- AI fixture mode, không cần API key
-
-Không commit các file `.env`.
-
-## Chạy Dự Án
-
-Khởi động hạ tầng local:
+Khởi động database, Redis và object storage:
 
 ```bash
 make infra-up
 ```
 
-Chạy database migrations và seed dữ liệu demo:
+Chạy migration và khởi tạo workspace local:
 
 ```bash
 make migrate
 make seed
 ```
 
-Mở 3 terminal riêng:
+Mở ba terminal riêng tại thư mục gốc repository:
 
 ```bash
 make api
@@ -125,219 +200,74 @@ make worker
 make web-dev
 ```
 
-URL mặc định:
+Mở URL frontend mà lệnh `make web-dev` in ra. Các địa chỉ local mặc định:
 
-- Frontend: <http://localhost:5173>
+- Viraldy: <http://localhost:5173>
 - API: <http://localhost:8000>
-- Swagger/OpenAPI UI: <http://localhost:8000/docs>
+- API documentation: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/health>
 - Readiness check: <http://localhost:8000/ready>
 - MinIO console: <http://localhost:9001>
 
-Nếu cần chạy job bảo trì định kỳ, mở thêm terminal:
+> Local sign-in sử dụng `AUTH_MODE=local_test` trong `apps/backend/.env`. Chế độ xác thực này chỉ dành cho phát triển local; môi trường staging/production cần cấu hình nhà cung cấp đăng nhập phù hợp.
 
-```bash
-make beat
-```
+### Cấu hình dịch vụ tạo video
 
-## Đăng Nhập Local
-
-Local development dùng `AUTH_MODE=local_test`. Lệnh `make seed` tạo user và workspace demo tương ứng.
-
-Trên frontend, vào <http://localhost:5173/login> và dùng nút đăng nhập local.
-
-Khi gọi API trực tiếp, gửi bearer token:
-
-```http
-Authorization: Bearer local-test
-```
-
-Ví dụ:
-
-```bash
-curl -H "Authorization: Bearer local-test" http://localhost:8000/api/v1/workspaces
-```
-
-Production/staging không được dùng `AUTH_MODE=local_test` hoặc `AUTH_DISABLED=true`; backend sẽ fail fast khi cấu hình không an toàn.
-
-## Kiểm Tra Sau Khi Chạy
-
-Kiểm tra API:
-
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/ready
-```
-
-Chạy smoke test backend:
-
-```bash
-make smoke
-```
-
-Smoke test mặc định dùng fixture mode. Có thể chạy biến thể:
-
-```bash
-make smoke-fixture
-make smoke-mock
-```
-
-## Lệnh Thường Dùng
-
-Backend:
-
-| Lệnh | Mục đích |
-| --- | --- |
-| `make backend-install` | Cài Python dependencies bằng `uv` |
-| `make infra-up` | Chạy PostgreSQL, Redis, MinIO |
-| `make infra-down` | Dừng hạ tầng local |
-| `make api` | Chạy FastAPI dev server |
-| `make worker` | Chạy Celery worker |
-| `make beat` | Chạy Celery beat |
-| `make migrate` | Upgrade database tới Alembic head |
-| `make migration name="message"` | Tạo Alembic migration mới |
-| `make downgrade` | Rollback 1 migration |
-| `make seed` | Seed user/workspace/product demo |
-| `make openapi` | Export OpenAPI vào `docs/api/openapi.json` |
-| `make lint` | Ruff check backend |
-| `make format` | Ruff format backend |
-| `make typecheck` | mypy backend |
-| `make test` | pytest backend |
-| `make test-unit` | Unit tests backend |
-| `make test-integration` | Integration tests backend |
-| `make test-contract` | Contract tests backend |
-| `make security` | Bandit và pip-audit |
-
-Frontend:
-
-| Lệnh | Mục đích |
-| --- | --- |
-| `make web-install` | Cài frontend dependencies |
-| `make web-dev` | Chạy Vite/TanStack dev server |
-| `make web-lint` | ESLint frontend |
-| `make web-build` | Build frontend |
-| `cd apps/web && pnpm test` | Vitest |
-| `cd apps/web && pnpm typecheck` | TypeScript check |
-| `cd apps/web && pnpm format` | Prettier format |
-
-Docker:
-
-| Lệnh | Mục đích |
-| --- | --- |
-| `make docker-build` | Build image backend local |
-| `docker compose up --build api worker beat` | Chạy backend stack bằng Docker |
-| `make logs` | Theo dõi logs `api` và `worker` |
-
-Lưu ý: các service `api`, `worker`, `beat` trong `docker-compose.yml` đọc env từ `apps/backend/.env`.
-
-## Chạy Bằng Docker Cho Backend
-
-Local dev khuyến nghị chạy API/worker bằng `make api` và `make worker` để reload nhanh. Nếu muốn chạy backend hoàn toàn qua Docker:
-
-```bash
-cp .env.example apps/backend/.env
-docker compose up -d postgres redis minio minio-init
-docker compose build api worker beat
-docker compose run --rm api alembic upgrade head
-docker compose run --rm api python scripts/seed_local.py
-docker compose up --build api worker beat
-```
-
-Frontend vẫn chạy riêng:
-
-```bash
-make web-install
-make web-dev
-```
-
-## AI Mode
-
-Mặc định local dùng fixture mode:
+Backend có thể kết nối dịch vụ tạo video qua Unifically hoặc FlowKit. Khi triển khai một trong các dịch vụ này, cấu hình thông tin tương ứng trong `apps/backend/.env`:
 
 ```env
-AI_MODE=fixture
+UNIFICALLY_API_KEY=your-unifically-api-key
+# Hoặc địa chỉ FlowKit mà backend có thể truy cập:
+FLOWKIT_URL=http://127.0.0.1:8100
 ```
 
-Chế độ này deterministic, không gọi provider và không cần API key.
+Backend cần `ffmpeg` và `ffprobe` để xử lý media. Nếu các lệnh này không nằm trong `PATH`, có thể đặt `SMART_REMAKE_FFMPEG_PATH` và `SMART_REMAKE_FFPROBE_PATH` tới đường dẫn cài đặt trên máy.
 
-Để dùng OpenAI live, merge cấu hình từ `.env.openai.example` vào `apps/backend/.env`, điền `OPENAI_API_KEY`, rồi kiểm tra readiness:
+## Kiểm tra và lệnh thường dùng
 
-```bash
-cd apps/backend
-uv run python scripts/check_ai_readiness.py
+| Lệnh                                | Mục đích                                       |
+| ----------------------------------- | ---------------------------------------------- |
+| `make infra-up` / `make infra-down` | Khởi động / dừng dịch vụ hạ tầng local         |
+| `make api`                          | Chạy API server                                |
+| `make worker`                       | Chạy Celery worker                             |
+| `make beat`                         | Chạy Celery beat                               |
+| `make migrate`                      | Cập nhật database theo Alembic migrations      |
+| `make seed`                         | Khởi tạo dữ liệu cần thiết cho local workspace |
+| `make test`                         | Chạy backend tests                             |
+| `make lint` / `make typecheck`      | Kiểm tra style / kiểu dữ liệu backend          |
+| `make web-lint`                     | Kiểm tra frontend                              |
+| `make web-build`                    | Build frontend                                 |
+| `cd apps/web && pnpm test`          | Chạy frontend tests                            |
+| `cd apps/web && pnpm typecheck`     | Kiểm tra kiểu dữ liệu frontend                 |
+
+## Cấu trúc mã nguồn
+
+```text
+apps/backend/src/viraldy/api/          API entry point và router
+apps/backend/src/viraldy/modules/     Các module nghiệp vụ, gồm Smart Remake
+apps/backend/src/viraldy/platform/    Cấu hình, auth, database, storage và queue
+apps/backend/src/viraldy/worker/      Celery app và background tasks
+apps/backend/alembic/versions/        Database migrations
+apps/backend/tests/                   Backend tests
+apps/web/src/routes/                  TanStack file routes
+apps/web/src/features/                Giao diện theo tính năng
+apps/web/src/shared/api/              Frontend API clients
+apps/web/src/shared/ui/               UI components dùng chung
 ```
 
-Chỉ chạy live qualification khi thật sự cần vì sẽ gọi model thật. Xem thêm:
+## Tài liệu liên quan
 
-- `docs/runbooks/AI_PROVIDER_READINESS.md`
-- `docs/runbooks/OPENAI_PROVIDER.md`
-- `docs/runbooks/OPENAI_LIVE_QUALIFICATION.md`
+- [Frontend README](apps/web/README.md)
+- [Kiến trúc hệ thống](docs/architecture/SYSTEM_ARCHITECTURE.md)
+- [Ranh giới module backend](docs/architecture/MODULE_BOUNDARIES.md)
+- [Hướng dẫn phát triển local](docs/runbooks/LOCAL_DEVELOPMENT.md)
+- [Triển khai](docs/runbooks/DEPLOYMENT.md)
+- [Object storage](docs/runbooks/OBJECT_STORAGE.md)
+- [Security](SECURITY.md)
 
-## Cấu Trúc Chính
+## Xử lý sự cố local
 
-Backend:
-
-- `src/viraldy/api/main.py`: entry point FastAPI, middleware, router registration.
-- `src/viraldy/modules`: domain modules như products, assets, jobs, TikTok Scorer, UGC Review, AI gateway.
-- `src/viraldy/platform`: config, auth, database, storage, observability, queue.
-- `src/viraldy/worker`: Celery app và background tasks.
-- `alembic/versions`: database migrations.
-- `tests`: unit, integration, contract và architecture tests.
-
-Frontend:
-
-- `src/routes`: TanStack file routes.
-- `src/features`: feature slices.
-- `src/shared/api`: API clients và response envelope handling.
-- `src/shared/ui`: UI primitives.
-- `src/widgets/app-shell`: app shell, navigation, workspace switcher.
-
-## Tài Liệu Nên Đọc Tiếp
-
-- `apps/web/README.md`: chi tiết frontend.
-- `docs/architecture/SYSTEM_ARCHITECTURE.md`: sơ đồ hệ thống.
-- `docs/architecture/MODULE_BOUNDARIES.md`: ranh giới module backend.
-- `docs/development/ADDING_AN_ENDPOINT.md`: thêm endpoint mới.
-- `docs/development/ADDING_A_JOB.md`: thêm background job.
-- `docs/development/ADDING_A_MIGRATION.md`: thêm migration.
-- `docs/runbooks/LOCAL_DEVELOPMENT.md`: runbook local.
-- `docs/runbooks/DEPLOYMENT.md`: triển khai.
-- `docs/runbooks/OBJECT_STORAGE.md`: object storage và retention.
-- `SECURITY.md`: nguyên tắc bảo mật.
-
-## Troubleshooting
-
-Backend không đọc env:
-
-- Đảm bảo file nằm ở `apps/backend/.env`.
-- `make api`, `make migrate`, `make seed` đều chạy trong `apps/backend`, nên root `.env` không đủ cho backend.
-
-Frontend không gọi được API:
-
-- Đảm bảo API đang chạy ở `http://localhost:8000`.
-- Kiểm tra `apps/web/.env` có `VITE_API_BASE_URL=http://localhost:8000/api/v1`.
-- Đăng nhập lại ở `/login` nếu gặp `401`.
-
-Database hoặc Redis không kết nối:
-
-```bash
-make infra-up
-docker compose ps
-```
-
-Port `8000` bị chiếm:
-
-```bash
-API_PORT=8001 make api
-printf "VITE_API_BASE_URL=http://localhost:8001/api/v1\n" > apps/web/.env
-make web-dev
-```
-
-Muốn reset toàn bộ dữ liệu local:
-
-```bash
-docker compose down -v
-make infra-up
-make migrate
-make seed
-```
+- **Backend không đọc cấu hình:** kiểm tra file `apps/backend/.env`; các lệnh `make api`, `make migrate` và `make seed` chạy trong `apps/backend`.
+- **Frontend không kết nối được API:** kiểm tra `VITE_API_BASE_URL` trong `apps/web/.env` và xác nhận API đang chạy.
+- **Không kết nối được database hoặc Redis:** chạy `make infra-up`, sau đó kiểm tra bằng `docker compose ps`.
+- **Port API mặc định đang được sử dụng:** chạy `API_PORT=8001 make api` và cập nhật frontend thành `VITE_API_BASE_URL=http://localhost:8001/api/v1`.
