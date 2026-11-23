@@ -148,6 +148,14 @@ Tạo file cấu hình backend lần đầu. Nếu `apps/backend/.env` đã tồ
 cp .env.example apps/backend/.env
 ```
 
+Đăng ký/đăng nhập email và mật khẩu dùng `AUTH_MODE=password`. Tạo khóa ký JWT riêng bằng lệnh sau, rồi điền kết quả vào `AUTH_JWT_SECRET` trong `apps/backend/.env`:
+
+```bash
+openssl rand -hex 32
+```
+
+Giữ nguyên khóa qua các lần khởi động và dùng cùng khóa trên các instance backend. Không đưa khóa vào mã nguồn hoặc cấu hình trình duyệt. PostgreSQL lưu tài khoản và phiên đăng nhập; Redis cần hoạt động để giới hạn các lần thử đăng nhập. Xem [hướng dẫn xác thực](docs/runbooks/LOCAL_DEVELOPMENT.md) cho cấu hình triển khai và kiểm thử.
+
 Để bật phân tích Smart Remake bằng Gemini, cấu hình các mục sau trong `apps/backend/.env`:
 
 ```env
@@ -209,7 +217,7 @@ Mở URL frontend mà lệnh `make web-dev` in ra. Các địa chỉ local mặc
 - Readiness check: <http://localhost:8000/ready>
 - MinIO console: <http://localhost:9001>
 
-> Local sign-in sử dụng `AUTH_MODE=local_test` trong `apps/backend/.env`. Chế độ xác thực này chỉ dành cho phát triển local; môi trường staging/production cần cấu hình nhà cung cấp đăng nhập phù hợp.
+> Với `AUTH_MODE=password`, mở trang Create account để tạo tài khoản và workspace riêng. `AUTH_MODE=local_test` chỉ dùng cho kiểm thử local; staging/production chặn chế độ này. Khi triển khai, cấu hình HTTPS và `AUTH_PUBLIC_ORIGIN` trên server frontend.
 
 ### Cấu hình dịch vụ tạo video
 
