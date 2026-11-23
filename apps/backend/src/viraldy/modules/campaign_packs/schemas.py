@@ -4,10 +4,14 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from viraldy.modules.campaign_packs.contracts import CampaignPackBriefV1
 from viraldy.modules.campaign_packs.requirements import CompiledRequirementsSnapshotV2
+from viraldy.modules.campaign_packs.video_prompt import (
+    VideoGenerationPromptV1,
+    build_video_generation_prompt,
+)
 from viraldy.modules.products.contracts import ProductContextV1
 
 CampaignPackExportFormat = Literal["json", "text"]
@@ -56,6 +60,11 @@ class CampaignPackVersionResponse(BaseModel):
     source_prompt_version: str | None = None
     source_schema_version: str | None = None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def video_generation_prompt(self) -> VideoGenerationPromptV1:
+        return build_video_generation_prompt(self.brief_json)
 
     model_config = {"from_attributes": True}
 

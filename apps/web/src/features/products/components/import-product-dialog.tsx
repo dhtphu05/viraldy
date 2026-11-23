@@ -39,9 +39,25 @@ type ProductDraftForm = {
 export function ImportProductDialog({
     workspaceId,
     onImported,
+    triggerLabel = "Import product link",
+    dialogTitle = "Import product from link",
+    dialogDescription = "Paste a public product URL, review the observed fields, then save it to this workspace.",
+    urlPlaceholder = "Amazon, Etsy, or Shopify product link...",
+    saveLabel = "Save product",
+    savingLabel = "Saving...",
+    successTitle = "Product imported",
+    successDescription = (product) => `${product.name} is now available in the catalog.`,
 }: {
     workspaceId?: string;
     onImported: (product: Product) => void;
+    triggerLabel?: string;
+    dialogTitle?: string;
+    dialogDescription?: string;
+    urlPlaceholder?: string;
+    saveLabel?: string;
+    savingLabel?: string;
+    successTitle?: string;
+    successDescription?: (product: Product) => string;
 }) {
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
@@ -82,8 +98,8 @@ export function ImportProductDialog({
             setPreview(null);
             setForm(null);
             onImported(product);
-            toast.success("Product imported", {
-                description: `${product.name} is now available in the catalog.`,
+            toast.success(successTitle, {
+                description: successDescription(product),
             });
         },
         onError: (error) => {
@@ -115,16 +131,13 @@ export function ImportProductDialog({
                     }
                 >
                     <Link2 className="h-4 w-4" />
-                    Import product link
+                    {triggerLabel}
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Import product from link</DialogTitle>
-                    <DialogDescription>
-                        Paste a public product URL, review the observed fields, then save it to this
-                        workspace.
-                    </DialogDescription>
+                    <DialogTitle>{dialogTitle}</DialogTitle>
+                    <DialogDescription>{dialogDescription}</DialogDescription>
                 </DialogHeader>
 
                 <form
@@ -144,7 +157,7 @@ export function ImportProductDialog({
                             <Input
                                 id="product-import-url"
                                 type="url"
-                                placeholder="https://www.amazon.com/dp/..."
+                                placeholder={urlPlaceholder}
                                 value={url}
                                 onChange={(event) => {
                                     setUrl(event.target.value);
@@ -324,7 +337,7 @@ export function ImportProductDialog({
                             {saveMutation.isPending ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : null}
-                            {saveMutation.isPending ? "Saving…" : "Save product"}
+                            {saveMutation.isPending ? savingLabel : saveLabel}
                         </Button>
                     </DialogFooter>
                 </form>

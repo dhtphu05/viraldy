@@ -196,6 +196,12 @@ def _external_id(
         return match.group(1) if match else None
     if "play.google.com" in source_url:
         return parse_qs(urlsplit(source_url).query).get("id", [None])[0]
+    if source_type == "etsy":
+        match = re.search(r"/listing/(\d+)", source_url)
+        return match.group(1) if match else None
+    if source_type == "shopify":
+        match = re.search(r"/products/([^/?#]+)", source_url)
+        return match.group(1) if match else None
     return None
 
 
