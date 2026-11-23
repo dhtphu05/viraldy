@@ -2,11 +2,20 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
-import { defineConfig, type PluginOption } from "vite";
+import { defineConfig, loadEnv, type PluginOption } from "vite";
 
 const srcPath = new URL("./src", import.meta.url).pathname;
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
+    const serverEnv = loadEnv(mode, process.cwd(), "");
+    for (const name of [
+        "AUTH_PUBLIC_ORIGIN",
+        "AUTH_PROXY_SECRET",
+        "AUTH_TRUST_PROXY_HEADERS",
+        "AUTH_CLIENT_SECRET",
+    ]) {
+        if (!process.env[name] && serverEnv[name]) process.env[name] = serverEnv[name];
+    }
     const isBuild = command === "build";
     const plugins: PluginOption[] = [
         tailwindcss(),
@@ -14,7 +23,7 @@ export default defineConfig(({ command }) => {
             importProtection: {
                 behavior: "error",
                 client: {
-                    files: ["**/server/**"],
+                    files: ["**/server/**", "**/*.server.*"],
                     specifiers: ["server-only"],
                 },
             },

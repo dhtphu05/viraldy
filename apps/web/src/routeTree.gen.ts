@@ -37,6 +37,7 @@ import { Route as CreativeLibraryCreativeIdRouteImport } from './routes/creative
 import { Route as CampaignsNewRouteImport } from './routes/campaigns.new'
 import { Route as CampaignsCampaignIdRouteImport } from './routes/campaigns.$campaignId'
 import { Route as ApiBackendSplatRouteImport } from './routes/api.backend.$'
+import { Route as ApiAuthRegisterRouteImport } from './routes/api.auth.register'
 import { Route as ApiAuthRefreshRouteImport } from './routes/api.auth.refresh'
 import { Route as ApiAuthLogoutRouteImport } from './routes/api.auth.logout'
 import { Route as ApiAuthLoginRouteImport } from './routes/api.auth.login'
@@ -184,6 +185,11 @@ const ApiBackendSplatRoute = ApiBackendSplatRouteImport.update({
   path: '/api/backend/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
+  id: '/api/auth/register',
+  path: '/api/auth/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthRefreshRoute = ApiAuthRefreshRouteImport.update({
   id: '/api/auth/refresh',
   path: '/api/auth/refresh',
@@ -243,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/refresh': typeof ApiAuthRefreshRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/backend/$': typeof ApiBackendSplatRoute
   '/tiktok-scorer/$scoreId/compare/$comparisonId': typeof TiktokScorerScoreIdCompareComparisonIdRoute
 }
@@ -273,6 +280,7 @@ export interface FileRoutesByTo {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/refresh': typeof ApiAuthRefreshRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/backend/$': typeof ApiBackendSplatRoute
   '/tiktok-scorer/$scoreId/compare/$comparisonId': typeof TiktokScorerScoreIdCompareComparisonIdRoute
 }
@@ -309,6 +317,7 @@ export interface FileRoutesById {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/refresh': typeof ApiAuthRefreshRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/backend/$': typeof ApiBackendSplatRoute
   '/tiktok-scorer/$scoreId/compare/$comparisonId': typeof TiktokScorerScoreIdCompareComparisonIdRoute
 }
@@ -346,6 +355,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/refresh'
+    | '/api/auth/register'
     | '/api/backend/$'
     | '/tiktok-scorer/$scoreId/compare/$comparisonId'
   fileRoutesByTo: FileRoutesByTo
@@ -376,6 +386,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/refresh'
+    | '/api/auth/register'
     | '/api/backend/$'
     | '/tiktok-scorer/$scoreId/compare/$comparisonId'
   id:
@@ -411,6 +422,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/refresh'
+    | '/api/auth/register'
     | '/api/backend/$'
     | '/tiktok-scorer/$scoreId/compare/$comparisonId'
   fileRoutesById: FileRoutesById
@@ -435,6 +447,7 @@ export interface RootRouteChildren {
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthRefreshRoute: typeof ApiAuthRefreshRoute
+  ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
   ApiBackendSplatRoute: typeof ApiBackendSplatRoute
 }
 
@@ -643,6 +656,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthRefreshRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/register': {
+      id: '/api/auth/register'
+      path: '/api/auth/register'
+      fullPath: '/api/auth/register'
+      preLoaderRoute: typeof ApiAuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/logout': {
       id: '/api/auth/logout'
       path: '/api/auth/logout'
@@ -780,6 +800,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthRefreshRoute: ApiAuthRefreshRoute,
+  ApiAuthRegisterRoute: ApiAuthRegisterRoute,
   ApiBackendSplatRoute: ApiBackendSplatRoute,
 }
 export const routeTree = rootRouteImport

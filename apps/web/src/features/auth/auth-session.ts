@@ -7,7 +7,7 @@ export type AuthReason = "missing_session" | "session_expired" | "auth_unavailab
 export type AuthSnapshot = {
     authenticated: boolean;
     user: CurrentUser | null;
-    mode: "local_test" | "oidc" | "unavailable";
+    mode: "local_test" | "oidc" | "password" | "unavailable";
     enabled: boolean;
     reason: AuthReason;
 };

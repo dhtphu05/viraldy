@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { accessTokenFromCookie } from "@/features/auth/auth-session.server";
+import { authRequestUrl } from "@/features/auth/auth-request.server";
 import {
     backendPathFromRequest,
     hasValidMutationOrigin,
@@ -17,7 +18,7 @@ async function proxyBackend(request: Request): Promise<Response> {
     if (
         mutationMethods.has(request.method) &&
         !hasValidMutationOrigin({
-            requestUrl: request.url,
+            requestUrl: authRequestUrl(request).toString(),
             origin: request.headers.get("origin") ?? undefined,
         })
     ) {
