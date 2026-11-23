@@ -123,7 +123,7 @@ function TikTokScorerIndexRoute() {
                     description="Upload a TikTok or UGC video, see what is observable or blocked, and get an exact edit-or-reshoot plan. This is structural diagnosis—not performance prediction."
                     actions={
                         <Button asChild>
-                            <Link to="/tiktok-scorer/new">
+                            <Link to="/tiktok-scorer/new" search={{ directionId: undefined }}>
                                 <Plus className="h-4 w-4" />
                                 Score a video
                             </Link>
@@ -179,7 +179,10 @@ function TikTokScorerIndexRoute() {
                                     description="Quick Score works without a product. Product-Aware Score adds verified Product Context when you need commerce-specific checks."
                                     action={
                                         <Button asChild>
-                                            <Link to="/tiktok-scorer/new">
+                                            <Link
+                                                to="/tiktok-scorer/new"
+                                                search={{ directionId: undefined }}
+                                            >
                                                 Score your first video
                                             </Link>
                                         </Button>

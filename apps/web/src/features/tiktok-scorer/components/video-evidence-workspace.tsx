@@ -1,4 +1,4 @@
-import { Captions, ImageOff, Play, ScanLine, VideoOff, VolumeX } from "lucide-react";
+import { Captions, ChevronDown, ImageOff, Play, ScanLine, VideoOff, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { TikTokEvidence, TikTokScoreRun } from "../types";
@@ -103,6 +103,9 @@ export function VideoEvidenceWorkspace({
                                 ref={videoRef}
                                 src={mediaUrl}
                                 controls
+                                autoPlay
+                                muted
+                                loop
                                 playsInline
                                 preload="metadata"
                                 aria-label="Scored TikTok video"
@@ -164,24 +167,32 @@ export function VideoEvidenceWorkspace({
 
                     <div className="mt-5 space-y-4">
                         {run.evidence.length ? (
-                            evidenceGroups.map((group) => (
-                                <section
+                            evidenceGroups.map((group, index) => (
+                                <details
                                     key={group.key}
-                                    className="rounded-2xl border border-divider bg-surface p-3"
+                                    open={index === 0}
+                                    className="group rounded-2xl bg-surface p-3 shadow-soft-card"
                                 >
-                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                        <div>
-                                            <h3 className="text-sm font-semibold text-text-primary">
-                                                {group.title}
-                                            </h3>
-                                            <p className="text-xs text-text-tertiary">
-                                                {group.items.length} evidence item
-                                                {group.items.length === 1 ? "" : "s"}
-                                            </p>
-                                        </div>
-                                        <StatusChip tone={group.tone}>{group.label}</StatusChip>
-                                    </div>
-                                    <div className="space-y-2">
+                                    <summary className="cursor-pointer list-none rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                        <span className="flex min-h-10 items-center justify-between gap-3">
+                                            <span>
+                                                <span className="block text-sm font-semibold text-text-primary">
+                                                    {group.title}
+                                                </span>
+                                                <span className="text-xs text-text-tertiary">
+                                                    {group.items.length} evidence item
+                                                    {group.items.length === 1 ? "" : "s"}
+                                                </span>
+                                            </span>
+                                            <span className="flex items-center gap-2">
+                                                <StatusChip tone={group.tone}>
+                                                    {group.label}
+                                                </StatusChip>
+                                                <ChevronDown className="h-4 w-4 text-text-tertiary transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" />
+                                            </span>
+                                        </span>
+                                    </summary>
+                                    <div className="mt-2 space-y-2 rounded-xl bg-surface-soft p-2">
                                         {group.items.map((evidence) => (
                                             <EvidenceButton
                                                 key={evidence.id}
@@ -198,7 +209,7 @@ export function VideoEvidenceWorkspace({
                                             />
                                         ))}
                                     </div>
-                                </section>
+                                </details>
                             ))
                         ) : (
                             <p className="rounded-xl bg-surface-soft p-4 text-sm text-text-secondary">
@@ -234,7 +245,7 @@ function CompactEvidenceTimeline({
     return (
         <section
             aria-label="Video evidence timeline"
-            className="rounded-2xl border border-divider bg-surface p-4"
+            className="rounded-2xl bg-surface p-4 shadow-soft-card"
         >
             <div className="flex items-center justify-between gap-3">
                 <div>
@@ -292,10 +303,10 @@ function CompactEvidenceTimeline({
                         key={group.key}
                         type="button"
                         onClick={() => onSeek(group.primary.at, group.primary)}
-                        className={`rounded-xl border p-3 text-left transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        className={`rounded-xl p-3 text-left shadow-[0_1px_0_rgb(0_0_0_/_0.03)] transition-[background-color,box-shadow,transform] duration-150 hover:bg-surface-soft hover:shadow-soft-card active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none ${
                             group.items.some((item) => item.id === activeId)
-                                ? "border-primary bg-primary-soft"
-                                : "border-divider bg-surface"
+                                ? "bg-primary-soft ring-2 ring-primary/20"
+                                : "bg-surface"
                         }`}
                     >
                         <span className="flex items-center justify-between gap-2">

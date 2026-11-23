@@ -1,6 +1,7 @@
 import {
     Check,
     CheckCircle2,
+    ChevronDown,
     Clock3,
     ExternalLink,
     MessageSquareText,
@@ -57,9 +58,13 @@ export function FixPlan({
                     .map((group) => (
                         <section key={group.key} aria-labelledby={`fix-group-${group.key}`}>
                             <div className="mb-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                                    {group.actions.length} action
+                                    {group.actions.length === 1 ? "" : "s"}
+                                </p>
                                 <h3
                                     id={`fix-group-${group.key}`}
-                                    className="font-semibold text-text-primary"
+                                    className="mt-1 text-lg font-semibold text-text-primary"
                                 >
                                     {group.title}
                                 </h3>
@@ -161,53 +166,84 @@ function FixCard({
                 />
             </div>
 
-            <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                <ListBlock
-                    title="Exact instructions"
-                    items={action.instructions}
-                    icon={Scissors}
-                    empty="No detailed instruction was supplied."
-                />
-                <ListBlock
-                    title="Completion criteria"
-                    items={action.completionCriteria}
-                    icon={Check}
-                    empty="No completion criteria were supplied."
-                />
-                <ListBlock
-                    title="Strengths to preserve"
-                    items={action.strengthsToPreserve}
-                    icon={CheckCircle2}
-                    empty="No specific strength was linked to this action."
-                />
-                <ListBlock
-                    title="Required inputs"
-                    items={action.requiredInputs}
-                    icon={MessageSquareText}
-                    empty="No additional seller input is required."
-                />
-            </div>
+            {action.instructions[0] && (
+                <div className="mt-4 flex gap-3 rounded-xl bg-primary-softer/60 p-4 shadow-[0_1px_0_rgb(0_0_0_/_0.03)]">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                        1
+                    </span>
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                            Do this first
+                        </p>
+                        <p className="mt-1 text-pretty text-sm font-medium leading-6 text-text-primary">
+                            {action.instructions[0]}
+                        </p>
+                    </div>
+                </div>
+            )}
 
-            <div className="mt-4 rounded-xl bg-surface-soft p-3 text-sm">
-                <p className="text-xs font-medium uppercase text-text-tertiary">
-                    Verification method
-                </p>
-                <p className="mt-1 text-text-primary">{action.verificationMethod}</p>
-                <p className="mt-2 text-xs text-text-tertiary">
-                    Evidence references: {action.evidenceIds.length || "None supplied"}
-                </p>
-            </div>
-
-            <details className="mt-3 text-xs text-text-tertiary">
-                <summary className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    Technical details
+            <details className="group mt-4 rounded-2xl bg-surface-soft p-4 shadow-[0_1px_0_rgb(0_0_0_/_0.02)]">
+                <summary className="cursor-pointer list-none rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <span className="flex min-h-10 items-center justify-between gap-3">
+                        <span>
+                            <span className="block text-sm font-semibold text-text-primary">
+                                Open exact edit instructions
+                            </span>
+                            <span className="mt-0.5 block text-xs text-text-tertiary">
+                                Steps, completion checks, inputs, and verification
+                            </span>
+                        </span>
+                        <ChevronDown className="h-5 w-5 shrink-0 text-text-tertiary transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" />
+                    </span>
                 </summary>
-                <p className="mt-2">Action code: {action.code || "Unavailable"}</p>
-                <p>Source finding: {action.sourceFindingCode || "Unavailable"}</p>
-                <p>Operations: {action.operations.length || "None supplied"}</p>
+                <div className="mt-4 rounded-2xl bg-surface/70 p-4">
+                    <div className="grid gap-3 lg:grid-cols-2">
+                        <ListBlock
+                            title="Exact instructions"
+                            items={action.instructions}
+                            icon={Scissors}
+                            empty="No detailed instruction was supplied."
+                        />
+                        <ListBlock
+                            title="Completion criteria"
+                            items={action.completionCriteria}
+                            icon={Check}
+                            empty="No completion criteria were supplied."
+                        />
+                        <ListBlock
+                            title="Strengths to preserve"
+                            items={action.strengthsToPreserve}
+                            icon={CheckCircle2}
+                            empty="No specific strength was linked to this action."
+                        />
+                        <ListBlock
+                            title="Required inputs"
+                            items={action.requiredInputs}
+                            icon={MessageSquareText}
+                            empty="No additional seller input is required."
+                        />
+                    </div>
+                    <div className="mt-3 rounded-xl bg-surface p-3 text-sm">
+                        <p className="text-xs font-medium uppercase text-text-tertiary">
+                            Verification method
+                        </p>
+                        <p className="mt-1 text-text-primary">{action.verificationMethod}</p>
+                        <p className="mt-2 text-xs text-text-tertiary">
+                            Evidence references: {action.evidenceIds.length || "None supplied"}
+                        </p>
+                    </div>
+                    <details className="mt-3 text-xs text-text-tertiary">
+                        <summary className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            Technical details
+                        </summary>
+                        <p className="mt-2">Action code: {action.code || "Unavailable"}</p>
+                        <p>Source finding: {action.sourceFindingCode || "Unavailable"}</p>
+                        <p>Operations: {action.operations.length || "None supplied"}</p>
+                    </details>
+                </div>
             </details>
 
-            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-divider pt-4">
+            <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-surface-soft/80 p-3">
                 <Button
                     type="button"
                     size="sm"
@@ -283,8 +319,8 @@ function ValuePanel({
         <div
             className={
                 tone === "ok"
-                    ? "rounded-2xl border border-ok/20 bg-ok-soft p-4"
-                    : "rounded-2xl border border-warn/20 bg-warn-soft p-4"
+                    ? "rounded-2xl bg-ok-soft p-4 shadow-[0_1px_0_rgb(0_0_0_/_0.03)]"
+                    : "rounded-2xl bg-warn-soft p-4 shadow-[0_1px_0_rgb(0_0_0_/_0.03)]"
             }
         >
             <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
@@ -307,7 +343,7 @@ function ValuePanel({
                         key === main?.[0] ? null : (
                             <div
                                 key={key}
-                                className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2 border-t border-white/50 pt-2 text-sm"
+                                className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2 rounded-lg bg-white/40 px-2 py-2 text-sm"
                             >
                                 <dt className="text-text-secondary">{humanize(key)}</dt>
                                 <dd className="break-words text-text-primary">
@@ -336,7 +372,7 @@ function ListBlock({
     empty: string;
 }) {
     return (
-        <div className="rounded-2xl border border-divider bg-surface-soft p-4">
+        <div className="rounded-2xl bg-surface-soft p-4 shadow-[0_1px_0_rgb(0_0_0_/_0.02)]">
             <p className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-primary-softer text-primary">
                     <Icon className="h-4 w-4" />
@@ -373,14 +409,14 @@ function FixMeta({
     icon?: typeof UserRound;
 }) {
     const toneClass = {
-        risk: "border-destructive/25 bg-destructive-soft text-destructive",
-        warn: "border-warn/25 bg-warn-soft text-warn",
-        info: "border-info/25 bg-info-soft text-info",
-        neutral: "border-divider bg-surface-soft text-text-secondary",
-        ok: "border-ok/25 bg-ok-soft text-ok",
+        risk: "bg-destructive-soft text-destructive",
+        warn: "bg-warn-soft text-warn",
+        info: "bg-info-soft text-info",
+        neutral: "bg-surface-soft text-text-secondary",
+        ok: "bg-ok-soft text-ok",
     }[tone];
     return (
-        <div className={`rounded-2xl border px-3 py-2 ${toneClass}`}>
+        <div className={`rounded-2xl px-3 py-2 ${toneClass}`}>
             <p className="text-[11px] font-semibold uppercase tracking-wide opacity-75">{label}</p>
             <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
                 {Icon && <Icon className="h-3.5 w-3.5" />}

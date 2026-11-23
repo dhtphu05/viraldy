@@ -10,6 +10,7 @@ import {
     Loader2,
     PackageOpen,
     Play,
+    Search,
     Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,6 +35,14 @@ import { DecisionHero } from "@/shared/ui/decision-hero";
 import { ExpectedObservedTable } from "@/shared/ui/expected-observed-table";
 import { Input } from "@/shared/ui/input";
 import { ValueReceipt } from "@/shared/ui/value-receipt";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/shared/ui/dialog";
 import { AnalysisThinkingSkeleton } from "@/shared/ui/analysis-thinking-skeleton";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -43,7 +52,12 @@ import { PatternKitResult } from "@/features/mvp-flow/components/pattern-kit-res
 import { ProductionRunHeader } from "@/features/mvp-flow/components/production-run-header";
 import { ProductionRunRail } from "@/features/mvp-flow/components/production-run-rail";
 import { ViralKitResult } from "@/features/mvp-flow/components/viral-kit-result";
+import {
+    VideoGenerationPromptPanel,
+    type VideoGenerationPrompt,
+} from "@/features/mvp-flow/components/video-generation-prompt";
 import { seedProducts } from "@/features/products/data/products";
+import { ImportProductDialog } from "@/features/products/components/import-product-dialog";
 import { useAppStore } from "@/app/store/app-store";
 import {
     deriveProductionRunPhases,
@@ -249,6 +263,7 @@ type CampaignPackVersion = {
     source_prompt_version: string | null;
     source_schema_version: string | null;
     created_at: string;
+    video_generation_prompt: VideoGenerationPrompt;
 };
 type CampaignPack = {
     id: string;
@@ -1247,7 +1262,7 @@ function ProductionRunRoute() {
 
     return (
         <AppShell>
-            <div className="flex flex-col gap-5">
+            <div className="production-run-page flex flex-col gap-6">
                 <ProductionRunHeader
                     backendConfigured={backendConfigured}
                     loading={workflowLoading}
@@ -1287,6 +1302,7 @@ function ProductionRunRoute() {
                             <div className="min-w-0">
                                 {activePhase === "context" && (
                                     <ProductionContextPanel
+                                        workspaceId={workspaceId}
                                         search={search}
                                         products={products.data ?? []}
                                         references={references.data ?? []}
@@ -1557,6 +1573,12 @@ function ProductionRunRoute() {
                                                     <CampaignBriefEditor
                                                         value={briefDraft}
                                                         onChange={setBriefDraft}
+                                                    />
+                                                    <VideoGenerationPromptPanel
+                                                        artifact={
+                                                            pack.data.current_version
+                                                                .video_generation_prompt
+                                                        }
                                                     />
                                                     <details className="rounded-md border border-hairline bg-surface-soft p-3">
                                                         <summary className="cursor-pointer text-sm font-medium text-text-primary">
@@ -1862,33 +1884,64 @@ function ActionPanel({
         <section
             id={id}
             aria-labelledby={id ? `${id}-heading` : undefined}
-            className="scroll-mt-20 rounded-2xl bg-surface p-5 shadow-soft-card sm:p-6"
+            className="scroll-mt-20 rounded-2xl bg-surface/95 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.07)] sm:p-6"
         >
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="mb-4 flex flex-col gap-3 pb-1 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 gap-3">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary-active">
+                    <span
+                        className={cn(
+                            "grid h-10 w-10 shrink-0 place-items-center rounded-xl",
+                            actionPanelAccent(id),
+                        )}
+                    >
                         <Icon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">
                         {eyebrow && (
-                            <p className="text-[10px] font-semibold uppercase text-text-tertiary">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
                                 {eyebrow}
                             </p>
                         )}
                         <h2
                             id={id ? `${id}-heading` : undefined}
                             tabIndex={id ? -1 : undefined}
-                            className="text-base font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="text-lg font-semibold tracking-[-0.01em] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                             {title}
                         </h2>
-                        {summary && <p className="mt-0.5 text-sm text-text-secondary">{summary}</p>}
+                        {summary && (
+                            <p className="mt-1 max-w-3xl text-sm leading-6 text-text-secondary">
+                                {summary}
+                            </p>
+                        )}
                     </div>
                 </div>
+                {id && (
+                    <span className="hidden rounded-full bg-surface-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-tertiary sm:block">
+                        {id}
+                    </span>
+                )}
             </div>
             <div className="flex flex-col gap-4">{children}</div>
         </section>
     );
+}
+
+function actionPanelAccent(id?: string) {
+    switch (id) {
+        case "context":
+            return "bg-info-soft text-info";
+        case "decode":
+            return "bg-primary-soft text-primary-active";
+        case "adapt":
+            return "bg-warn-soft text-warn";
+        case "build":
+            return "bg-info-soft text-info";
+        case "review":
+            return "bg-ok-soft text-ok";
+        default:
+            return "bg-primary-soft text-primary-active";
+    }
 }
 
 function ProductionEntryChooser({
@@ -1919,7 +1972,7 @@ function ProductionEntryChooser({
     return (
         <section aria-labelledby="production-entry-heading" className="mx-auto w-full max-w-5xl">
             <div className="mb-5">
-                <p className="text-xs font-semibold uppercase text-primary">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                     Choose a starting point
                 </p>
                 <h2
@@ -1941,9 +1994,21 @@ function ProductionEntryChooser({
                             type="button"
                             disabled={disabled}
                             onClick={() => onChoose(entry.id)}
-                            className="group min-w-0 rounded-md bg-surface p-5 text-left shadow-soft-card transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-hover-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55 sm:p-6"
+                            className={cn(
+                                "group min-w-0 rounded-2xl p-5 text-left shadow-soft-card transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-px hover:shadow-hover-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55 sm:p-6",
+                                entry.id === "reference-first"
+                                    ? "bg-primary-soft/48 hover:bg-primary-soft/70"
+                                    : "bg-info-soft/46 hover:bg-info-soft/68",
+                            )}
                         >
-                            <span className="grid h-10 w-10 place-items-center rounded-md bg-primary-soft text-primary-active">
+                            <span
+                                className={cn(
+                                    "grid h-11 w-11 place-items-center rounded-xl",
+                                    entry.id === "reference-first"
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-info text-white",
+                                )}
+                            >
                                 <Icon className="h-5 w-5" />
                             </span>
                             <h3 className="mt-4 text-base font-semibold text-text-primary">
@@ -1952,7 +2017,7 @@ function ProductionEntryChooser({
                             <p className="mt-2 text-sm leading-6 text-text-secondary">
                                 {entry.description}
                             </p>
-                            <p className="mt-4 border-t border-divider pt-3 text-xs leading-5 text-text-tertiary">
+                            <p className="mt-5 border-t border-divider pt-3 text-xs leading-5 text-text-tertiary">
                                 <span className="font-medium text-text-primary">Outcome:</span>{" "}
                                 {entry.outcome}
                             </p>
@@ -1970,6 +2035,7 @@ function ProductionEntryChooser({
 }
 
 function ProductionContextPanel({
+    workspaceId,
     search,
     products,
     references,
@@ -1995,6 +2061,7 @@ function ProductionContextPanel({
     onAnalyze,
     onRetryQuick,
 }: {
+    workspaceId?: string;
     search: MvpSearch;
     products: Product[];
     references: Reference[];
@@ -2078,122 +2145,158 @@ function ProductionContextPanel({
                     ))}
                 </div>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <ContextSelect
-                        label="Product"
-                        value={search.productId}
-                        placeholder="Select a product"
-                        options={products.map((product) => ({
-                            value: product.id,
-                            label: product.name,
-                        }))}
-                        onChange={(productId) => {
-                            const nextProduct = products.find((item) => item.id === productId);
-                            const contextAutofill = productionContextAutofill(nextProduct, search);
-                            onChange({
-                                productId,
-                                market:
-                                    search.market ??
-                                    nextProduct?.product_context.identity?.market ??
-                                    nextProduct?.market ??
-                                    undefined,
-                                ...contextAutofill,
-                                patternKitId: undefined,
-                                viralKitId: undefined,
-                                selectedConceptId: undefined,
-                                conceptConfirmed: undefined,
-                                packId: undefined,
-                                campaignId: undefined,
-                                preflightRunId: undefined,
-                                preflightJobId: undefined,
-                            });
-                        }}
-                    />
-                    <ContextSelect
-                        label="Primary reference"
-                        value={search.primaryReferenceId}
-                        placeholder="Select a winning reference"
-                        options={references.map((reference) => ({
-                            value: reference.id,
-                            label: reference.title,
-                        }))}
-                        onChange={(primaryReferenceId) =>
-                            onChange({
-                                primaryReferenceId,
-                                ...productionContextAutofill(selectedProduct, search),
-                                quickAssetId: undefined,
-                                dnaId: undefined,
-                                dnaJobId: undefined,
-                                patternKitId: undefined,
-                                viralKitId: undefined,
-                                selectedConceptId: undefined,
-                                conceptConfirmed: undefined,
-                                packId: undefined,
-                                campaignId: undefined,
-                                preflightRunId: undefined,
-                                preflightJobId: undefined,
-                            })
-                        }
-                    />
-                    <ContextSelect
-                        label="Objective"
-                        value={search.objective}
-                        placeholder="Select an objective"
-                        options={[
-                            {
-                                value: "tiktok_shop_affiliate_test",
-                                label: "TikTok Shop affiliate test",
-                            },
-                            { value: "organic_product_test", label: "Organic product test" },
-                            { value: "spark_ads_test", label: "Spark Ads test" },
-                        ]}
-                        onChange={(objective) =>
-                            onChange({
-                                objective,
-                                viralKitId: undefined,
-                                selectedConceptId: undefined,
-                                conceptConfirmed: undefined,
-                                packId: undefined,
-                                campaignId: undefined,
-                                preflightRunId: undefined,
-                            })
-                        }
-                    />
-                    <ContextSelect
-                        label="Market"
-                        value={search.market}
-                        placeholder="Select a market"
-                        options={["US", "UK", "CA", "AU"].map((market) => ({
-                            value: market,
-                            label: market,
-                        }))}
-                        onChange={(market) =>
-                            onChange({
-                                market,
-                                viralKitId: undefined,
-                                selectedConceptId: undefined,
-                                conceptConfirmed: undefined,
-                                packId: undefined,
-                                campaignId: undefined,
-                                preflightRunId: undefined,
-                            })
-                        }
-                    />
-                    {personas.length > 0 ? (
+                <>
+                    <section
+                        className="grid gap-1.5 rounded-[22px] bg-surface-muted/75 p-1.5 shadow-[inset_0_1px_0_rgba(15,23,42,0.08)] sm:grid-cols-3"
+                        aria-label="Run context overview"
+                    >
+                        <ContextSnapshot
+                            label="Product"
+                            value={selectedProduct?.name ?? "Not selected"}
+                            tone={selectedProduct ? "info" : "neutral"}
+                            product={selectedProduct}
+                        />
+                        <ContextSnapshot
+                            label="Reference"
+                            value={quickAsset ? assetTitle(quickAsset) : "Not selected"}
+                            tone={quickAsset ? "primary" : "neutral"}
+                        />
+                        <ContextSnapshot
+                            label="Decision state"
+                            value={contextReady ? "Ready to decode" : "Needs context"}
+                            tone={contextReady ? "ok" : "warn"}
+                        />
+                    </section>
+                    <div className="grid gap-x-5 gap-y-4 rounded-[22px] bg-surface-muted/70 p-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.09)] sm:grid-cols-2 sm:p-5">
+                        <div className="flex min-w-0 flex-col gap-2">
+                            <div className="flex items-end gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <ProductPickerDialog
+                                        products={products}
+                                        selectedProductId={search.productId}
+                                        onSelect={(productId) => {
+                                            const nextProduct = products.find(
+                                                (item) => item.id === productId,
+                                            );
+                                            const contextAutofill = productionContextAutofill(
+                                                nextProduct,
+                                                search,
+                                            );
+                                            onChange({
+                                                productId,
+                                                market:
+                                                    search.market ??
+                                                    nextProduct?.product_context.identity?.market ??
+                                                    nextProduct?.market ??
+                                                    undefined,
+                                                ...contextAutofill,
+                                                patternKitId: undefined,
+                                                viralKitId: undefined,
+                                                selectedConceptId: undefined,
+                                                conceptConfirmed: undefined,
+                                                packId: undefined,
+                                                campaignId: undefined,
+                                                preflightRunId: undefined,
+                                                preflightJobId: undefined,
+                                            });
+                                        }}
+                                    />
+                                </div>
+                                <div className="shrink-0">
+                                    <ImportProductDialog
+                                        workspaceId={workspaceId}
+                                        triggerLabel="Import link"
+                                        dialogTitle="Import Amazon product for this run"
+                                        dialogDescription="Paste a public Amazon product URL. Viraldy will crawl observed product context, let you review the fields, then save and select it for this Production Run."
+                                        urlPlaceholder="https://www.amazon.com/dp/..."
+                                        saveLabel="Save and use in run"
+                                        savingLabel="Saving and selecting..."
+                                        successTitle="Product imported for this run"
+                                        successDescription={(product) =>
+                                            `${product.name} is now selected as the Product Run context.`
+                                        }
+                                        onImported={(newProduct) => {
+                                            const castedProduct = newProduct as unknown as Product;
+                                            const contextAutofill = productionContextAutofill(
+                                                castedProduct,
+                                                search,
+                                            );
+                                            onChange({
+                                                productId: castedProduct.id,
+                                                market:
+                                                    search.market ??
+                                                    castedProduct.product_context.identity
+                                                        ?.market ??
+                                                    castedProduct.market ??
+                                                    undefined,
+                                                ...contextAutofill,
+                                                patternKitId: undefined,
+                                                viralKitId: undefined,
+                                                selectedConceptId: undefined,
+                                                conceptConfirmed: undefined,
+                                                packId: undefined,
+                                                campaignId: undefined,
+                                                preflightRunId: undefined,
+                                                preflightJobId: undefined,
+                                            });
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-text-secondary">
+                                Product context powers the buyer, market, and offer suggestions
+                                below.
+                            </p>
+                        </div>
                         <ContextSelect
-                            label="Buyer persona"
-                            value={search.buyerPersona}
-                            placeholder="Select a buyer"
-                            options={personas.map((persona) => ({
-                                value: persona.id,
-                                label: persona.label,
+                            label="Primary reference"
+                            value={search.primaryReferenceId}
+                            placeholder="Select a winning reference"
+                            helper="The source mechanic to decode. Required before Creative DNA can run."
+                            required
+                            options={references.map((reference) => ({
+                                value: reference.id,
+                                label: reference.title,
                             }))}
-                            onChange={(buyerPersona) =>
+                            onChange={(primaryReferenceId) =>
                                 onChange({
-                                    ...productionContextAutofill(selectedProduct, {
-                                        ...search,
-                                        buyerPersona,
-                                    }),
+                                    primaryReferenceId,
+                                    ...productionContextAutofill(selectedProduct, search),
+                                    quickAssetId: undefined,
+                                    dnaId: undefined,
+                                    dnaJobId: undefined,
+                                    patternKitId: undefined,
+                                    viralKitId: undefined,
+                                    selectedConceptId: undefined,
+                                    conceptConfirmed: undefined,
+                                    packId: undefined,
+                                    campaignId: undefined,
+                                    preflightRunId: undefined,
+                                    preflightJobId: undefined,
+                                })
+                            }
+                        />
+                        <ContextSectionLabel
+                            number="2"
+                            title="Decision intent"
+                            description="Set the buyer and desired change this run should prove."
+                        />
+                        <ContextSelect
+                            label="Objective"
+                            value={search.objective}
+                            placeholder="Select an objective"
+                            helper="Shapes the concept angle and the final handoff."
+                            options={[
+                                {
+                                    value: "tiktok_shop_affiliate_test",
+                                    label: "TikTok Shop affiliate test",
+                                },
+                                { value: "organic_product_test", label: "Organic product test" },
+                                { value: "spark_ads_test", label: "Spark Ads test" },
+                            ]}
+                            onChange={(objective) =>
+                                onChange({
+                                    objective,
                                     viralKitId: undefined,
                                     selectedConceptId: undefined,
                                     conceptConfirmed: undefined,
@@ -2203,75 +2306,146 @@ function ProductionContextPanel({
                                 })
                             }
                         />
-                    ) : (
+                        <ContextSelect
+                            label="Market"
+                            value={search.market}
+                            placeholder="Select a market"
+                            helper="Sets the commercial and claims context for this run."
+                            options={["US", "UK", "CA", "AU"].map((market) => ({
+                                value: market,
+                                label: market,
+                            }))}
+                            onChange={(market) =>
+                                onChange({
+                                    market,
+                                    viralKitId: undefined,
+                                    selectedConceptId: undefined,
+                                    conceptConfirmed: undefined,
+                                    packId: undefined,
+                                    campaignId: undefined,
+                                    preflightRunId: undefined,
+                                })
+                            }
+                        />
+                        {personas.length > 0 ? (
+                            <ContextSelect
+                                label="Buyer persona"
+                                value={search.buyerPersona}
+                                placeholder="Select a buyer"
+                                helper="Suggested from product context · edit if this test targets a different buyer."
+                                options={personas.map((persona) => ({
+                                    value: persona.id,
+                                    label: persona.label,
+                                }))}
+                                onChange={(buyerPersona) =>
+                                    onChange({
+                                        ...productionContextAutofill(selectedProduct, {
+                                            ...search,
+                                            buyerPersona,
+                                        }),
+                                        viralKitId: undefined,
+                                        selectedConceptId: undefined,
+                                        conceptConfirmed: undefined,
+                                        packId: undefined,
+                                        campaignId: undefined,
+                                        preflightRunId: undefined,
+                                    })
+                                }
+                            />
+                        ) : (
+                            <ContextInput
+                                label="Buyer persona"
+                                value={search.buyerPersona}
+                                placeholder="Who is this for?"
+                                helper="Name the person who should immediately recognize the problem."
+                                required
+                                onChange={(buyerPersona) =>
+                                    onChange({
+                                        ...productionContextAutofill(selectedProduct, {
+                                            ...search,
+                                            buyerPersona,
+                                        }),
+                                        viralKitId: undefined,
+                                        selectedConceptId: undefined,
+                                        conceptConfirmed: undefined,
+                                        packId: undefined,
+                                        campaignId: undefined,
+                                        preflightRunId: undefined,
+                                    })
+                                }
+                            />
+                        )}
                         <ContextInput
-                            label="Buyer persona"
-                            value={search.buyerPersona}
-                            placeholder="Who is this for?"
-                            onChange={(buyerPersona) =>
+                            label="Buyer pain"
+                            value={search.buyerPain}
+                            placeholder="What are they trying to fix?"
+                            helper="Describe the before-state in the buyer’s own words."
+                            required
+                            onChange={(buyerPain) =>
                                 onChange({
-                                    ...productionContextAutofill(selectedProduct, {
-                                        ...search,
-                                        buyerPersona,
-                                    }),
+                                    buyerPain,
                                     viralKitId: undefined,
-                                    selectedConceptId: undefined,
                                     conceptConfirmed: undefined,
                                     packId: undefined,
                                     campaignId: undefined,
-                                    preflightRunId: undefined,
                                 })
                             }
                         />
-                    )}
-                    <ContextInput
-                        label="Buyer pain"
-                        value={search.buyerPain}
-                        placeholder="What are they trying to fix?"
-                        onChange={(buyerPain) =>
-                            onChange({
-                                buyerPain,
-                                viralKitId: undefined,
-                                conceptConfirmed: undefined,
-                                packId: undefined,
-                                campaignId: undefined,
-                            })
-                        }
-                    />
-                    <ContextInput
-                        label="Desired outcome"
-                        value={search.desiredOutcome}
-                        placeholder="What should change after using the product?"
-                        onChange={(desiredOutcome) =>
-                            onChange({
-                                desiredOutcome,
-                                viralKitId: undefined,
-                                conceptConfirmed: undefined,
-                                packId: undefined,
-                                campaignId: undefined,
-                            })
-                        }
-                    />
-                    <ContextSelect
-                        label="Reference video"
-                        value={search.quickAssetId ?? quickAsset?.id}
-                        placeholder="Use the selected reference media"
-                        options={assets.map((asset) => ({
-                            value: asset.id,
-                            label: assetTitle(asset),
-                        }))}
-                        onChange={(quickAssetId) =>
-                            onChange({
-                                quickAssetId,
-                                quickRunId: undefined,
-                                quickJobId: undefined,
-                            })
-                        }
-                    />
-                </div>
+                        <ContextInput
+                            label="Desired outcome"
+                            value={search.desiredOutcome}
+                            placeholder="What should change after using the product?"
+                            helper="Make the post-demo change visible and testable."
+                            required
+                            onChange={(desiredOutcome) =>
+                                onChange({
+                                    desiredOutcome,
+                                    viralKitId: undefined,
+                                    conceptConfirmed: undefined,
+                                    packId: undefined,
+                                    campaignId: undefined,
+                                })
+                            }
+                        />
+                        <ContextSelect
+                            label="Reference video"
+                            value={search.quickAssetId ?? quickAsset?.id}
+                            placeholder="Use the selected reference media"
+                            helper="Optional structure check only; it does not replace Creative DNA."
+                            options={assets.map((asset) => ({
+                                value: asset.id,
+                                label: assetTitle(asset),
+                            }))}
+                            onChange={(quickAssetId) =>
+                                onChange({
+                                    quickAssetId,
+                                    quickRunId: undefined,
+                                    quickJobId: undefined,
+                                })
+                            }
+                        />
+                        {selectedProduct && (
+                            <div className="flex items-start gap-3 rounded-2xl bg-info-soft/55 p-3 sm:col-span-2">
+                                <CheckCircle2
+                                    className="mt-0.5 h-4 w-4 shrink-0 text-info"
+                                    aria-hidden
+                                />
+                                <div>
+                                    <p className="text-sm font-semibold text-text-primary">
+                                        Product context loaded
+                                    </p>
+                                    <p className="mt-1 text-xs leading-5 text-text-secondary">
+                                        Buyer and market defaults are ready. Review the suggested
+                                        fields, then edit them before you run the analysis.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </>
             )}
 
-            <div className="rounded-md border border-dashed border-control-border bg-surface-soft p-4">
+            <div className="rounded-2xl bg-info-soft/45 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.12)]">
                 <label
                     htmlFor="production-reference-upload"
                     className="text-sm font-medium text-text-primary"
@@ -2294,7 +2468,10 @@ function ProductionContextPanel({
             </div>
 
             <div
-                className={cn("rounded-md p-4", contextReady ? "bg-ok-soft" : "bg-surface-soft")}
+                className={cn(
+                    "rounded-2xl p-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.04)]",
+                    contextReady ? "bg-ok-soft" : "bg-warn-soft/55",
+                )}
                 aria-live="polite"
             >
                 <p className="text-sm font-semibold text-text-primary">
@@ -2315,7 +2492,7 @@ function ProductionContextPanel({
                 </div>
             </div>
 
-            <details className="rounded-md border border-hairline bg-surface p-4">
+            <details className="rounded-2xl bg-surface-soft/60 p-4 shadow-inner">
                 <summary className="cursor-pointer text-sm font-medium text-text-primary">
                     Optional structure check
                 </summary>
@@ -2354,28 +2531,230 @@ function ProductionContextPanel({
     );
 }
 
+function ProductPickerDialog({
+    products,
+    selectedProductId,
+    onSelect,
+}: {
+    products: Product[];
+    selectedProductId?: string;
+    onSelect: (productId: string) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const selectedProduct = products.find((product) => product.id === selectedProductId);
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredProducts = products.filter((product) => {
+        if (!normalizedQuery) return true;
+        const category = product.product_context.identity?.category ?? "";
+        const searchableText = [product.name, category, product.market ?? ""].join(" ");
+        return searchableText.toLowerCase().includes(normalizedQuery);
+    });
+
+    const selectProduct = (productId: string) => {
+        onSelect(productId);
+        setOpen(false);
+        setQuery("");
+    };
+
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+                setOpen(nextOpen);
+                if (!nextOpen) setQuery("");
+            }}
+        >
+            <div className="grid min-w-0 gap-1.5 text-sm font-medium text-text-primary">
+                <span className="flex items-center gap-2">
+                    Product
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-warn">
+                        Required
+                    </span>
+                </span>
+                <DialogTrigger asChild>
+                    <button
+                        type="button"
+                        className={cn(
+                            "flex min-h-11 min-w-0 items-center justify-between gap-3 rounded-[12px] bg-surface px-3 text-left text-sm shadow-[0_2px_8px_rgba(15,23,42,0.10)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            selectedProduct
+                                ? "bg-info-soft/30 hover:bg-info-soft/50"
+                                : "bg-warn-soft/30 hover:bg-warn-soft/50",
+                        )}
+                        aria-haspopup="dialog"
+                        aria-label={
+                            selectedProduct
+                                ? "Change product, currently " + selectedProduct.name
+                                : "Select a product"
+                        }
+                    >
+                        <span className="flex min-w-0 items-center gap-2">
+                            {selectedProduct ? (
+                                <ProductPreview product={selectedProduct} size="trigger" />
+                            ) : (
+                                <PackageOpen className="h-4 w-4 shrink-0 text-warn" aria-hidden />
+                            )}
+                            <span className="min-w-0 truncate">
+                                {selectedProduct?.name ?? "Choose a product"}
+                            </span>
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-text-tertiary">
+                            {selectedProduct ? "Change" : "Browse"}
+                        </span>
+                    </button>
+                </DialogTrigger>
+                <p className="text-xs font-normal text-text-secondary">
+                    Choose the product the reference will be adapted to.
+                </p>
+            </div>
+            <DialogContent className="max-w-3xl gap-0 overflow-hidden border-0 p-0 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
+                <DialogHeader className="px-6 py-5 pr-14">
+                    <DialogTitle>Choose product context</DialogTitle>
+                    <DialogDescription>
+                        Pick a product to load the right buyer, market, and offer signals into this
+                        run.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="bg-surface-soft/60 px-6 py-4">
+                    <div className="relative">
+                        <Search
+                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary"
+                            aria-hidden
+                        />
+                        <Input
+                            autoFocus
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search by product, category, or market"
+                            className="pl-9"
+                            aria-label="Search products"
+                        />
+                    </div>
+                    <p className="mt-2 text-xs text-text-tertiary" aria-live="polite">
+                        {filteredProducts.length}{" "}
+                        {filteredProducts.length === 1 ? "product" : "products"} available
+                    </p>
+                </div>
+                <div
+                    className="max-h-[min(58vh,30rem)] overflow-y-auto p-6"
+                    role="listbox"
+                    aria-label="Available products"
+                >
+                    {filteredProducts.length > 0 ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {filteredProducts.map((product) => {
+                                const category =
+                                    product.product_context.identity?.category ?? "Product context";
+                                const market =
+                                    product.product_context.identity?.market ??
+                                    product.market ??
+                                    "Market not set";
+                                const personaCount = product.product_context.personas?.length ?? 0;
+                                const isSelected = product.id === selectedProductId;
+                                return (
+                                    <button
+                                        key={product.id}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={isSelected}
+                                        onClick={() => selectProduct(product.id)}
+                                        className={cn(
+                                            "group grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-2xl p-3 text-left shadow-[0_1px_5px_rgba(15,23,42,0.07)] transition-[box-shadow,background-color] hover:shadow-soft-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                            isSelected
+                                                ? "bg-info-soft/45 ring-2 ring-inset ring-info/45 shadow-soft-card"
+                                                : "bg-surface hover:bg-info-soft/20",
+                                        )}
+                                    >
+                                        <ProductPreview product={product} size="card" />
+                                        <div className="min-w-0">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-text-primary">
+                                                        {product.name}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-text-secondary">
+                                                        {category} · {market}
+                                                    </p>
+                                                </div>
+                                                {isSelected && (
+                                                    <StatusChip tone="info" dot>
+                                                        Selected
+                                                    </StatusChip>
+                                                )}
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-1.5 text-xs text-text-tertiary">
+                                                <span className="rounded-full bg-surface-muted px-2 py-1">
+                                                    {personaCount} buyer{" "}
+                                                    {personaCount === 1 ? "signal" : "signals"}
+                                                </span>
+                                                <span className="rounded-full bg-surface-muted px-2 py-1">
+                                                    Context v{product.product_context_version}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="rounded-2xl bg-surface-soft p-8 text-center">
+                            <p className="text-sm font-semibold text-text-primary">
+                                No matching products
+                            </p>
+                            <p className="mt-1 text-sm text-text-secondary">
+                                Try a different name, category, or market.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function ContextSelect({
     label,
     value,
     placeholder,
     options,
+    helper,
+    required = false,
     onChange,
 }: {
     label: string;
     value?: string;
     placeholder: string;
     options: Array<{ value: string; label: string }>;
+    helper?: string;
+    required?: boolean;
     onChange: (value: string) => void;
 }) {
     const id = `production-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const helperId = `${id}-hint`;
     return (
         <label htmlFor={id} className="grid min-w-0 gap-1.5 text-sm font-medium text-text-primary">
-            {label}
+            <span className="flex items-center gap-2">
+                {label}
+                {required && (
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-warn">
+                        Required
+                    </span>
+                )}
+            </span>
             <select
                 id={id}
                 value={value ?? ""}
                 onChange={(event) => onChange(event.target.value)}
-                className="h-10 min-w-0 rounded-[10px] border border-control-border bg-surface px-3 text-sm text-text-primary focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring/20"
+                aria-describedby={helper ? helperId : undefined}
+                aria-required={required}
+                className={cn(
+                    "h-11 min-w-0 rounded-[12px] border-0 bg-surface px-3 text-sm text-text-primary shadow-[0_2px_8px_rgba(15,23,42,0.10)] focus:outline-none focus:ring-2 focus:ring-ring/45",
+                    value
+                        ? "ring-1 ring-inset ring-info/30"
+                        : required
+                          ? "bg-warn-soft/55 ring-1 ring-inset ring-warn/25"
+                          : undefined,
+                )}
             >
                 <option value="" disabled>
                     {placeholder}
@@ -2386,31 +2765,182 @@ function ContextSelect({
                     </option>
                 ))}
             </select>
+            {helper && (
+                <span id={helperId} className="text-xs font-normal leading-5 text-text-secondary">
+                    {helper}
+                </span>
+            )}
         </label>
     );
+}
+
+function ContextSnapshot({
+    label,
+    value,
+    tone,
+    product,
+}: {
+    label: string;
+    value: string;
+    tone: "neutral" | "primary" | "info" | "ok" | "warn";
+    product?: Product;
+}) {
+    const toneClass = {
+        neutral: "bg-surface-soft text-text-tertiary",
+        primary: "bg-primary-soft/55 text-primary-active",
+        info: "bg-info-soft/55 text-info",
+        ok: "bg-ok-soft text-ok",
+        warn: "bg-warn-soft text-warn",
+    }[tone];
+
+    return (
+        <div
+            className={cn(
+                "flex min-w-0 items-center gap-3 rounded-[18px] p-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)]",
+                toneClass,
+            )}
+        >
+            {product && <ProductPreview product={product} size="summary" />}
+            <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em]">{label}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-text-primary" title={value}>
+                    {value}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function ContextSectionLabel({
+    number,
+    title,
+    description,
+}: {
+    number: string;
+    title: string;
+    description: string;
+}) {
+    return (
+        <div className="flex items-center gap-3 pt-2 sm:col-span-2">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-text-primary text-xs font-semibold text-surface">
+                {number}
+            </span>
+            <div>
+                <p className="text-sm font-semibold text-text-primary">{title}</p>
+                <p className="text-xs text-text-secondary">{description}</p>
+            </div>
+        </div>
+    );
+}
+
+function ProductPreview({
+    product,
+    size,
+}: {
+    product: Product;
+    size: "trigger" | "summary" | "card";
+}) {
+    const imageUrl = productImageUrl(product);
+    const sizeClass = {
+        trigger: "h-6 w-6 rounded-md",
+        summary: "h-10 w-10 rounded-xl",
+        card: "h-[88px] w-[72px] rounded-xl",
+    }[size];
+
+    return (
+        <span
+            className={cn(
+                "grid shrink-0 place-items-center overflow-hidden bg-surface-muted shadow-[0_1px_3px_rgba(15,23,42,0.10)]",
+                sizeClass,
+            )}
+            aria-hidden
+        >
+            {imageUrl ? (
+                <img src={imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+            ) : (
+                <PackageOpen
+                    className={cn(
+                        "text-text-tertiary",
+                        size === "card" ? "h-5 w-5" : "h-3.5 w-3.5",
+                    )}
+                />
+            )}
+        </span>
+    );
+}
+
+function productImageUrl(product: Product) {
+    const metadata = product.metadata_json;
+    const candidate = [
+        metadata.image_url,
+        metadata.imageUrl,
+        metadata.thumbnail_url,
+        metadata.thumbnailUrl,
+    ].find((value): value is string => typeof value === "string" && isProductImageUrl(value));
+    if (candidate) return candidate;
+
+    const category = product.product_context.identity?.category ?? "";
+    const fixturePreview: Record<string, string> = {
+        home_organization: "/demo-media/kitchen_organizer.jpg",
+        beauty_tool: "/demo-media/beauty_mirror.jpg",
+        pod_personalized_gift: "/demo-media/family_name_sign.jpg",
+        pet_accessory: "/demo-media/pet_hair_roller.jpg",
+    };
+    return fixturePreview[category];
+}
+
+function isProductImageUrl(value: string) {
+    return value.startsWith("/") || value.startsWith("https://") || value.startsWith("http://");
 }
 
 function ContextInput({
     label,
     value,
     placeholder,
+    helper,
+    required = false,
     onChange,
 }: {
     label: string;
     value?: string;
     placeholder: string;
+    helper?: string;
+    required?: boolean;
     onChange: (value: string) => void;
 }) {
     const id = `production-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const helperId = `${id}-hint`;
     return (
         <label htmlFor={id} className="grid min-w-0 gap-1.5 text-sm font-medium text-text-primary">
-            {label}
+            <span className="flex items-center gap-2">
+                {label}
+                {required && (
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-warn">
+                        Required
+                    </span>
+                )}
+            </span>
             <Input
                 id={id}
                 value={value ?? ""}
                 placeholder={placeholder}
+                aria-describedby={helper ? helperId : undefined}
+                aria-required={required}
+                className={cn(
+                    "h-11 border-0 bg-surface shadow-[0_2px_8px_rgba(15,23,42,0.10)] focus-visible:ring-ring/45",
+                    value
+                        ? "ring-1 ring-inset ring-info/30"
+                        : required
+                          ? "bg-warn-soft/55 ring-1 ring-inset ring-warn/25"
+                          : undefined,
+                )}
                 onChange={(event) => onChange(event.target.value)}
             />
+            {helper && (
+                <span id={helperId} className="text-xs font-normal leading-5 text-text-secondary">
+                    {helper}
+                </span>
+            )}
         </label>
     );
 }
@@ -2697,6 +3227,7 @@ function DnaBlock({ dna }: { dna: Dna }) {
                 confidence={formatSystemValue(data.overall_confidence ?? dna.confidence)}
                 effort={`${humanizeLabel(dna.analysis_mode)} analysis`}
                 statusTone="info"
+                className="border-l-4 border-l-info"
                 secondaryAction={
                     <Button asChild size="sm" variant="secondary">
                         <a href="#dna-evidence">Review extracted DNA</a>
@@ -2707,30 +3238,70 @@ function DnaBlock({ dna }: { dna: Dna }) {
                 stages={["Opening decoded", "Proof isolated", "Reuse boundaries identified"]}
             />
             <div id="dna-evidence" className="scroll-mt-20">
-                <p className="mb-3 text-sm font-semibold text-text-primary">Creative DNA ribbon</p>
-                <div className="grid overflow-hidden rounded-2xl bg-surface-soft sm:grid-cols-2 lg:grid-cols-5">
-                    <DnaRibbonItem label="Opening" value={observedText(data.opening?.hook_text)} />
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-info">
+                            Evidence map
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-text-primary">
+                            Creative DNA ribbon
+                        </p>
+                    </div>
+                    <StatusChip tone="info">
+                        {formatSystemValue(data.overall_confidence ?? dna.confidence)} confidence
+                    </StatusChip>
+                </div>
+                <div className="grid gap-1.5 rounded-2xl bg-surface-muted/75 p-1.5 shadow-[inset_0_1px_0_rgba(15,23,42,0.07)] sm:grid-cols-2 lg:grid-cols-5">
+                    <DnaRibbonItem
+                        label="Opening"
+                        value={observedText(data.opening?.hook_text)}
+                        tone="primary"
+                    />
                     <DnaRibbonItem
                         label="Product"
                         value={formatObservedTimestamp(data.product?.first_appearance_ms)}
+                        tone="info"
                     />
                     <DnaRibbonItem
                         label="Narrative"
                         value={observedText(data.narrative?.structure)}
+                        tone="neutral"
                     />
-                    <DnaRibbonItem label="Demo" value={observedText(data.demo?.demo_type)} />
+                    <DnaRibbonItem
+                        label="Demo"
+                        value={observedText(data.demo?.demo_type)}
+                        tone="ok"
+                    />
                     <DnaRibbonItem
                         label="Proof"
                         value={observedText(data.proof?.strongest_proof)}
+                        tone="ok"
                     />
                     <DnaRibbonItem
                         label="Creator"
                         value={observedText(data.creator?.delivery_style)}
+                        tone="neutral"
                     />
-                    <DnaRibbonItem label="Editing" value={observedText(data.editing?.pacing)} />
-                    <DnaRibbonItem label="Offer" value={observedText(data.offer?.offer_types)} />
-                    <DnaRibbonItem label="CTA" value={observedText(data.cta?.cta_types)} />
-                    <DnaRibbonItem label="Platform" value={observedText(data.platform?.format)} />
+                    <DnaRibbonItem
+                        label="Editing"
+                        value={observedText(data.editing?.pacing)}
+                        tone="neutral"
+                    />
+                    <DnaRibbonItem
+                        label="Offer"
+                        value={observedText(data.offer?.offer_types)}
+                        tone="warn"
+                    />
+                    <DnaRibbonItem
+                        label="CTA"
+                        value={observedText(data.cta?.cta_types)}
+                        tone="primary"
+                    />
+                    <DnaRibbonItem
+                        label="Platform"
+                        value={observedText(data.platform?.format)}
+                        tone="info"
+                    />
                 </div>
             </div>
             <div className="grid gap-3 lg:grid-cols-2">
@@ -2772,8 +3343,12 @@ function DnaInsightPanel({
     return (
         <section
             className={cn(
-                "rounded-md p-4",
-                tone === "positive" ? "bg-ok-soft/70" : "bg-surface-soft",
+                "rounded-2xl p-4",
+                tone === "positive"
+                    ? "bg-ok-soft/72 shadow-[inset_0_1px_0_rgba(12,138,74,0.12)]"
+                    : tone === "warning"
+                      ? "bg-warn-soft/60 shadow-[inset_0_1px_0_rgba(183,110,0,0.14)]"
+                      : "bg-info-soft/42 shadow-[inset_0_1px_0_rgba(37,102,235,0.11)]",
                 className,
             )}
         >
@@ -2823,8 +3398,14 @@ function DnaInsightPanel({
 
 function DnaCoverage({ values }: { values: Record<string, boolean> }) {
     return (
-        <section className="rounded-md bg-surface-soft p-4">
-            <h3 className="text-sm font-semibold text-text-primary">Evidence coverage</h3>
+        <section className="rounded-2xl bg-surface/95 p-4 shadow-[0_9px_24px_rgba(15,23,42,0.07)]">
+            <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-text-primary">Evidence coverage</h3>
+                <span className="text-xs text-text-tertiary">
+                    {Object.values(values).filter(Boolean).length}/{Object.keys(values).length || 0}{" "}
+                    covered
+                </span>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
                 {Object.entries(values).map(([key, complete]) => (
                     <StatusChip key={key} tone={complete ? "ok" : "neutral"}>
@@ -2836,9 +3417,24 @@ function DnaCoverage({ values }: { values: Record<string, boolean> }) {
     );
 }
 
-function DnaRibbonItem({ label, value }: { label: string; value: string }) {
+function DnaRibbonItem({
+    label,
+    value,
+    tone,
+}: {
+    label: string;
+    value: string;
+    tone: "neutral" | "primary" | "info" | "ok" | "warn";
+}) {
+    const toneClass = {
+        neutral: "bg-surface/65",
+        primary: "bg-primary-soft/70",
+        info: "bg-info-soft/70",
+        ok: "bg-ok-soft/70",
+        warn: "bg-warn-soft/70",
+    }[tone];
     return (
-        <div className="min-w-0 border-b border-divider p-3 last:border-b-0 sm:border-r lg:[&:nth-child(5n)]:border-r-0">
+        <div className={cn("min-w-0 rounded-xl p-3", toneClass)}>
             <p className="text-[10px] font-semibold uppercase text-text-tertiary">{label}</p>
             <p className="mt-1 line-clamp-2 break-words text-sm text-text-primary">{value}</p>
         </div>
@@ -2880,7 +3476,7 @@ function PreflightBlock({
                 {presentation ? (
                     <SellerDecisionBlock presentation={presentation} />
                 ) : (
-                    <div className="rounded-md border border-hairline bg-primary-soft/35 p-4">
+                    <div className="rounded-2xl bg-gradient-to-br from-primary-soft/70 via-surface to-info-soft/46 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)]">
                         <h3 className="text-sm font-semibold text-text-primary">
                             {presentationError
                                 ? "Decision view needs attention"
@@ -2957,7 +3553,10 @@ function PreflightBlock({
                 }}
             />
             <Fixes blockers={run.blockers_json} fixes={run.fixes_json} />
-            <div id="preflight-revision" className="scroll-mt-20 rounded-2xl bg-info-soft p-4">
+            <div
+                id="preflight-revision"
+                className="scroll-mt-20 rounded-2xl bg-info-soft/60 p-4 shadow-[inset_0_1px_0_rgba(37,102,235,0.14)]"
+            >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                         <h3 className="text-sm font-semibold text-text-primary">
@@ -3034,7 +3633,7 @@ function PreflightBlock({
                     }))}
                 />
             </div>
-            <div className="rounded-2xl bg-surface-soft p-3 text-sm text-text-primary">
+            <div className="rounded-2xl bg-warn-soft/52 p-3 text-sm text-text-primary shadow-[inset_0_1px_0_rgba(183,110,0,0.14)]">
                 Spark or paid usage remains pending until creator rights and authorization are
                 confirmed.
             </div>
@@ -3045,10 +3644,12 @@ function PreflightBlock({
 function SellerDecisionBlock({ presentation }: { presentation: PreflightPresentation }) {
     const summary = presentation.seller_summary;
     return (
-        <section className="rounded-md border border-hairline bg-primary-soft/35 p-4 sm:p-5">
+        <section className="rounded-2xl bg-gradient-to-br from-primary-soft/72 via-surface to-info-soft/42 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)] sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase text-primary">Seller decision</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+                        Seller decision
+                    </p>
                     <h3 className="mt-1 text-lg font-semibold text-text-primary">
                         {summary.headline}
                     </h3>
@@ -3062,13 +3663,13 @@ function SellerDecisionBlock({ presentation }: { presentation: PreflightPresenta
                 <StatusChip tone="info">{summary.locale}</StatusChip>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                <DecisionList title="Keep" items={summary.strengths_to_keep} />
-                <DecisionList title="Fix" items={summary.blockers_to_fix} />
-                <DecisionList title="Do next" items={summary.next_actions} />
+            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+                <DecisionList title="Keep" items={summary.strengths_to_keep} tone="ok" />
+                <DecisionList title="Fix" items={summary.blockers_to_fix} tone="warn" />
+                <DecisionList title="Do next" items={summary.next_actions} tone="info" />
             </div>
 
-            <div className="mt-4 border-t border-divider pt-3 text-xs leading-5 text-text-secondary">
+            <div className="mt-4 rounded-xl bg-surface/60 px-3 py-2.5 text-xs leading-5 text-text-secondary">
                 <p>{summary.confidence_explanation}</p>
                 <p className="mt-1 font-medium text-text-primary">{summary.commercial_guardrail}</p>
             </div>
@@ -3076,10 +3677,25 @@ function SellerDecisionBlock({ presentation }: { presentation: PreflightPresenta
     );
 }
 
-function DecisionList({ title, items }: { title: string; items: string[] }) {
+function DecisionList({
+    title,
+    items,
+    tone,
+}: {
+    title: string;
+    items: string[];
+    tone: "ok" | "warn" | "info";
+}) {
+    const toneClass = {
+        ok: "bg-ok-soft/60 shadow-[inset_0_1px_0_rgba(12,138,74,0.12)]",
+        warn: "bg-warn-soft/60 shadow-[inset_0_1px_0_rgba(183,110,0,0.14)]",
+        info: "bg-info-soft/48 shadow-[inset_0_1px_0_rgba(37,102,235,0.12)]",
+    }[tone];
     return (
-        <div>
-            <h4 className="text-xs font-semibold uppercase text-text-tertiary">{title}</h4>
+        <div className={`rounded-2xl p-4 ${toneClass}`}>
+            <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-text-tertiary">
+                {title}
+            </h4>
             {items.length ? (
                 <ul className="mt-2 space-y-2 text-sm leading-5 text-text-primary">
                     {items.map((item) => (
@@ -3127,10 +3743,10 @@ function CampaignBriefEditor({
     }
 
     return (
-        <div className="rounded-2xl bg-primary-soft/35 p-4 sm:p-5">
+        <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary-soft/60 via-surface to-info-soft/35 p-4 sm:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <p className="text-[10px] font-semibold uppercase text-primary">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
                         Structured Campaign Pack
                     </p>
                     <h3 className="mt-1 text-base font-semibold text-text-primary">
@@ -3142,7 +3758,7 @@ function CampaignBriefEditor({
                 </StatusChip>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 rounded-2xl border border-control-border bg-surface/80 p-4 md:grid-cols-2">
                 <BriefEditField
                     label="Objective"
                     value={getRecordValue(brief.objective, "objective_type")}
@@ -3200,6 +3816,7 @@ function CampaignBriefEditor({
                     title="Must show"
                     items={(brief.must_show ?? []).map((item) => formatBriefRequirement(item))}
                     compact
+                    tone="ok"
                 />
                 <BriefField title="Claim guardrails" value={brief.claim_guardrails} />
             </div>
@@ -3289,7 +3906,7 @@ function VersionHistory({
         );
     }
     return (
-        <div className="rounded-md border border-hairline bg-surface-soft p-3">
+        <div className="rounded-2xl border border-control-border bg-surface-soft/75 p-3">
             <h3 className="text-sm font-semibold text-text-primary">Version history</h3>
             <div className="mt-3 space-y-2">
                 {versions.length ? (
@@ -3327,7 +3944,10 @@ function VersionHistory({
 
 function AnalysisStageSummary({ stages }: { stages: string[] }) {
     return (
-        <section aria-label="Completed analysis stages" className="rounded-md bg-surface-soft p-3">
+        <section
+            aria-label="Completed analysis stages"
+            className="rounded-2xl border border-ok/20 bg-ok-soft/45 p-3"
+        >
             <div className="flex flex-wrap gap-2">
                 {stages.map((stage) => (
                     <span
@@ -3350,7 +3970,7 @@ function DimensionGrid({ dimensions }: { dimensions: Record<string, DimensionRes
     return (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {Object.entries(dimensions).map(([key, item]) => (
-                <div key={key} className="rounded-md border border-hairline bg-surface-soft p-3">
+                <div key={key} className="rounded-2xl border border-info/15 bg-info-soft/35 p-3">
                     <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium text-text-primary">
                             {humanizeLabel(key)}
@@ -3386,8 +4006,8 @@ function DimensionGrid({ dimensions }: { dimensions: Record<string, DimensionRes
 function Fixes({ blockers, fixes }: { blockers: Finding[]; fixes: Finding[] }) {
     return (
         <div className="grid gap-3 lg:grid-cols-2">
-            <ListBlock title="Blockers" items={blockers.map((item) => item.message)} />
-            <ListBlock title="Fixes" items={fixes.map((item) => item.instruction)} />
+            <ListBlock title="Blockers" items={blockers.map((item) => item.message)} tone="warn" />
+            <ListBlock title="Fixes" items={fixes.map((item) => item.instruction)} tone="info" />
         </div>
     );
 }
@@ -3397,14 +4017,14 @@ function SignalBlock({ dimensions }: { dimensions: Record<string, DimensionResul
         (item.signals ?? []).map((signal) => ({ dimension, signal })),
     );
     return (
-        <div className="rounded-md border border-hairline bg-surface-soft p-3">
+        <div className="rounded-2xl border border-info/15 bg-info-soft/35 p-3">
             <h3 className="text-sm font-semibold text-text-primary">Signals</h3>
             <div className="mt-2 grid gap-2 md:grid-cols-2">
                 {rows.length ? (
                     rows.slice(0, 12).map(({ dimension, signal }) => (
                         <div
                             key={`${dimension}-${signal.code}`}
-                            className="rounded-md border border-hairline bg-surface p-2 text-xs"
+                            className="rounded-xl border border-control-border bg-surface p-2 text-xs"
                         >
                             <div className="flex items-center justify-between gap-2">
                                 <span className="font-medium text-text-primary">
@@ -3432,7 +4052,7 @@ function SignalBlock({ dimensions }: { dimensions: Record<string, DimensionResul
 
 function KeyValueBlock({ title, values }: { title: string; values: Record<string, unknown> }) {
     return (
-        <div className="rounded-md border border-hairline bg-surface-soft p-3">
+        <div className="rounded-2xl border border-control-border bg-surface-soft/75 p-3">
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
             <div className="mt-2 grid gap-1 text-sm text-text-secondary">
                 {Object.entries(values).length ? (
@@ -3454,18 +4074,21 @@ function ListBlock({
     title,
     items,
     compact = false,
+    tone = "neutral",
 }: {
     title: string;
     items: Array<string | undefined>;
     compact?: boolean;
+    tone?: "neutral" | "ok" | "info" | "warn";
 }) {
+    const toneClass = {
+        neutral: "border-control-border bg-surface-soft/75",
+        ok: "border-ok/20 bg-ok-soft/55",
+        info: "border-info/20 bg-info-soft/45",
+        warn: "border-warn/25 bg-warn-soft/55",
+    }[tone];
     return (
-        <div
-            className={cn(
-                "rounded-md border border-hairline bg-surface-soft",
-                compact ? "p-2" : "p-3",
-            )}
-        >
+        <div className={cn("rounded-2xl border", toneClass, compact ? "p-2" : "p-3")}>
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
             <ul className="mt-2 space-y-1 text-sm text-text-secondary">
                 {items.filter(Boolean).length ? (

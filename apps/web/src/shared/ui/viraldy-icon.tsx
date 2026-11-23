@@ -15,6 +15,8 @@ const sizeClass: Record<ViraldyIconSize, string> = {
     hero: "h-14 w-14",
 };
 
+const OPTICAL_SCALE = 512 / 420;
+
 export function ViraldyIcon({
     name,
     size = "md",
@@ -36,6 +38,7 @@ export function ViraldyIcon({
             alt={isDecorative ? "" : label}
             aria-hidden={isDecorative || undefined}
             className={cn("inline-block shrink-0 object-contain", sizeClass[size], className)}
+            style={{ transform: `scale(${OPTICAL_SCALE})` }}
             draggable={false}
         />
     );

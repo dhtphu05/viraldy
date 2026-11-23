@@ -245,6 +245,25 @@ body,
     scrollbar-gutter: stable;
 }
 
+.production-run-page {
+    background:
+        radial-gradient(circle at 5% 0%, rgba(255, 225, 233, 0.62), transparent 30rem),
+        radial-gradient(circle at 96% 10%, rgba(221, 234, 255, 0.6), transparent 32rem),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0));
+    border-radius: 28px;
+    padding: 6px;
+    isolation: isolate;
+}
+
+.production-run-page :is(h1, h2, h3, h4) {
+    text-wrap: balance;
+}
+
+.production-run-page img {
+    outline: 1px solid rgba(15, 23, 42, 0.08);
+    outline-offset: -1px;
+}
+
 @media (prefers-reduced-motion: reduce) {
     * {
         animation-duration: 0.01ms !important;

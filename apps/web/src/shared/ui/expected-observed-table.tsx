@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { humanizeLabel } from "@/shared/lib/display";
+import { cn } from "@/shared/lib/utils";
 import type { MetricTone } from "@/shared/types";
 import { ConfidenceBadge } from "@/shared/ui/confidence-badge";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -24,6 +25,21 @@ function statusTone(status: string): MetricTone {
     return "info";
 }
 
+function statusRowClass(status: string) {
+    switch (statusTone(status)) {
+        case "ok":
+            return "bg-ok-soft/35";
+        case "warn":
+            return "bg-warn-soft/40";
+        case "destructive":
+            return "bg-destructive-soft/40";
+        case "info":
+            return "bg-info-soft/30";
+        default:
+            return "bg-surface";
+    }
+}
+
 export function ExpectedObservedTable({
     rows,
     emptyMessage = "No requirement alignment data is available yet.",
@@ -39,7 +55,13 @@ export function ExpectedObservedTable({
         <>
             <div className="space-y-3 sm:hidden">
                 {rows.map((row) => (
-                    <article key={row.id} className="rounded-2xl bg-surface-soft p-4">
+                    <article
+                        key={row.id}
+                        className={cn(
+                            "rounded-2xl border border-control-border p-4",
+                            statusRowClass(row.status),
+                        )}
+                    >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <StatusChip tone={statusTone(row.status)}>
                                 {humanizeLabel(row.status)}
@@ -75,7 +97,7 @@ export function ExpectedObservedTable({
                     </TableHeader>
                     <TableBody>
                         {rows.map((row) => (
-                            <TableRow key={row.id}>
+                            <TableRow key={row.id} className={statusRowClass(row.status)}>
                                 <TableCell className="max-w-64 align-top">
                                     {row.requirement}
                                 </TableCell>

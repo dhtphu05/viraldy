@@ -27,6 +27,9 @@ import { SurfaceCard } from "@/shared/ui/surface-card";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 
 export const Route = createFileRoute("/tiktok-scorer/new")({
+    validateSearch: (search: Record<string, unknown>) => ({
+        directionId: typeof search.directionId === "string" ? search.directionId : undefined,
+    }),
     head: () => ({ meta: [{ title: "Score a video — TikTok Scorer — Viraldy" }] }),
     component: TikTokScorerNewRoute,
 });
@@ -52,6 +55,7 @@ const CANONICAL_PROFILES: TikTokScoreProfile[] = [
 }));
 
 function TikTokScorerNewRoute() {
+    const routeSearch = Route.useSearch();
     const navigate = useNavigate();
     const { workspaceId, workspaces } = useScorerWorkspace();
     const products = useQuery({
@@ -83,7 +87,9 @@ function TikTokScorerNewRoute() {
     const [intendedUse, setIntendedUse] = useState<IntendedUse>("tiktok_organic");
     const [profile, setProfile] = useState<ScoreProfileCode>("general_tiktok_v1");
     const [profileChanged, setProfileChanged] = useState(false);
-    const [directionContextId, setDirectionContextId] = useState<string | null>(null);
+    const [directionContextId, setDirectionContextId] = useState<string | null>(
+        routeSearch.directionId ?? null,
+    );
     const [uploadProgress, setUploadProgress] = useState(0);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const abortRef = useRef<AbortController | null>(null);
