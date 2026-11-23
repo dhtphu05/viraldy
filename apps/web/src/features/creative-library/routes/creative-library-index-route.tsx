@@ -28,6 +28,9 @@ import { emptyFilterState } from "@/features/creative-library/types/creative";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
+import { TikTokSearchPanel } from "@/features/creative-library/components/tiktok-search-panel";
+import { ViralVideoFinder } from "@/features/creative-library/components/viral-video-finder";
+import { useApiWorkspace } from "@/shared/hooks/use-workspace";
 
 export const Route = createFileRoute("/creative-library/")({
     validateSearch: (search: Record<string, unknown>) => ({
@@ -60,6 +63,7 @@ function CreativeLibraryPage() {
     const archive = useAppStore((s) => s.archiveCreative);
     const campaignDraft = useAppStore((s) => s.campaignDraft);
     const setDraft = useAppStore((s) => s.setDraft);
+    const { workspaceId } = useApiWorkspace();
 
     const navigate = useNavigate();
 
@@ -290,6 +294,10 @@ function CreativeLibraryPage() {
                                 className="flex-1"
                             />
                         </div>
+
+                        <ViralVideoFinder />
+
+                        <TikTokSearchPanel workspaceId={workspaceId} />
 
                         {/* Active filter chips */}
                         {activeFilterCount > 0 && (
