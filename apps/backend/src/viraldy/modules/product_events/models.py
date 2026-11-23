@@ -31,6 +31,16 @@ class ProductEventModel(Base):
             "'tiktok_fix_sent_to_creator', 'tiktok_fix_sent_to_editor', "
             "'tiktok_fix_marked_completed', 'tiktok_revision_uploaded', "
             "'tiktok_comparison_viewed', 'tiktok_action_verified_after_revision'"
+            ", 'tiktok_search_executed', 'tiktok_search_result_opened', "
+            "'tiktok_ad_saved_reference', 'tiktok_ad_analyze_started', "
+            "'tiktok_ad_analyze_completed', 'tiktok_ad_attached_product', "
+            "'tiktok_ad_used_for_direction', 'tiktok_commercial_content_opened', "
+            "'creative_family_candidate_created', 'creative_family_confirmed', "
+            "'market_pattern_created', 'market_pattern_used', 'provider_error', "
+            "'acquisition_entry', 'activation_market_search', 'activation_reference_saved', "
+            "'creative_direction_created', 'creative_direction_selected', "
+            "'batch_review_created', 'batch_review_completed', 'seller_decision_recorded', "
+            "'market_snapshot_created', 'market_snapshot_published'"
             ")",
             name="ck_product_events_event_type",
         ),
@@ -56,3 +66,8 @@ class ProductEventModel(Base):
     subject_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     payload_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    entry_flow: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    attribution_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("analytics_attributions.id"), nullable=True
+    )
+    utm_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)

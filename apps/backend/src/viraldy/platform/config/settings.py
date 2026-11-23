@@ -54,6 +54,32 @@ class Settings(BaseSettings):
     product_crawl_output_dir: str | None = None
     product_crawl_review_clip_ttl_hours: int = Field(default=6, ge=1, le=168)
 
+    tiktok_commercial_client_key: SecretStr | None = None
+    tiktok_commercial_client_secret: SecretStr | None = None
+    tiktok_commercial_api_enabled: bool = False
+    tiktok_commercial_media_persistence_allowed: bool = False
+    tiktok_commercial_direct_stream_allowed: bool = False
+    tiktok_commercial_request_timeout_seconds: float = Field(default=20, gt=0)
+    tiktok_commercial_max_retries: int = Field(default=2, ge=0, le=5)
+    tiktok_commercial_cache_ttl_seconds: int = Field(default=300, ge=30, le=3600)
+
+    # Rollout/cost controls only. These flags do not represent paid entitlements.
+    tiktok_market_intelligence: bool = False
+    creative_family: bool = False
+    market_pattern_evidence: bool = False
+    batch_creative_review: bool = False
+    share_market_snapshot: bool = False
+    tiktok_market_search_limit: int = Field(default=100, ge=1, le=1000)
+    tiktok_market_analysis_limit: int = Field(default=20, ge=1, le=200)
+    tiktok_market_score_limit: int = Field(default=20, ge=1, le=200)
+    tiktok_market_adaptation_limit: int = Field(default=10, ge=1, le=100)
+    tiktok_market_batch_size_limit: int = Field(default=25, ge=1, le=100)
+    free_market_searches_per_period: int = Field(default=10, ge=1, le=1000)
+    free_creative_analyses: int = Field(default=3, ge=1, le=200)
+    free_single_score_reviews: int = Field(default=3, ge=1, le=200)
+    free_product_adaptations: int = Field(default=3, ge=1, le=200)
+    free_batch_size: int = Field(default=3, ge=1, le=100)
+
     auth_mode: AuthMode = AuthMode.LOCAL_TEST
     auth_disabled: bool = False
     auth_jwt_secret: SecretStr | None = None

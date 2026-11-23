@@ -24,11 +24,18 @@ class AssetModel(Base):
     __tablename__ = "assets"
     __table_args__ = (
         Index("ix_assets_workspace_status_created", "workspace_id", "status", "created_at"),
+        Index(
+            "ix_assets_market_source",
+            "source_provider",
+            "source_entity_type",
+            "source_entity_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
-    workspace_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
     )
     product_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("products.id"), nullable=True
@@ -38,10 +45,18 @@ class AssetModel(Base):
     current_version_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("asset_versions.id"), nullable=True
     )
-    created_by_user_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     metadata_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    library_scope: Mapped[str] = mapped_column(String(30), nullable=False, default="WORKSPACE")
+    source_provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="NOT_ANALYZED"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

@@ -24,8 +24,8 @@ class MediaArtifactModel(Base):
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
-    workspace_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
     )
     asset_version_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("asset_versions.id"), nullable=False, index=True
@@ -91,7 +91,15 @@ class EvidenceItemModel(Base):
     value_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    field_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    raw_value_json: Mapped[object | None] = mapped_column(JSONB, nullable=True)
+    normalized_value_json: Mapped[object | None] = mapped_column(JSONB, nullable=True)
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    evidence_scope: Mapped[str] = mapped_column(String(30), nullable=False, default="WORKSPACE")
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     pipeline_version: Mapped[str] = mapped_column(
         String(100), nullable=False, default="media_pipeline_v1"
