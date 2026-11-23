@@ -27,6 +27,8 @@ def configure_logging(settings: Settings) -> None:
         stream=sys.stdout,
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     structlog.configure(
         processors=processors,
         logger_factory=structlog.stdlib.LoggerFactory(),

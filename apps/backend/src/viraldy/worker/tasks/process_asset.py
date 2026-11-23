@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import hashlib
+import tempfile
+from dataclasses import replace
 from time import perf_counter
 from typing import cast
 from uuid import UUID
 
+import httpx
 import structlog
 from sqlalchemy.orm import Session
 
-from viraldy.modules.assets.public import AssetVersionSnapshot, SyncAssetQueries
+from viraldy.modules.assets.models import AssetVersionModel
+from viraldy.modules.assets.public import (
+    AssetVersionSnapshot,
+    SyncAssetQueries,
+    SyncAssetRepository,
+)
 from viraldy.modules.campaign_packs.public import SyncCampaignPackRepository
 from viraldy.modules.creative_dna.service import SyncCreativeDnaBuilder
 from viraldy.modules.creative_domain.schema_versions import TIKTOK_SCORE_SCHEMA_VERSION
@@ -26,6 +35,9 @@ from viraldy.modules.recommendations.contracts import (
 )
 from viraldy.modules.recommendations.models import RecommendationModel
 from viraldy.modules.references.repository import SyncReferenceRepository
+from viraldy.modules.tiktok_commercial_content.evidence import persist_platform_metadata_evidence
+from viraldy.modules.tiktok_commercial_content.media_stream import _validate_provider_url
+from viraldy.modules.tiktok_commercial_content.repository import SyncTikTokCommercialRepository
 from viraldy.modules.tiktok_scorer.comparison import compare_score_results
 from viraldy.modules.tiktok_scorer.contracts_v2 import (
     CreativeDirectionContextV1,
@@ -48,6 +60,7 @@ from viraldy.modules.tiktok_scorer.scorer import score_tiktok_structure
 from viraldy.platform.clock.utc import utc_now
 from viraldy.platform.config.settings import get_settings
 from viraldy.platform.database.session import create_worker_session
+from viraldy.platform.storage.s3 import S3StorageAdapter
 from viraldy.shared.errors.base import AppError
 from viraldy.worker.celery_app import celery_app
 
@@ -271,7 +284,98 @@ def _execute_job(
         )
         repo.update_progress(job, 90, "persisting_results")
         return output
+    if job_type == JobType.TIKTOK_MEDIA_IMPORT.value:
+        return _import_tiktok_media(job, repo, session)
     raise RuntimeError(f"unsupported_job_type:{job.job_type}")
+
+
+def _import_tiktok_media(
+    job: ProcessingJobModel,
+    repo: WorkerJobRepository,
+    session: Session,
+) -> dict[str, object]:
+    settings = get_settings()
+    if not settings.tiktok_commercial_media_persistence_allowed:
+        raise AppError("TIKTOK_MEDIA_PERSISTENCE_DISABLED", "TikTok media persistence is disabled.")
+    asset_id = UUID(str(job.input_json["asset_id"]))
+    version_id = UUID(str(job.input_json["asset_version_id"]))
+    source_url = str(job.input_json["source_url"])
+    media_type = str(job.input_json["media_type"])
+    _validate_provider_url(source_url)
+    version = session.get(AssetVersionModel, version_id)
+    if version is None or version.asset_id != asset_id:
+        raise AppError("ASSET_NOT_FOUND", "TikTok asset import target was not found.")
+    repo.update_progress(job, 20, "downloading_media")
+    session.commit()
+    with tempfile.NamedTemporaryFile(prefix="viraldy-tiktok-", suffix=".media") as temp_file:
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with httpx.stream(
+                "GET",
+                source_url,
+                timeout=settings.tiktok_commercial_request_timeout_seconds,
+                follow_redirects=False,
+            ) as response:
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+                expected_prefix = "video/" if media_type == "video" else "image/"
+                if not content_type.startswith(expected_prefix):
+                    raise AppError(
+                        "TIKTOK_MEDIA_TYPE_INVALID", "TikTok media type was not supported."
+                    )
+                for chunk in response.iter_bytes(1024 * 1024):
+                    size += len(chunk)
+                    if size > settings.max_declared_upload_bytes:
+                        raise AppError(
+                            "TIKTOK_MEDIA_TOO_LARGE", "TikTok media exceeds the upload limit."
+                        )
+                    digest.update(chunk)
+                    temp_file.write(chunk)
+        except httpx.HTTPError as exc:
+            raise AppError(
+                "TIKTOK_MEDIA_DOWNLOAD_FAILED", "TikTok media could not be downloaded."
+            ) from exc
+        repo.update_progress(job, 70, "validating_media")
+        session.commit()
+        temp_file.flush()
+        S3StorageAdapter(settings).upload_file(temp_file.name, version.storage_key, content_type)
+    completed = SyncAssetRepository(session).complete_remote_import(
+        workspace_id=job.workspace_id,
+        asset_id=asset_id,
+        asset_version_id=version_id,
+        size_bytes=size,
+        detected_mime_type=content_type,
+        checksum_sha256=digest.hexdigest(),
+        metadata_json={"media_imported_at": utc_now().isoformat(), "media_type": media_type},
+    )
+    if completed is None:
+        raise AppError("ASSET_NOT_FOUND", "TikTok asset import target was not found.")
+    source_id = UUID(str(job.input_json["source_record_id"]))
+    source = SyncTikTokCommercialRepository(session).get_source_record(source_id)
+    if source is not None:
+        persist_platform_metadata_evidence(
+            session,
+            workspace_id=job.workspace_id,
+            asset_version_id=version_id,
+            source_entity_id=source.provider_entity_id,
+            metadata=source.raw_payload,
+            observed_at=source.fetched_at,
+        )
+    reference_id = job.input_json.get("reference_id")
+    if reference_id:
+        reference = SyncReferenceRepository(session).get(job.workspace_id, UUID(str(reference_id)))
+        if reference is not None:
+            reference.status = "ready"
+    repo.update_progress(job, 90, "persisting_results")
+    session.commit()
+    return {
+        "asset_id": str(asset_id),
+        "asset_version_id": str(version_id),
+        "source_record_id": str(source_id),
+        "size_bytes": size,
+        "media_type": media_type,
+    }
 
 
 def _process_media(
@@ -290,6 +394,8 @@ def _process_media(
     loaded = asset_queries.load_asset_version(asset_id, version_id)
     if loaded is None:
         raise RuntimeError("asset_version_not_found")
+    if loaded.workspace_id is None:
+        loaded = replace(loaded, workspace_id=job.workspace_id)
     repo.update_progress(job, 35, "probing_media")
     session.commit()
     pipeline_result = SyncMediaEvidencePipeline(session, get_settings()).process_with_metadata(
@@ -298,6 +404,8 @@ def _process_media(
     refreshed = asset_queries.load_asset_version(asset_id, version_id)
     if refreshed is not None:
         loaded = refreshed
+        if loaded.workspace_id is None:
+            loaded = replace(loaded, workspace_id=job.workspace_id)
     repo.update_progress(job, 60, "extracting_visual_evidence")
     session.commit()
     return loaded, pipeline_result.evidence, pipeline_result.primary_model_run_id

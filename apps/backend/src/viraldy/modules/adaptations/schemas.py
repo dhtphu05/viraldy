@@ -13,6 +13,7 @@ class CreateAdaptationRequest(BaseModel):
     target_market: str = Field(default="US", min_length=1, max_length=100)
     target_buyer: dict[str, object] = Field(default_factory=dict)
     constraints: dict[str, object] = Field(default_factory=dict)
+    provenance: dict[str, object] = Field(default_factory=dict)
 
 
 class AdaptationRunResponse(BaseModel):
@@ -25,6 +26,7 @@ class AdaptationRunResponse(BaseModel):
     target_buyer_json: dict[str, object]
     constraints_json: dict[str, object]
     result_json: dict[str, object]
+    provenance_json: dict[str, object] = Field(default_factory=dict)
     status: str
     schema_version: str
     product_snapshot_json: dict[str, object] | None = None

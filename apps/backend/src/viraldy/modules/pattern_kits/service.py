@@ -91,12 +91,17 @@ class PatternKitService:
             source_rows = [
                 (source.creative_dna_version_id, source.asset_version_id) for source in sources
             ]
+            repository_kwargs: dict[str, dict[str, object] | None] = {}
+            market_evidence_state = _market_evidence_state(sources)
+            if market_evidence_state:
+                repository_kwargs["evidence_state_json"] = market_evidence_state
             kit, version = await self._repository.create_kit_with_version(
                 workspace_id=workspace_id,
                 user_id=user_id,
                 pattern=pattern,
                 source_rows=source_rows,
                 evidence_links=evidence_links,
+                **repository_kwargs,
             )
             await self._complete_model_run(
                 model_run,
@@ -258,6 +263,10 @@ class PatternKitService:
         source_rows = [
             (source.creative_dna_version_id, source.asset_version_id) for source in sources
         ]
+        repository_kwargs: dict[str, dict[str, object] | None] = {}
+        market_evidence_state = _market_evidence_state(sources)
+        if market_evidence_state:
+            repository_kwargs["evidence_state_json"] = market_evidence_state
         version = await self._repository.create_version(
             kit=kit,
             user_id=user_id,
@@ -266,6 +275,7 @@ class PatternKitService:
             change_reason=data.change_reason,
             source_rows=source_rows,
             evidence_links=evidence_links,
+            **repository_kwargs,
         )
         await self._events.record(
             event_type="pattern_kit_version_created",
@@ -439,8 +449,7 @@ class PatternKitService:
             input_summary=input_summary,
             endpoint_family=(
                 "responses"
-                if self._settings.ai_mode == "live"
-                and self._settings.ai_provider == "openai"
+                if self._settings.ai_mode == "live" and self._settings.ai_provider == "openai"
                 else None
             ),
             prompt_name=PATTERN_KIT_PROMPT_NAME,
@@ -482,9 +491,7 @@ class PatternKitService:
             source_payloads=_source_payloads(sources),
             model_run_id=model_run_id,
             evidence_catalog=_model_evidence_catalog(sources),
-            source_version_ids=list(
-                dict.fromkeys(source.asset_version_id for source in sources)
-            ),
+            source_version_ids=list(dict.fromkeys(source.asset_version_id for source in sources)),
         )
         return execution.output, execution.provider_result
 
@@ -777,6 +784,7 @@ def _version_response(version: PatternKitVersionModel) -> PatternKitVersionRespo
         schema_version=version.schema_version,
         pattern=_pattern_from_version(version),
         overall_confidence=version.overall_confidence,
+        evidence_state_json=getattr(version, "evidence_state_json", None) or {},
         model_run_id=version.model_run_id,
         created_by_user_id=version.created_by_user_id,
         created_at=version.created_at,
@@ -798,8 +806,49 @@ def _evidence_by_id(evidence: list[EvidenceItemModel]) -> dict[UUID, PatternEvid
             end_ms=item.end_ms,
             value_json=item.value_json,
             confidence=float(item.confidence) if item.confidence is not None else None,
+            source_provider=getattr(item, "source_provider", None),
+            source_entity_id=getattr(item, "source_entity_id", None),
+            observed_at=getattr(item, "observed_at", None),
         )
         for item in evidence
+    }
+
+
+def _market_evidence_state(sources: list[PatternSourceInput]) -> dict[str, object]:
+    provider_evidence = [
+        evidence
+        for source in sources
+        for evidence in source.evidence_by_id.values()
+        if evidence.source_provider == "tiktok_commercial_content"
+    ]
+    if not provider_evidence:
+        return {}
+    asset_ids = {evidence.asset_version_id for evidence in provider_evidence}
+    observed_dates = [
+        evidence.observed_at.isoformat()
+        for evidence in provider_evidence
+        if evidence.observed_at is not None
+    ]
+    return {
+        "evidence_level": "MARKET_OBSERVED",
+        "provider": "tiktok_commercial_content",
+        "sample_size": len(asset_ids),
+        "date_range": {
+            "observed_min": min(observed_dates) if observed_dates else None,
+            "observed_max": max(observed_dates) if observed_dates else None,
+        },
+        "market": "public_market",
+        "category": "unknown",
+        "comparability": (
+            "source records share public provider metadata; "
+            "creative comparability requires review"
+        ),
+        "recency": "observed_at timestamps retained per evidence row",
+        "limitations": [
+            "Public market signal only; not seller-private performance evidence.",
+            "Cannot establish GMV, ROAS, conversion, creator quality, or winner status.",
+        ],
+        "evidence_strength": "observed",
     }
 
 
@@ -810,9 +859,7 @@ def _source_payloads(sources: list[PatternSourceInput]) -> list[dict[str, object
             "asset_version_id": str(source.asset_version_id),
             "taxonomy_version": source.taxonomy_version,
             "dna": source.dna.model_dump(mode="json"),
-            "evidence_feature_paths": _evidence_feature_paths(
-                source.dna.model_dump(mode="json")
-            ),
+            "evidence_feature_paths": _evidence_feature_paths(source.dna.model_dump(mode="json")),
             "evidence": [
                 {
                     "evidence_id": str(evidence.id),
@@ -891,9 +938,7 @@ async def _fail_model_run(
         error.message,
         http_status=http_status if isinstance(http_status, int) else None,
         safe_error_message=error.message,
-        provider_request_id=(
-            provider_request_id if isinstance(provider_request_id, str) else None
-        ),
+        provider_request_id=(provider_request_id if isinstance(provider_request_id, str) else None),
         repair_attempt_count=(
             repair_attempt_count if isinstance(repair_attempt_count, int) else None
         ),

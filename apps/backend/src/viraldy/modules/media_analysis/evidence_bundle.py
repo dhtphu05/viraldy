@@ -29,8 +29,9 @@ ALLOWED_EVIDENCE_TYPES = {
     "editing_signal",
     "claim_signal",
     "platform_signal",
+    "platform_metadata",
 }
-ALLOWED_SOURCES = {"asr", "ocr", "vision", "derived"}
+ALLOWED_SOURCES = {"asr", "ocr", "vision", "derived", "platform_metadata"}
 REQUIRED_COMPLETENESS_SIGNALS = {
     "visual_observations": {
         "product_first_appearance",

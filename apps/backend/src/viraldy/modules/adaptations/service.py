@@ -67,6 +67,7 @@ class AdaptationService:
                 _model_name(self._settings),
                 status="processing",
                 product_snapshot_json=product.product_context.model_dump(mode="json"),
+                provenance_json=data.provenance,
             )
             model_repo = AiModelRunRepository(self._session)
             input_summary: dict[str, object] = {
@@ -91,15 +92,11 @@ class AdaptationService:
                 request_hash=_hash_json(input_summary),
                 input_hash=_hash_json(input_summary),
                 input_summary=input_summary,
-                endpoint_family=(
-                    "responses" if self._settings.ai_provider == "openai" else None
-                ),
+                endpoint_family=("responses" if self._settings.ai_provider == "openai" else None),
                 prompt_name=ADAPTATION_PROMPT_NAME,
             )
             try:
-                execution = LiveAdaptationProvider(
-                    self._settings
-                ).generate_with_metadata(
+                execution = LiveAdaptationProvider(self._settings).generate_with_metadata(
                     product={
                         "id": str(product.product_id),
                         "context": adaptation_input.product_snapshot.model_dump(mode="json"),
@@ -168,6 +165,7 @@ class AdaptationService:
             if self._settings.ai_mode == "fixture"
             else self._settings.ai_text_model,
             product_snapshot_json=product.product_context.model_dump(mode="json"),
+            provenance_json=data.provenance,
         )
         await self._session.commit()
         return AdaptationRunResponse.model_validate(run)
@@ -436,9 +434,7 @@ async def _fail_model_run(
         error.message,
         http_status=http_status if isinstance(http_status, int) else None,
         safe_error_message=error.message,
-        provider_request_id=(
-            provider_request_id if isinstance(provider_request_id, str) else None
-        ),
+        provider_request_id=(provider_request_id if isinstance(provider_request_id, str) else None),
         repair_attempt_count=(
             repair_attempt_count if isinstance(repair_attempt_count, int) else None
         ),

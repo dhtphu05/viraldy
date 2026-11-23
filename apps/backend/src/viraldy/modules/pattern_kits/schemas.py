@@ -89,6 +89,7 @@ class PatternKitVersionResponse(BaseModel):
     schema_version: str
     pattern: PatternKitV1
     overall_confidence: str
+    evidence_state_json: dict[str, object] = Field(default_factory=dict)
     model_run_id: UUID | None
     created_by_user_id: UUID
     created_at: datetime

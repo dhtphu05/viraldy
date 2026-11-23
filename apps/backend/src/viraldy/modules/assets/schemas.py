@@ -53,11 +53,17 @@ class AssetVersionPlaybackResponse(BaseModel):
 
 class AssetResponse(BaseModel):
     id: UUID
-    workspace_id: UUID
+    workspace_id: UUID | None
     product_id: UUID | None
     asset_type: str
     status: str
     current_version_id: UUID | None
     metadata_json: dict[str, object]
+    library_scope: str = "WORKSPACE"
+    source_provider: str | None = None
+    source_entity_type: str | None = None
+    source_entity_id: str | None = None
+    media_type: str | None = None
+    processing_status: str = "NOT_ANALYZED"
 
     model_config = {"from_attributes": True}

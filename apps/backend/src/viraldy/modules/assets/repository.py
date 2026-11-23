@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from viraldy.modules.assets.models import AssetModel, AssetVersionModel
+from viraldy.modules.references.models import ReferenceModel
 
 
-class AssetRepository:
+class _AssetUploadRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
@@ -54,6 +56,182 @@ class AssetRepository:
 
         asset.current_version_id = version_id
         await self._session.flush()
+        return asset, version
+
+    async def create_pending_remote_asset(
+        self,
+        *,
+        workspace_id: UUID,
+        product_id: UUID | None,
+        asset_type: str,
+        filename: str,
+        declared_mime_type: str,
+        storage_key: str,
+        created_by_user_id: UUID,
+        asset_id: UUID,
+        version_id: UUID,
+        metadata_json: dict[str, object],
+    ) -> tuple[AssetModel, AssetVersionModel]:
+        asset = AssetModel(
+            id=asset_id,
+            workspace_id=workspace_id,
+            product_id=product_id,
+            asset_type=asset_type,
+            status="pending_import",
+            current_version_id=None,
+            created_by_user_id=created_by_user_id,
+            metadata_json=metadata_json,
+        )
+        self._session.add(asset)
+        await self._session.flush()
+        version = AssetVersionModel(
+            id=version_id,
+            asset_id=asset_id,
+            version_number=1,
+            storage_key=storage_key,
+            original_filename=filename,
+            declared_mime_type=declared_mime_type,
+            size_bytes=0,
+            metadata_json=metadata_json,
+            validation_status="pending",
+        )
+        self._session.add(version)
+        await self._session.flush()
+        asset.current_version_id = version_id
+        await self._session.flush()
+        return asset, version
+
+    async def get_or_create_market_asset(
+        self,
+        *,
+        source_provider: str,
+        source_entity_type: str,
+        source_entity_id: str,
+        asset_type: str,
+        filename: str,
+        declared_mime_type: str,
+        media_type: str | None,
+        metadata_json: dict[str, object],
+    ) -> tuple[AssetModel, AssetVersionModel]:
+        asset = await self._session.scalar(
+            select(AssetModel).where(
+                AssetModel.library_scope == "MARKET",
+                AssetModel.source_provider == source_provider,
+                AssetModel.source_entity_type == source_entity_type,
+                AssetModel.source_entity_id == source_entity_id,
+                AssetModel.deleted_at.is_(None),
+            )
+        )
+        if asset is not None and asset.current_version_id is not None:
+            version = await self._session.get(AssetVersionModel, asset.current_version_id)
+            if version is not None:
+                asset.metadata_json = {**asset.metadata_json, **metadata_json}
+                asset.media_type = media_type or asset.media_type
+                await self._session.flush()
+                return asset, version
+
+        asset_id = asset.id if asset is not None else uuid4()
+        version_id = uuid4()
+        if asset is None:
+            asset = AssetModel(
+                id=asset_id,
+                workspace_id=None,
+                product_id=None,
+                asset_type=asset_type,
+                status="metadata_only",
+                current_version_id=None,
+                created_by_user_id=None,
+                metadata_json=metadata_json,
+                library_scope="MARKET",
+                source_provider=source_provider,
+                source_entity_type=source_entity_type,
+                source_entity_id=source_entity_id,
+                media_type=media_type,
+                processing_status="NOT_ANALYZED",
+            )
+            self._session.add(asset)
+            await self._session.flush()
+        version = AssetVersionModel(
+            id=version_id,
+            asset_id=asset.id,
+            version_number=1,
+            storage_key=f"market/{source_provider}/{source_entity_type}/{source_entity_id}/source",
+            original_filename=filename,
+            declared_mime_type=declared_mime_type,
+            size_bytes=0,
+            metadata_json=metadata_json,
+            validation_status="metadata_only",
+        )
+        self._session.add(version)
+        await self._session.flush()
+        asset.current_version_id = version.id
+        await self._session.flush()
+        return asset, version
+
+    async def get_market_asset(self, asset_id: UUID) -> AssetModel | None:
+        return await self._session.scalar(
+            select(AssetModel).where(
+                AssetModel.id == asset_id,
+                AssetModel.library_scope == "MARKET",
+                AssetModel.deleted_at.is_(None),
+            )
+        )
+
+    async def get_for_workspace(self, workspace_id: UUID, asset_id: UUID) -> AssetModel | None:
+        return await self._session.scalar(
+            select(AssetModel)
+            .outerjoin(ReferenceModel, ReferenceModel.asset_id == AssetModel.id)
+            .where(
+                AssetModel.id == asset_id,
+                AssetModel.deleted_at.is_(None),
+                or_(
+                    AssetModel.workspace_id == workspace_id,
+                    and_(
+                        AssetModel.library_scope == "MARKET",
+                        ReferenceModel.workspace_id == workspace_id,
+                        ReferenceModel.deleted_at.is_(None),
+                    ),
+                ),
+            )
+        )
+
+
+class _AssetRepositoryMethods:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def complete_remote_import(
+        self,
+        *,
+        workspace_id: UUID,
+        asset_id: UUID,
+        asset_version_id: UUID,
+        size_bytes: int,
+        detected_mime_type: str,
+        checksum_sha256: str,
+        metadata_json: dict[str, object],
+    ) -> tuple[AssetModel, AssetVersionModel] | None:
+        asset = self._session.execute(
+            select(AssetModel).where(
+                AssetModel.id == asset_id,
+                AssetModel.deleted_at.is_(None),
+                or_(
+                    AssetModel.workspace_id == workspace_id,
+                    AssetModel.library_scope == "MARKET",
+                ),
+            )
+        ).scalar_one_or_none()
+        version = self._session.get(AssetVersionModel, asset_version_id)
+        if asset is None or version is None or version.asset_id != asset.id:
+            return None
+        version.size_bytes = size_bytes
+        version.detected_mime_type = detected_mime_type
+        version.checksum_sha256 = checksum_sha256
+        version.metadata_json = metadata_json
+        version.validation_status = "uploaded"
+        asset.status = "uploaded"
+        asset.metadata_json = {**asset.metadata_json, **metadata_json}
+        self._session.flush()
         return asset, version
 
     async def list_assets(self, workspace_id: UUID) -> list[AssetModel]:
@@ -166,11 +344,20 @@ class AssetRepository:
         result = await self._session.execute(
             select(AssetModel, AssetVersionModel)
             .join(AssetVersionModel, AssetVersionModel.asset_id == AssetModel.id)
+            .outerjoin(ReferenceModel, ReferenceModel.asset_id == AssetModel.id)
             .where(
-                AssetModel.workspace_id == workspace_id,
                 AssetModel.deleted_at.is_(None),
                 AssetVersionModel.id == version_id,
+                or_(
+                    AssetModel.workspace_id == workspace_id,
+                    and_(
+                        AssetModel.library_scope == "MARKET",
+                        ReferenceModel.workspace_id == workspace_id,
+                        ReferenceModel.deleted_at.is_(None),
+                    ),
+                ),
             )
+            .distinct()
         )
         row = result.one_or_none()
         if row is None:
@@ -191,11 +378,20 @@ class AssetRepository:
         result = await self._session.execute(
             select(AssetVersionModel)
             .join(AssetModel, AssetModel.current_version_id == AssetVersionModel.id)
+            .outerjoin(ReferenceModel, ReferenceModel.asset_id == AssetModel.id)
             .where(
-                AssetModel.workspace_id == workspace_id,
                 AssetModel.id == asset_id,
                 AssetModel.deleted_at.is_(None),
+                or_(
+                    AssetModel.workspace_id == workspace_id,
+                    and_(
+                        AssetModel.library_scope == "MARKET",
+                        ReferenceModel.workspace_id == workspace_id,
+                        ReferenceModel.deleted_at.is_(None),
+                    ),
+                ),
             )
+            .distinct()
         )
         return result.scalar_one_or_none()
 
@@ -282,3 +478,11 @@ class AssetRepository:
         is_current = asset.current_version_id == version.id
         await self._session.flush()
         return asset, version, is_current, newly_completed
+
+
+class AssetRepository(_AssetUploadRepository, _AssetRepositoryMethods):
+    """Async workspace repository plus the market-asset extensions."""
+
+
+class SyncAssetRepository(_AssetRepositoryMethods):
+    """Synchronous repository surface used by worker tasks."""

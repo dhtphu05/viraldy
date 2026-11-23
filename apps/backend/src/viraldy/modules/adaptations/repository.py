@@ -31,6 +31,7 @@ class AdaptationRepository:
         status: str = "completed",
         primary_model_run_id: UUID | None = None,
         product_snapshot_json: dict[str, object] | None = None,
+        provenance_json: dict[str, object] | None = None,
     ) -> AdaptationRunModel:
         run = AdaptationRunModel(
             workspace_id=workspace_id,
@@ -41,6 +42,7 @@ class AdaptationRepository:
             target_buyer_json=target_buyer,
             constraints_json=constraints,
             result_json=result,
+            provenance_json=provenance_json or {},
             status=status,
             schema_version=ADAPTATION_SCHEMA_VERSION,
             product_snapshot_json=product_snapshot_json,

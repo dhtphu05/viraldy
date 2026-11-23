@@ -38,6 +38,20 @@ class CreativeDnaRepository:
         )
         return result.scalar_one_or_none()
 
+    async def latest_for_asset_version(
+        self, workspace_id: UUID, asset_version_id: UUID
+    ) -> CreativeDnaVersionModel | None:
+        result = await self._session.execute(
+            select(CreativeDnaVersionModel)
+            .where(
+                CreativeDnaVersionModel.workspace_id == workspace_id,
+                CreativeDnaVersionModel.asset_version_id == asset_version_id,
+            )
+            .order_by(CreativeDnaVersionModel.version_number.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
 
 class SyncCreativeDnaRepository:
     def __init__(self, session: Session) -> None:
