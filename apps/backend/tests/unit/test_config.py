@@ -50,7 +50,7 @@ def test_production_oidc_requires_browser_flow_settings() -> None:
 
 
 def test_production_oidc_requires_standard_identity_scopes() -> None:
-    with pytest.raises(ValidationError, match="OIDC_SCOPES.*email.*phone"):
+    with pytest.raises(ValidationError, match="OIDC_SCOPES.*email"):
         Settings(
             _env_file=None,
             app_env="production",
@@ -131,6 +131,7 @@ async def test_auth_config_exposes_only_public_browser_flow_settings() -> None:
         "scopes": ["openid", "profile", "email", "phone", "offline_access"],
         "registration_url": "https://issuer.example/register",
         "end_session_url": "https://issuer.example/logout",
+        "revocation_url": None,
     }
 
 

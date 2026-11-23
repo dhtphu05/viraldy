@@ -33,7 +33,6 @@ def test_me_response_requires_phone_number() -> None:
             id=uuid4(),
             email="seller@example.com",
             display_name="Seller",
-            phone_number=None,
             status="active",
         )
 

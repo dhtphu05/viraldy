@@ -36,6 +36,7 @@ def verifier(public_key: object) -> OidcTokenVerifier:
         oidc_issuer_url="https://issuer.example",
         oidc_audience="viraldy-api",
         oidc_jwks_url="https://issuer.example/.well-known/jwks.json",
+        oidc_require_verified_phone=True,
     )
     token_verifier = OidcTokenVerifier(settings)
     token_verifier._jwks = FakeJwks(public_key)  # type: ignore[attr-defined]  # noqa: SLF001

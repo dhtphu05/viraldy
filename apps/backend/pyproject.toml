@@ -97,3 +97,6 @@ addopts = "--cov=viraldy --cov-report=term-missing --cov-fail-under=70"
 markers = [
   "openai_live: opt-in tests that require a real OpenAI API key and explicit live-test flag",
 ]
+
+[tool.coverage.run]
+concurrency = ["greenlet", "thread"]

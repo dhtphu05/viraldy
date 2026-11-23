@@ -21,6 +21,10 @@ PUBLIC_PATHS = {
     "/api/v1/ready",
     "/api/v1/system/ai-readiness",
     "/api/v1/auth/config",
+    "/api/v1/auth/register",
+    "/api/v1/auth/login",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
 }
 
 
@@ -109,6 +113,7 @@ def test_identity_response_payloads_are_typed_in_openapi() -> None:
         "scopes",
         "registration_url",
         "end_session_url",
+        "revocation_url",
     }
     assert "phone_number" in components["MeResponse"]["required"]
     for path, envelope_name, payload_name in (
