@@ -31,6 +31,15 @@ import { SurfaceCard } from "@/shared/ui/surface-card";
 import { Textarea } from "@/shared/ui/textarea";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/utils";
+import { consumeSmartRemakeHandoff } from "@/features/smart-remake/lib/smart-remake-handoff";
+import {
+    renderSmartRemakeVideo,
+    type SmartRemakeRenderState,
+} from "@/features/smart-remake/lib/smart-remake-render";
+import {
+    getSmartRemakeWorkflowProgress,
+    SMART_REMAKE_ANALYSIS_STEPS,
+} from "@/features/smart-remake/lib/smart-remake-progress";
 
 export const Route = createFileRoute("/smart-remake")({
     head: () => ({ meta: [{ title: "Smart Remake - Viraldy" }] }),
@@ -39,30 +48,6 @@ export const Route = createFileRoute("/smart-remake")({
 
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const ANALYSIS_STEPS = [
-    {
-        label: "Đang xem nhịp video mẫu",
-        detail: "Tìm phần mở đầu, điểm nhấn và cách câu chuyện được kể.",
-    },
-    {
-        label: "Đang chọn những khoảnh khắc đáng nhớ",
-        detail: "Giữ lại cảm xúc và nhịp điệu phù hợp nhất từ video của bạn.",
-    },
-    {
-        label: "Đang nhận diện sản phẩm",
-        detail: "Ghi nhận các chi tiết để sản phẩm luôn xuất hiện nhất quán.",
-    },
-    {
-        label: "Đang lên ý tưởng cho video mới",
-        detail: "Kết hợp sản phẩm của bạn với cảm hứng từ video mẫu.",
-    },
-    {
-        label: "Đang viết kịch bản video mới",
-        detail: "Hoàn thiện từng phân đoạn để sẵn sàng cho bước tạo video.",
-    },
-] as const;
-const DEMO_OUTPUT_VIDEO = "/smart-remake/02_After.mp4";
-const DEMO_RENDER_DELAY_MS = 20_000;
 
 type CompileAssets = {
     referenceVideo: File;
@@ -75,11 +60,6 @@ type ProductLinkSelection = {
     title: string;
     description: string | null;
     imageUrls: string[];
-};
-
-type SmartRemakeRenderState = {
-    finalVideoUrl: string;
-    status: "completed";
 };
 
 function SmartRemakePage() {
@@ -104,6 +84,19 @@ function SmartRemakePage() {
     const [analysisStep, setAnalysisStep] = useState(0);
     const [renderProgress, setRenderProgress] = useState(0);
     const referenceVideoElementRef = useRef<HTMLVideoElement>(null);
+
+    useEffect(() => {
+        const handoff = consumeSmartRemakeHandoff();
+        if (!handoff) return;
+        setReferenceVideo(handoff.referenceVideo);
+        setProductImages(handoff.productImages);
+        setProductLink("");
+        setLinkedProduct(null);
+        setCompileResult(null);
+        setResult(null);
+        setError(null);
+    }, []);
+
     const referencePreviewUrl = usePreviewUrl(referenceVideo);
     const uploadedProductPreviewUrls = usePreviewUrls(productImages);
     const productPreviewUrls = linkedProduct?.imageUrls ?? uploadedProductPreviewUrls;
@@ -159,7 +152,10 @@ function SmartRemakePage() {
     useEffect(() => {
         if (!compile.isPending) return;
         const timer = window.setInterval(
-            () => setAnalysisStep((step) => Math.min(step + 1, ANALYSIS_STEPS.length - 1)),
+            () =>
+                setAnalysisStep((step) =>
+                    Math.min(step + 1, SMART_REMAKE_ANALYSIS_STEPS.length - 1),
+                ),
             4_000,
         );
         return () => window.clearInterval(timer);
@@ -168,18 +164,20 @@ function SmartRemakePage() {
     const render = useMutation({
         mutationFn: () => {
             if (!compileResult) throw new Error("Hãy phân tích video trước khi tạo video mới.");
-            return new Promise<void>((resolve) => window.setTimeout(resolve, DEMO_RENDER_DELAY_MS));
+            if (!workspaceId) throw new Error("Chọn workspace trước khi tạo video.");
+            return renderSmartRemakeVideo(workspaceId, {
+                compileResult,
+                productImage: productImages[0],
+                health: health.data,
+            });
         },
         onMutate: () => {
             setError(null);
             setRenderProgress(0);
         },
-        onSuccess: () => {
+        onSuccess: (data) => {
             setRenderProgress(100);
-            setResult({
-                finalVideoUrl: DEMO_OUTPUT_VIDEO,
-                status: "completed",
-            });
+            setResult(data);
         },
         onError: (cause) =>
             setError(cause instanceof Error ? cause.message : "Smart Remake render failed."),
@@ -446,10 +444,7 @@ function SmartRemakePage() {
                             </CardHeader>
                             <CardContent>
                                 {compileResult ? (
-                                    <div className="space-y-5">
-                                        <CompilePreview result={compileResult} />
-                                        <PromptInspector result={compileResult} />
-                                    </div>
+                                    <CompilePreview result={compileResult} />
                                 ) : (
                                     <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-control-border bg-surface-soft text-center text-sm text-text-secondary">
                                         <Sparkles className="mb-3 size-8 text-primary/60" />
@@ -512,6 +507,23 @@ function SmartRemakePage() {
                         )}
                     </div>
                 </div>
+
+                {compileResult && (
+                    <Card className="overflow-hidden border-primary/25">
+                        <CardHeader className="border-b border-primary/15 bg-primary/[0.04]">
+                            <CardTitle className="flex items-center gap-2">
+                                <Sparkles className="size-5 text-primary" />
+                                Prompt tạo video
+                            </CardTitle>
+                            <CardDescription>
+                                Nội dung đầy đủ hệ thống sẽ dùng để tạo video mới cho bạn.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                            <PromptInspector result={compileResult} />
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </AppShell>
     );
@@ -614,10 +626,12 @@ function SmartRemakeFlow({
                         onPlaybackChange={onOutputPlaybackChange}
                     />
                 </div>
-                <AnalysisProgress
+                <WorkflowProgress
                     complete={Boolean(compileResult)}
-                    isRunning={isCompiling}
-                    step={analysisStep}
+                    isCompiling={isCompiling}
+                    isRendering={isRendering}
+                    analysisStep={analysisStep}
+                    renderProgress={renderProgress}
                 />
             </CardContent>
         </Card>
@@ -667,7 +681,12 @@ function FlowInputSlot({
                     </div>
                     {file && <StatusChip tone="ok">Đã chọn</StatusChip>}
                 </div>
-                <div className={cn("flex flex-1", portraitFrame && "mx-auto w-full max-w-40")}>
+                <div
+                    className={cn(
+                        "flex flex-1",
+                        portraitFrame && "mx-auto w-full max-w-40 items-center justify-center",
+                    )}
+                >
                     <button
                         type="button"
                         aria-label={`Chọn ${label.toLowerCase()}`}
@@ -908,8 +927,13 @@ function OutputSlot({
     onPlaybackChange: (playing: boolean) => void;
 }) {
     const completedVideo = result?.status === "completed" ? result.finalVideoUrl : null;
-    const currentAnalysis = ANALYSIS_STEPS[analysisStep];
-    const analysisProgress = Math.round(((analysisStep + 1) / ANALYSIS_STEPS.length) * 100);
+    const workflow = getSmartRemakeWorkflowProgress({
+        analysisStep,
+        isCompiling,
+        isRendering,
+        renderProgress,
+    });
+    const currentAnalysis = workflow.steps[workflow.currentStep];
     const statusLabel = isRendering
         ? `Đang hoàn thiện video · ${renderProgress}%`
         : isCompiling
@@ -990,19 +1014,9 @@ function OutputSlot({
                                     {currentAnalysis.detail}
                                 </p>
                             </div>
-                            <div
-                                aria-label="Tiến độ phân tích"
-                                aria-valuemax={100}
-                                aria-valuemin={0}
-                                aria-valuenow={analysisProgress}
-                                className="h-1.5 w-full overflow-hidden rounded-full bg-control-border"
-                                role="progressbar"
-                            >
-                                <div
-                                    className="h-full rounded-full bg-primary transition-[width] duration-500"
-                                    style={{ width: `${analysisProgress}%` }}
-                                />
-                            </div>
+                            <p className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium tabular-nums text-primary">
+                                Bước {workflow.currentStep + 1}/{workflow.steps.length}
+                            </p>
                         </div>
                     ) : (
                         <div className="flex flex-col items-center gap-2 px-5 text-center">
@@ -1030,100 +1044,133 @@ function OutputSlot({
     );
 }
 
-function AnalysisProgress({
+function WorkflowProgress({
     complete,
-    isRunning,
-    step,
+    isCompiling,
+    isRendering,
+    analysisStep,
+    renderProgress,
 }: {
     complete: boolean;
-    isRunning: boolean;
-    step: number;
+    isCompiling: boolean;
+    isRendering: boolean;
+    analysisStep: number;
+    renderProgress: number;
 }) {
-    if (!isRunning && !complete) return null;
+    if (!isCompiling && !isRendering && !complete) return null;
 
-    const currentStep = ANALYSIS_STEPS[Math.min(step, ANALYSIS_STEPS.length - 1)];
-    const activeStep = complete ? ANALYSIS_STEPS.length : step + 1;
+    const workflow = getSmartRemakeWorkflowProgress({
+        analysisStep,
+        isCompiling,
+        isRendering,
+        renderProgress,
+    });
+    const isComplete = complete && !isCompiling && !isRendering;
+    const activeStep = workflow.steps[workflow.currentStep];
+    const heading = isRendering
+        ? "Đang tạo video mới"
+        : isCompiling
+          ? "Đang phân tích video của bạn"
+          : "Kịch bản đã sẵn sàng";
+
     return (
-        <div
-            className="mt-5 rounded-lg border border-control-border bg-surface-soft p-4"
+        <section
+            aria-label="Tiến trình Smart Remake"
             aria-live="polite"
+            className="mt-5 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-surface to-surface shadow-sm"
         >
-            <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                    <p className="text-sm font-medium text-text-primary">
-                        {complete ? "Kịch bản đã sẵn sàng" : currentStep.label}
-                    </p>
-                    {!complete && (
-                        <p className="mt-1 text-xs text-text-secondary">{currentStep.detail}</p>
-                    )}
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-primary/15 px-5 py-4 sm:px-6">
+                <div className="flex min-w-0 items-start gap-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                        {isComplete ? (
+                            <CheckCircle2 className="size-5" aria-hidden="true" />
+                        ) : (
+                            <Sparkles className="size-5 animate-pulse" aria-hidden="true" />
+                        )}
+                    </span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary">{heading}</p>
+                        <p className="mt-1 text-sm leading-5 text-text-secondary">
+                            {isComplete
+                                ? "Bạn có thể xem prompt, kiểm tra kịch bản và tạo video khi sẵn sàng."
+                                : activeStep.detail}
+                        </p>
+                    </div>
                 </div>
-                <span className="text-xs text-text-secondary">
-                    {complete ? "Hoàn tất" : `Bước ${activeStep}/${ANALYSIS_STEPS.length}`}
-                </span>
+                <StatusChip tone={isComplete ? "ok" : "info"}>
+                    {isComplete ? "Hoàn tất" : `${workflow.percentage}% hoàn thành`}
+                </StatusChip>
             </div>
-            <div
-                aria-label="Tiến độ phân tích video"
-                aria-valuemax={ANALYSIS_STEPS.length}
-                aria-valuemin={0}
-                aria-valuenow={activeStep}
-                className="mb-4 h-2 overflow-hidden rounded-full bg-control-border"
-                role="progressbar"
-            >
+            <div className="px-5 py-5 sm:px-6">
                 <div
-                    className="h-full rounded-full bg-primary transition-[width] duration-500"
-                    style={{
-                        width: `${Math.max(12, (activeStep / ANALYSIS_STEPS.length) * 100)}%`,
-                    }}
-                />
-            </div>
-            <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                {ANALYSIS_STEPS.map((item, index) => {
-                    const done = complete || index < step;
-                    const current = !complete && index === step;
-                    return (
-                        <li
-                            className={cn(
-                                "rounded-lg border p-3 transition-colors",
-                                done
-                                    ? "border-primary/25 bg-primary/5"
-                                    : current
-                                      ? "border-primary/50 bg-surface"
-                                      : "border-control-border bg-surface",
-                            )}
-                            key={item.label}
-                        >
-                            <span
+                    aria-label={isRendering ? "Tiến độ tạo video" : "Tiến độ Smart Remake"}
+                    aria-valuemax={100}
+                    aria-valuemin={0}
+                    aria-valuenow={workflow.percentage}
+                    className="mb-5 h-2.5 overflow-hidden rounded-full bg-primary/10"
+                    role="progressbar"
+                >
+                    <div
+                        className="h-full rounded-full bg-primary transition-[width] duration-500"
+                        style={{ width: `${workflow.percentage}%` }}
+                    />
+                </div>
+                <ol
+                    className={cn(
+                        "grid gap-2 sm:grid-cols-2",
+                        workflow.steps.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4",
+                    )}
+                >
+                    {workflow.steps.map((item, index) => {
+                        const done = isComplete || index < workflow.currentStep;
+                        const current = !isComplete && index === workflow.currentStep;
+                        return (
+                            <li
                                 className={cn(
-                                    "mb-2 grid size-5 shrink-0 place-items-center rounded-full border text-[10px] font-semibold",
+                                    "rounded-xl border p-3 transition-colors",
                                     done
-                                        ? "border-primary bg-primary text-primary-foreground"
+                                        ? "border-primary/25 bg-primary/5"
                                         : current
-                                          ? "border-primary text-primary"
-                                          : "border-control-border text-text-secondary",
+                                          ? "border-primary bg-surface shadow-sm"
+                                          : "border-control-border bg-surface/70",
                                 )}
+                                key={item.label}
                             >
-                                {done ? (
-                                    <CheckCircle2 className="size-3" aria-hidden="true" />
-                                ) : (
-                                    index + 1
-                                )}
-                            </span>
-                            <p
-                                className={cn(
-                                    "text-sm font-medium leading-5",
-                                    done || current ? "text-text-primary" : "text-text-secondary",
-                                )}
-                            >
-                                {item.label}
-                            </p>
-                            <p className="mt-1 text-xs leading-5 text-text-secondary">
-                                {item.detail}
-                            </p>
-                        </li>
-                    );
-                })}
-            </ol>
-        </div>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <span
+                                        className={cn(
+                                            "grid size-6 place-items-center rounded-full border text-xs font-semibold",
+                                            done
+                                                ? "border-primary bg-primary text-primary-foreground"
+                                                : current
+                                                  ? "border-primary bg-primary/10 text-primary"
+                                                  : "border-control-border text-text-secondary",
+                                        )}
+                                    >
+                                        {done ? (
+                                            <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                                        ) : (
+                                            index + 1
+                                        )}
+                                    </span>
+                                    {current && (
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                            Đang thực hiện
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-sm font-semibold leading-5 text-text-primary">
+                                    {item.label}
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-text-secondary">
+                                    {item.detail}
+                                </p>
+                            </li>
+                        );
+                    })}
+                </ol>
+            </div>
+        </section>
     );
 }
 
@@ -1189,31 +1236,32 @@ function CompilePreview({ result }: { result: SmartRemakeCompileResult }) {
 
 function PromptInspector({ result }: { result: SmartRemakeCompileResult }) {
     return (
-        <div className="space-y-4 border-t border-control-border pt-5">
-            <div>
-                <p className="text-sm font-semibold text-text-primary">Prompt gốc (raw)</p>
-                <p className="mt-1 text-xs text-text-secondary">
-                    Nội dung nguyên bản mà hệ thống đã tạo cho từng phần video.
-                </p>
-            </div>
-            <div className="space-y-3">
+        <div className="space-y-6">
+            <div className="space-y-4">
                 {result.compiledPrompts.map((compiledPrompt, index) => (
-                    <div className="space-y-2" key={index}>
-                        <p className="text-xs font-medium text-text-secondary">
-                            Prompt phần {index + 1}
-                        </p>
-                        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-control-border bg-surface-soft p-3 font-mono text-xs leading-5 text-text-primary">
+                    <div className="space-y-3" key={index}>
+                        <div className="flex items-center gap-2">
+                            <span className="grid size-7 place-items-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                {index + 1}
+                            </span>
+                            <p className="text-sm font-semibold text-text-primary">
+                                Prompt phần {index + 1}
+                            </p>
+                        </div>
+                        <pre className="min-h-72 max-h-[38rem] overflow-auto whitespace-pre-wrap break-words rounded-2xl border-2 border-primary/25 bg-primary/[0.035] p-5 font-mono text-sm leading-7 text-text-primary shadow-sm">
                             {rawPromptFromCompiled(compiledPrompt)}
                         </pre>
                     </div>
                 ))}
             </div>
-            <div className="space-y-2">
-                <p className="text-sm font-semibold text-text-primary">JSON đầy đủ</p>
-                <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-control-border bg-surface-soft p-3 font-mono text-xs leading-5 text-text-primary">
+            <details className="rounded-xl border border-control-border bg-surface-soft px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-text-secondary">
+                    Xem dữ liệu chi tiết
+                </summary>
+                <pre className="mt-4 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-control-border bg-surface p-3 font-mono text-xs leading-5 text-text-primary">
                     {JSON.stringify(result, null, 2)}
                 </pre>
-            </div>
+            </details>
         </div>
     );
 }
