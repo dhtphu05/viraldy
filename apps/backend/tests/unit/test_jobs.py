@@ -40,6 +40,7 @@ def test_private_beta_job_registry_contains_required_types() -> None:
         "storyboard_generate",
         "concept_video_generate",
         "retention_cleanup",
+        "tiktok_media_import",
     }
 
     assert required.issubset(JOB_DEFINITIONS)

@@ -16,6 +16,7 @@ from viraldy.modules.domain_intelligence.public import (
 )
 from viraldy.modules.jobs.models import ProcessingJobModel
 from viraldy.modules.ugc_review import public as ugc_public
+from viraldy.platform.config.settings import Settings
 from viraldy.worker.tasks import process_asset as worker
 
 
@@ -113,6 +114,9 @@ def test_ugc_review_worker_reuses_media_pipeline_and_persists_recommendation_res
         def commit(self) -> None:
             pass
 
+    monkeypatch.setattr(
+        worker, "get_settings", lambda: Settings(_env_file=None, ai_mode="fixture")
+    )
     monkeypatch.setattr(worker, "_process_media", fake_process_media)
     monkeypatch.setattr(domain_public, "adapt_media_evidence", lambda _items: evidence_bundle)
     monkeypatch.setattr(domain_public, "SyncDomainIntelligenceQueries", FakeDomainQueries)
