@@ -22,7 +22,7 @@ function AccountPage() {
             <div className="flex max-w-3xl flex-col gap-6">
                 <PageHeader
                     title="Account"
-                    description="Your verified identity and Viraldy session."
+                    description="Your profile and current Viraldy session."
                 />
 
                 <SurfaceCard className="overflow-hidden p-0">
@@ -36,7 +36,7 @@ function AccountPage() {
                             </h2>
                             <p className="mt-1 flex items-center gap-1.5 text-sm text-text-secondary">
                                 <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
-                                Verified account
+                                {auth.mode === "password" ? "Active account" : "Verified account"}
                             </p>
                         </div>
                     </div>
@@ -44,12 +44,20 @@ function AccountPage() {
                     <dl className="divide-y divide-divider">
                         <IdentityRow icon={UserRound} label="Full name" value={user.display_name} />
                         <IdentityRow icon={Mail} label="Email" value={user.email} />
-                        <IdentityRow icon={Phone} label="Phone number" value={user.phone_number} />
+                        <IdentityRow
+                            icon={Phone}
+                            label="Phone number"
+                            value={user.phone_number ?? "Not provided"}
+                        />
                         <IdentityRow
                             icon={KeyRound}
                             label="Sign-in method"
                             value={
-                                auth.mode === "local_test" ? "Local development" : "OIDC provider"
+                                auth.mode === "password"
+                                    ? "Email and password"
+                                    : auth.mode === "local_test"
+                                      ? "Local development"
+                                      : "OIDC provider"
                             }
                         />
                     </dl>
