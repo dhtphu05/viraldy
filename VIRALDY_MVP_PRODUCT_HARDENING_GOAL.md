@@ -2,7 +2,7 @@
 ## Codex Goal-Mode Execution Contract — Keyless Product Hardening
 
 > **Repository:** local Viraldy source containing the completed fixture-mode MVP  
-> **Audit source:** `VIRALDY_MVP_AUDIT.md`  
+> **Setup references:** `docs/runbooks/AI_PROVIDER_READINESS.md`, `docs/runbooks/LOCAL_DEVELOPMENT.md`
 > **Primary objective:** harden data integrity, workflows, jobs, media processing, AI provider contracts, scoring, and frontend so all MVP features work end to end without model credentials and real models require environment configuration only  
 > **Out of scope:** cloud deployment, Kubernetes, autoscaling, billing, non-MVP features, and broad production optimization
 
@@ -10,7 +10,7 @@
 
 # 0. EXECUTION DIRECTIVE
 
-Read the current repository and `VIRALDY_MVP_AUDIT.md` before changing code.
+Read the current repository, `docs/runbooks/AI_PROVIDER_READINESS.md`, and `docs/runbooks/LOCAL_DEVELOPMENT.md` before changing code.
 
 The existing MVP already supports:
 

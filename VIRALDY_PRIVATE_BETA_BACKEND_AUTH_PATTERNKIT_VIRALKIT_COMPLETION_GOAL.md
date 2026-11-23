@@ -2446,13 +2446,14 @@ fully automatic statistical winner certification
 
 # 25. Final deliverables
 
-Create:
+Use the setup and qualification guidance in:
 
 ```text
-VIRALDY_PRIVATE_BETA_TECH_FREEZE_AUDIT.md
+docs/runbooks/LOCAL_DEVELOPMENT.md
+docs/runbooks/OPENAI_LIVE_QUALIFICATION.md
 ```
 
-The audit must contain:
+The delivery summary must contain:
 
 1. branch and commit SHA;
 2. PR URL;

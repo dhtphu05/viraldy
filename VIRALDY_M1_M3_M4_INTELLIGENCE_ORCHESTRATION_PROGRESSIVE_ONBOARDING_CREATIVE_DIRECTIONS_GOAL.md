@@ -62,12 +62,13 @@ Do not expand this goal into TikTok Scorer V2, UGC Preflight V2, creator marketp
 Before planning or changing code, confirm that these files are readable from the current repository root:
 
 ```text
-VIRALDY_OPENAI_PRODUCTION_INTELLIGENCE_AUDIT.md
+docs/runbooks/AI_PROMPTS_AND_VERSIONING.md
+docs/runbooks/OPENAI_LIVE_QUALIFICATION.md
 VIRALDY_OPENAI_NATIVE_PRODUCTION_INTELLIGENCE_SHOWCASE_GOAL.md
 VIRALDY_GOLDEN_OUTPUT_REFERENCE_AND_ACCEPTANCE_EXAMPLES.md
 ```
 
-The third file must be the current **Golden Output V1.0** supplied with this goal.
+The Golden Output file must be the current **Golden Output V1.0** supplied with this goal.
 
 The current repository may still contain:
 

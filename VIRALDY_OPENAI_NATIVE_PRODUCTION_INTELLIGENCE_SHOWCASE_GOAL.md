@@ -60,11 +60,10 @@ Do not claim that entering an API key alone makes the entire application product
 Before changing code, read and treat the following as authoritative:
 
 ```text
-VIRALDY_PRIVATE_BETA_TECH_FREEZE_AUDIT.md
 VIRALDY_GOLDEN_OUTPUT_REFERENCE_AND_ACCEPTANCE_EXAMPLES.md
 VIRALDY_PRIVATE_BETA_BACKEND_AUTH_PATTERNKIT_VIRALKIT_COMPLETION_GOAL.md
 VIRALDY_CREATIVE_DOMAIN_INTELLIGENCE_HARDENING_GOAL.md
-VIRALDY_PR14_SEMANTIC_CORRECTNESS_AUDIT.md
+VIRALDY_PR14_SEMANTIC_CORRECTNESS_COMPLETION_GOAL.md
 ```
 
 If one of these files is not in the repository but is supplied in the Codex workspace, copy it into an appropriate documentation location before implementation.
@@ -2037,10 +2036,10 @@ Provide:
 16. Cost/latency observations without unsupported claims.
 17. Data/privacy notes.
 18. Dola/Seed migration notes.
-19. Final audit file:
+19. Qualification guidance:
 
 ```text
-VIRALDY_OPENAI_PRODUCTION_INTELLIGENCE_AUDIT.md
+docs/runbooks/OPENAI_LIVE_QUALIFICATION.md
 ```
 
 The final audit must distinguish among:
