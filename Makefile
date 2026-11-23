@@ -3,9 +3,12 @@ WEB_DIR=apps/web
 SMOKE_MODE ?= fixture
 SMOKE_ARGS ?=
 
-.PHONY: setup infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke smoke-fixture smoke-mock smoke-release-fixture smoke-release-mock security docker-build logs clean
+.PHONY: setup setup-env infra-up infra-down backend-install web-install api worker beat web-dev web-build web-lint dev migrate migration downgrade seed openapi lint format typecheck test test-unit test-integration test-contract smoke smoke-fixture smoke-mock smoke-release-fixture smoke-release-mock security docker-build logs clean
 
 setup: backend-install
+
+setup-env:
+	node scripts/setup-local.mjs
 
 infra-up:
 	docker compose up -d postgres redis minio minio-init
@@ -14,10 +17,10 @@ infra-down:
 	docker compose down
 
 backend-install:
-	cd $(BACKEND_DIR) && uv sync --all-extras --dev
+	cd $(BACKEND_DIR) && uv sync --frozen --all-extras --dev
 
 web-install:
-	cd $(WEB_DIR) && pnpm install
+	cd $(WEB_DIR) && pnpm install --frozen-lockfile
 
 api:
 	cd $(BACKEND_DIR) && uv run uvicorn viraldy.api.main:app --host $${API_HOST:-0.0.0.0} --port $${API_PORT:-8000} --reload
@@ -29,7 +32,7 @@ beat:
 	cd $(BACKEND_DIR) && uv run celery -A viraldy.worker.celery_app beat --loglevel=INFO
 
 web-dev:
-	cd $(WEB_DIR) && pnpm dev
+	cd $(WEB_DIR) && pnpm dev --port 5173 --strictPort
 
 web-build:
 	cd $(WEB_DIR) && pnpm build

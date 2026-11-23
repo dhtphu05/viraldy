@@ -17,3 +17,13 @@ docs/api/openapi.json
 apps/backend/evaluation/reports/
 apps/web/artifacts/
 .DS_Store
+
+# Local runtime data and optional demo media (not application source).
+/.pnpm-store/
+/apps/backend/outputs/
+/apps/web/public/product_ads/
+/apps/web/public/smart-remake/
+
+# Root-only QA screenshots.
+/creative-library-*.png
+/production-run-*.png

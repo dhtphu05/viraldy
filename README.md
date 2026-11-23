@@ -4,16 +4,31 @@ Viraldy là nền tảng hỗ trợ đội ngũ thương mại điện tử phâ
 
 ## Smart Remake
 
-Smart Remake dành cho những lúc bạn đã tìm được một video có cách mở đầu, nhịp dựng hoặc cách trình bày đáng học hỏi, nhưng cần chuyển ý tưởng đó thành creative phù hợp với sản phẩm của mình.
+Smart Remake giúp seller tái tạo một video quảng cáo hiệu quả cho sản phẩm của mình: lấy video tham khảo làm hình mẫu về hook, nhịp dựng và cách trình diễn, rồi phát triển thành creative mới có sản phẩm và thương hiệu riêng.
+
+### Bài toán cần giải quyết
+
+Khi đã tìm được một video ads thắng hoặc có cách trình bày hiệu quả, seller vẫn phải tự xem lại, phân tích hook và nhịp dựng, viết brief rồi làm lại từng cảnh cho sản phẩm của mình. Bắt đầu từ đầu tốn thời gian và công sức; bê nguyên video sang sản phẩm khác thì dễ lệch nhận diện, thương hiệu hoặc thông tin sản phẩm.
+
+Smart Remake chuyển video tham khảo thành kế hoạch cảnh và prompt mới, đồng thời phân tích sản phẩm riêng để giữ đúng nhận diện và cách sử dụng. Hệ thống học theo cấu trúc sáng tạo — không sao chép danh tính, thương hiệu hay nội dung nguyên bản của video. Video tham khảo do người dùng chọn; Smart Remake không tự xác minh hiệu quả quảng cáo của video đó.
 
 ### Giá trị mang lại
 
-- Rút ngắn quá trình từ video tham khảo đến một kịch bản quảng cáo có thể duyệt và triển khai.
-- Giữ sản phẩm làm trọng tâm, đồng thời đưa các yêu cầu về thương hiệu, thông điệp và phong cách vào cùng một brief.
-- Xem trước cấu trúc từng cảnh và toàn bộ prompt trước khi tạo video để dễ kiểm tra, chỉnh hướng sáng tạo và phối hợp trong nhóm.
-- Tạo nội dung video dọc 9:16 theo hai lựa chọn thời lượng: 8 giây hoặc 16 giây.
+- **Tái tạo nhanh winning ads:** chuyển hook, nhịp dựng và cách trình diễn của video tham khảo thành một creative mới phù hợp với sản phẩm của bạn.
+- **Tiết kiệm thời gian và công sức:** thay việc phân tích, viết brief và chia cảnh thủ công bằng một kịch bản có cấu trúc để đội ngũ bắt đầu từ đó.
+- **Nâng chất lượng và tính nhất quán:** Product Lock cùng prompt theo từng cảnh giúp giữ sản phẩm làm trọng tâm; người dùng có thể xem và chỉnh hướng nội dung trước khi tạo video.
+- **Dễ thử nghiệm:** tạo kế hoạch video dọc 9:16 theo hai lựa chọn 8 giây hoặc 16 giây.
 
-Smart Remake hỗ trợ quá trình sáng tạo; kết quả quảng cáo và hiệu quả kinh doanh vẫn phụ thuộc vào sản phẩm, nội dung, đối tượng và chiến dịch.
+Smart Remake giúp tái sử dụng cách làm creative, không bảo đảm video mới sẽ đạt doanh thu hay hiệu quả tương đương video tham khảo. Kết quả còn phụ thuộc vào sản phẩm, nội dung, đối tượng và chiến dịch.
+
+### Input và Output
+
+| Giai đoạn                                                                       | Input                                                                                                                                             | Output                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phân tích và biên dịch (`POST /workspaces/{workspace_id}/smart-remake/compile`) | Video tham khảo; một ảnh sản phẩm **hoặc** URL trang sản phẩm; thời lượng 8/16 giây; tỷ lệ 9:16; ngôn ngữ; hướng sáng tạo và các yêu cầu cần giữ. | Phân tích video (`referenceAnalysis`), thông tin sản phẩm (`analyzeOutput`), `Product Lock`, `Scene Map`, prompt cho từng cảnh (`prompt`, `imagePrompt`, `videoPrompt`), cảnh báo và chẩn đoán biên dịch. Đây là kịch bản/payload đã biên dịch, chưa phải file video. |
+| Tạo video (`POST /workspaces/{workspace_id}/smart-remake/render`)               | Kết quả biên dịch; ảnh sản phẩm; nhà cung cấp tạo video; tên project và tùy chọn âm thanh.                                                        | Trạng thái xử lý, URL video khi hoàn tất, thời lượng, số cảnh và cảnh báo.                                                                                                                                                                                            |
+
+Khi nhập URL sản phẩm, Product Import lấy hình ảnh chính cùng tiêu đề/mô tả có sẵn để bổ sung thông tin cho bước phân tích. Khi tải ảnh trực tiếp, ảnh đó là nguồn tham chiếu nhận diện sản phẩm. Giao diện có thể cho xem trước nhiều ảnh, nhưng mỗi yêu cầu biên dịch hiện gửi một ảnh sản phẩm làm ảnh tham chiếu.
 
 ### Ai sẽ dùng Smart Remake?
 
@@ -126,7 +141,7 @@ Các lỗi định dạng JSON có bước yêu cầu Gemini sửa lại theo sc
 
 - Docker Desktop hoặc Docker Engine với Docker Compose v2
 - Python 3.12 và `uv`
-- Node.js và `pnpm`
+- Node.js 22.12+ (hoặc Node.js 24+) và `pnpm` 10; `make`
 
 Cài `uv` trên macOS/Linux:
 
@@ -134,27 +149,26 @@ Cài `uv` trên macOS/Linux:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Bật `pnpm` bằng Corepack nếu máy chưa có:
+Bật `pnpm` 10 bằng Corepack nếu máy đã có Corepack; nếu chưa có, cài `pnpm` 10 trước:
 
 ```bash
-corepack enable pnpm
+corepack enable
+corepack prepare pnpm@10 --activate
 ```
 
 ### Cài đặt
 
-Tạo file cấu hình backend lần đầu. Nếu `apps/backend/.env` đã tồn tại, bỏ qua bước sao chép và cập nhật file hiện tại:
+Sau khi clone repository và vào thư mục gốc, tạo cấu hình local và cài dependencies theo lockfile đã commit:
 
 ```bash
-cp .env.example apps/backend/.env
+make setup-env
+make backend-install
+make web-install
 ```
 
-Đăng ký/đăng nhập email và mật khẩu dùng `AUTH_MODE=password`. Tạo khóa ký JWT riêng bằng lệnh sau, rồi điền kết quả vào `AUTH_JWT_SECRET` trong `apps/backend/.env`:
+`make setup-env` dùng Node.js native, không cần cài dependencies trước. Lệnh tạo **chỉ file còn thiếu**: `apps/backend/.env` từ `.env.example`, và `apps/web/.env.local` với cấu hình API/public origin cùng các biến AUTH cần cho server frontend. Lệnh sinh hai secret ngẫu nhiên độc lập: `AUTH_JWT_SECRET` chỉ ở backend và `AUTH_PROXY_SECRET` dùng chung backend/frontend. Mặc định dùng `AUTH_MODE=password`, `AI_MODE=fixture`, API `http://localhost:8000/api/v1` và web `http://localhost:5173`.
 
-```bash
-openssl rand -hex 32
-```
-
-Giữ nguyên khóa qua các lần khởi động và dùng cùng khóa trên các instance backend. Không đưa khóa vào mã nguồn hoặc cấu hình trình duyệt. PostgreSQL lưu tài khoản và phiên đăng nhập; Redis cần hoạt động để giới hạn các lần thử đăng nhập. Xem [hướng dẫn xác thực](docs/runbooks/LOCAL_DEVELOPMENT.md) cho cấu hình triển khai và kiểm thử.
+Chạy lại lệnh không ghi đè file, secret hay feature flag đã có. Nếu mới có một file env, lệnh dùng lại `AUTH_PROXY_SECRET` của file đó để tạo file còn thiếu; nếu secret này trống, cần điền thủ công rồi chạy lại. Khi cả hai file đã có, lệnh giữ nguyên và không đồng bộ/kiểm tra cấu hình cũ. Không đưa secret vào Git hoặc biến `VITE_`. Xem [runbook local](docs/runbooks/LOCAL_DEVELOPMENT.md) cho cách cập nhật cấu hình cũ và kiểm thử.
 
 Để bật phân tích Smart Remake bằng Gemini, cấu hình các mục sau trong `apps/backend/.env`:
 
@@ -164,20 +178,7 @@ SMART_REMAKE_ENABLED=true
 GEMINI_API_KEY=your-gemini-api-key
 ```
 
-Giữ API key trong file môi trường local và không đưa file này lên Git. Có thể cấu hình model qua `SMART_REMAKE_GEMINI_MODEL`; mặc định backend sử dụng `gemini-2.5-flash`.
-
-Tạo cấu hình frontend trong `apps/web/.env`:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000/api/v1
-```
-
-Cài dependencies:
-
-```bash
-make backend-install
-make web-install
-```
+Giữ API key trong file môi trường local và không đưa file này lên Git. Có thể cấu hình model qua `SMART_REMAKE_GEMINI_MODEL`; mặc định backend sử dụng `gemini-2.5-flash`. Chế độ fixture không cần API key; kết quả render fixture không tạo video thật. Tạo video thật cần thêm một dịch vụ render như phần bên dưới.
 
 ### Khởi động
 
@@ -187,12 +188,13 @@ Khởi động database, Redis và object storage:
 make infra-up
 ```
 
-Chạy migration và khởi tạo workspace local:
+Chạy migration trước khi khởi động API:
 
 ```bash
 make migrate
-make seed
 ```
+
+Head là `0022_merge_auth_market`, merge hai nhánh `0020_creative_family_candidates` và `0021_password_auth`. Migration auth `0021` vẫn đi từ baseline `0017_domain_ugc_review`; `0021` không phụ thuộc `0020`. Đăng ký tài khoản sẽ tự tạo workspace riêng, không cần seed. `make seed` chỉ dành cho dữ liệu mẫu/workspace kiểm thử `local_test`, không tạo tài khoản mật khẩu để đăng nhập.
 
 Mở ba terminal riêng tại thư mục gốc repository:
 
@@ -208,7 +210,7 @@ make worker
 make web-dev
 ```
 
-Mở URL frontend mà lệnh `make web-dev` in ra. Các địa chỉ local mặc định:
+`make web-dev` dùng port `5173` với `--strictPort`; nếu port bận, lệnh sẽ báo lỗi. Mở cùng một origin `localhost` để cookie đăng nhập nhất quán. Các địa chỉ local mặc định:
 
 - Viraldy: <http://localhost:5173>
 - API: <http://localhost:8000>
@@ -217,7 +219,7 @@ Mở URL frontend mà lệnh `make web-dev` in ra. Các địa chỉ local mặc
 - Readiness check: <http://localhost:8000/ready>
 - MinIO console: <http://localhost:9001>
 
-> Với `AUTH_MODE=password`, mở trang Create account để tạo tài khoản và workspace riêng. `AUTH_MODE=local_test` chỉ dùng cho kiểm thử local; staging/production chặn chế độ này. Khi triển khai, cấu hình HTTPS và `AUTH_PUBLIC_ORIGIN` trên server frontend.
+> Với `AUTH_MODE=password`, mở [Create account](http://localhost:5173/register), nhập tên, email và mật khẩu ít nhất 12 ký tự để tạo tài khoản và workspace riêng. PostgreSQL và Redis phải đang hoạt động. `AUTH_MODE=local_test` chỉ dùng cho kiểm thử local; staging/production chặn chế độ này. Khi triển khai, cấu hình HTTPS và `AUTH_PUBLIC_ORIGIN` trên server frontend.
 
 ### Cấu hình dịch vụ tạo video
 
@@ -231,16 +233,23 @@ FLOWKIT_URL=http://127.0.0.1:8100
 
 Backend cần `ffmpeg` và `ffprobe` để xử lý media. Nếu các lệnh này không nằm trong `PATH`, có thể đặt `SMART_REMAKE_FFMPEG_PATH` và `SMART_REMAKE_FFPROBE_PATH` tới đường dẫn cài đặt trên máy.
 
+### Media demo local (tùy chọn)
+
+Các thư mục `apps/web/public/product_ads/` và `apps/web/public/smart-remake/` bị loại khỏi Git. Clone/pull mã nguồn **không** mang theo video/ảnh demo trên máy của người phát triển. Có thể dùng file tự tải lên; nếu cần bộ demo riêng, sao chép từ nguồn nội bộ theo [hướng dẫn media tùy chọn](docs/runbooks/LOCAL_DEVELOPMENT.md#optional-local-demo-media). Preview thiếu media dùng trạng thái fallback của giao diện; không cần video demo để tạo tài khoản hoặc chạy ứng dụng.
+
 ## Kiểm tra và lệnh thường dùng
 
 | Lệnh                                | Mục đích                                       |
 | ----------------------------------- | ---------------------------------------------- |
+| `make setup-env`                    | Tạo env còn thiếu và sinh secret local an toàn |
+| `make backend-install` / `make web-install` | Cài dependencies theo lockfile đã commit |
 | `make infra-up` / `make infra-down` | Khởi động / dừng dịch vụ hạ tầng local         |
 | `make api`                          | Chạy API server                                |
 | `make worker`                       | Chạy Celery worker                             |
 | `make beat`                         | Chạy Celery beat                               |
 | `make migrate`                      | Cập nhật database theo Alembic migrations      |
-| `make seed`                         | Khởi tạo dữ liệu cần thiết cho local workspace |
+| `make seed`                         | Tạo dữ liệu mẫu cho workspace kiểm thử local |
+| `node --test tests/setup-local.test.mjs` | Kiểm thử setup trong thư mục tạm, không sửa env thật |
 | `make test`                         | Chạy backend tests                             |
 | `make lint` / `make typecheck`      | Kiểm tra style / kiểu dữ liệu backend          |
 | `make web-lint`                     | Kiểm tra frontend                              |
@@ -276,6 +285,7 @@ apps/web/src/shared/ui/               UI components dùng chung
 ## Xử lý sự cố local
 
 - **Backend không đọc cấu hình:** kiểm tra file `apps/backend/.env`; các lệnh `make api`, `make migrate` và `make seed` chạy trong `apps/backend`.
-- **Frontend không kết nối được API:** kiểm tra `VITE_API_BASE_URL` trong `apps/web/.env` và xác nhận API đang chạy.
+- **Frontend không kết nối được API:** kiểm tra `VITE_API_BASE_URL` trong `apps/web/.env.local` và xác nhận API đang chạy.
+- **Đăng ký/đăng nhập lỗi origin:** mở đúng `AUTH_PUBLIC_ORIGIN=http://localhost:5173`, kiểm tra cùng `AUTH_PROXY_SECRET` ở backend/frontend và khởi động lại server sau khi đổi env. Cấu hình cũ như port `8081` được setup giữ nguyên; nếu tiếp tục dùng port đó, chạy Vite với `--port 8081 --strictPort` và giữ origin/CORS tương ứng.
 - **Không kết nối được database hoặc Redis:** chạy `make infra-up`, sau đó kiểm tra bằng `docker compose ps`.
 - **Port API mặc định đang được sử dụng:** chạy `API_PORT=8001 make api` và cập nhật frontend thành `VITE_API_BASE_URL=http://localhost:8001/api/v1`.

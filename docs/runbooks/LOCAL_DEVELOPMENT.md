@@ -1,6 +1,70 @@
 # Local Development
 
-Use `make backend-install`, `make infra-up`, `make migrate`, `make seed`, `make api`, and `make worker`. When explicitly using `AUTH_MODE=local_test` for isolated local tests, auth uses `Authorization: Bearer local-test`.
+## Fresh clone
+
+Install Git, `make`, Docker with Compose v2, Python 3.12, `uv`, Node.js 22.12+ (or 24+), and pnpm 10. Run these commands from the cloned repository root:
+
+```sh
+make setup-env
+make backend-install
+make web-install
+make infra-up
+docker compose ps
+make migrate
+```
+
+`backend-install` uses `uv sync --frozen --all-extras --dev`; `web-install` uses `pnpm install --frozen-lockfile`. Both use the committed lockfiles. Wait for PostgreSQL, Redis, and MinIO to be healthy and `minio-init` to finish before migrating. Do not run `docker compose down -v` to troubleshoot a teammate's database; it deletes local data.
+
+In separate terminals at the repository root, start `make api`, `make worker` (background jobs), and `make web-dev`. The web target pins port 5173 with `--strictPort`, so an occupied port causes an error instead of silently changing the cookie origin. Open [Create account](http://localhost:5173/register) and register with a name, email, and password of at least 12 characters. Registration creates your own workspace; `make seed` is optional test data for the separate `local_test` workspace and does not create a password login. When explicitly using `AUTH_MODE=local_test` for isolated local tests, auth uses `Authorization: Bearer local-test`.
+
+### Safe env setup
+
+`make setup-env` runs the small native Node script `scripts/setup-local.mjs`, with no dependency installation required. It creates missing `apps/backend/.env` from `.env.example` and missing `apps/web/.env.local` from the template's frontend allowlist. Fresh files use permissions `0600`, `AUTH_MODE=password`, `AUTH_DISABLED=false`, and fixture AI. The script generates two independent 32-byte random secrets: the JWT signing secret stays on the backend, and the proxy secret is shared with the frontend server. Backend credentials and provider keys are not copied into the web env.
+
+Existing files are never overwritten or patched. If just one exists, its nonempty single-line `AUTH_PROXY_SECRET` is reused in the missing file. If that value is missing/blank, fill it manually before retrying; no mismatched peer file will be created. If both files already exist, setup leaves them byte-for-byte intact without validating or reconciling them. For older setups, manually check auth mode, JWT/proxy secrets, API URL, canonical origin, and CORS. Keep existing market feature flags unless intentionally changing them. Keep secret values stable across restarts and out of Git; never prefix a secret with `VITE_`.
+
+The new-clone defaults are:
+
+| Setting | Value |
+| --- | --- |
+| Backend / frontend `VITE_API_BASE_URL` | `http://localhost:8000/api/v1` |
+| Frontend server `AUTH_PUBLIC_ORIGIN` | `http://localhost:5173` |
+| Backend `BACKEND_CORS_ORIGINS` | `http://localhost:5173` |
+| Frontend server `AUTH_TRUST_PROXY_HEADERS` | `false` |
+
+To keep an existing `http://127.0.0.1:8081` setup, retain that canonical origin and matching backend CORS, and run `pnpm --dir apps/web dev --host 127.0.0.1 --port 8081 --strictPort`. Setup does not change existing env files or running processes. Avoid alternating `localhost` and `127.0.0.1`: cookies are host-specific. Restart the API/worker/frontend after manually changing their env files.
+
+The setup tests copy the script and template to isolated temporary clone fixtures, exercise the CLI there, and remove those fixtures afterward. They do not run setup against this checkout's env files:
+
+```sh
+node --test tests/setup-local.test.mjs
+```
+
+## Optional AI and render providers
+
+Leave `AI_MODE=fixture` for onboarding without external API keys. Smart Remake fixture compile returns deterministic sample analysis; fixture render validates the payload and does not call a video provider or produce a real video URL. For live Smart Remake, edit private `apps/backend/.env` and restart the API:
+
+```dotenv
+AI_MODE=live
+SMART_REMAKE_ENABLED=true
+GEMINI_API_KEY=<your private Gemini key>
+```
+
+`SMART_REMAKE_GEMINI_MODEL` selects the model. Real video generation also requires one configured renderer: `UNIFICALLY_API_KEY` for Unifically, or a reachable FlowKit service at `FLOWKIT_URL` (default `http://127.0.0.1:8100`). Choose the corresponding provider in the UI. Docker Compose does not start FlowKit. Install `ffmpeg` and `ffprobe` on the backend host for media processing/render assembly; set `SMART_REMAKE_FFMPEG_PATH` and `SMART_REMAKE_FFPROBE_PATH` if they are not on `PATH`. Optional R2 keys are only needed for R2 output storage; local output uses `apps/backend/outputs/` and `PUBLIC_BASE_URL` instead. These credentials are independent of native email/password auth. Live operations can incur provider charges.
+
+## Optional local demo media
+
+`apps/web/public/product_ads/` and `apps/web/public/smart-remake/` are private local demo directories excluded from Git, along with backend outputs, local caches, and root QA screenshots. Pulling application code does not supply the prerecorded videos/images from another developer's machine. Use your own uploads, or obtain the optional demo bundle separately through the team's existing sharing channel.
+
+If you have that bundle, copy only its demo directories, preserving filenames referenced by the UI. From the repository root, replacing `/path/to/private-demo-bundle` with your actual source:
+
+```sh
+mkdir -p apps/web/public/product_ads apps/web/public/smart-remake
+cp -Rn /path/to/private-demo-bundle/product_ads/. apps/web/public/product_ads/
+cp -Rn /path/to/private-demo-bundle/smart-remake/. apps/web/public/smart-remake/
+```
+
+`-n` avoids overwriting existing local media. Missing demo files use the frontend's fallback preview state; they are not required for account creation or normal API startup. Do not commit the demo media, generated outputs, screenshots, or env files. `AI_MODE=fixture` does not install media files.
 
 ## Native email/password authentication
 
@@ -8,7 +72,7 @@ Use `AUTH_MODE=password` to register and sign in with accounts owned by Viraldy.
 
 ### Backend environment and migration
 
-Generate two independent secrets once: one for JWT signing and one for signed client-IP forwarding between the BFF and backend.
+For a fresh clone, `make setup-env` generates these secrets. For an existing setup that needs manual configuration, generate two independent secrets once: one for JWT signing and one for signed client-IP forwarding between the BFF and backend.
 
 ```sh
 openssl rand -hex 32 # AUTH_JWT_SECRET: backend only
@@ -42,14 +106,15 @@ uv run alembic current
 uv run alembic heads
 ```
 
-The native-auth migration is `0021_password_auth`, following the committed baseline `0017_domain_ugc_review`. `make migrate` upgrades to the current head and creates `password_credentials`, `password_sessions`, and `password_refresh_tokens`; it does not seed accounts or alter the `users` table. Confirm the database revision matches the reported head. From a separate shell at the repository root, start `make api`; start `make worker` if testing background jobs.
+The current head is `0022_merge_auth_market`, a merge joining `0020_creative_family_candidates` and `0021_password_auth`. The published native-auth migration `0021_password_auth` retains its original parent `0017_domain_ugc_review`; it does not depend on `0020`. `make migrate` upgrades both branches to the merge head; the auth branch creates `password_credentials`, `password_sessions`, and `password_refresh_tokens` without seeding accounts or altering the `users` table. The merge revision itself has no DDL. Confirm `alembic current` matches the single head reported by `alembic heads`. From a separate shell at the repository root, start `make api`; start `make worker` if testing background jobs.
 
 ### Frontend runtime and first account
 
 Set the frontend server's `AUTH_PROXY_SECRET` to the exact same value as the backend. For local Vite development, put the following in private `apps/web/.env.local`, or export the equivalent process variables:
 
 ```dotenv
-AUTH_PUBLIC_ORIGIN=http://127.0.0.1:8081
+AUTH_PUBLIC_ORIGIN=http://localhost:5173
+VITE_API_BASE_URL=http://localhost:8000/api/v1
 AUTH_PROXY_SECRET=<the same proxy secret configured on the backend>
 AUTH_TRUST_PROXY_HEADERS=false
 ```
@@ -57,16 +122,12 @@ AUTH_TRUST_PROXY_HEADERS=false
 From the repository root:
 
 ```sh
-pnpm --dir apps/web install
-AUTH_PUBLIC_ORIGIN=http://127.0.0.1:8081 \
-AUTH_TRUST_PROXY_HEADERS=false \
-VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1 \
-pnpm --dir apps/web dev --host 127.0.0.1 --port 8081 --strictPort
+make web-dev
 ```
 
 `AUTH_PUBLIC_ORIGIN`, `AUTH_PROXY_SECRET`, and `AUTH_TRUST_PROXY_HEADERS` are frontend **server runtime** settings. The Vite config explicitly loads an allowlist of four AUTH variables (`AUTH_PUBLIC_ORIGIN`, `AUTH_PROXY_SECRET`, `AUTH_TRUST_PROXY_HEADERS`, and `AUTH_CLIENT_SECRET`) from its environment files into the server process when they are not already set. This supports private local `.env`/`.env.local` files; these AUTH values are not exposed as `VITE_` browser variables. On deployment, set the required values in the frontend server's actual runtime environment rather than relying on the build-time loader.
 
-Use one canonical origin, including the correct port. Open `http://127.0.0.1:8081/register`, enter a name, email, and password of at least 12 characters, then confirm the account can sign out and sign in again. Switching between `localhost` and `127.0.0.1` changes the browser's cookie host.
+Use one canonical origin, including the correct port. For the new-clone defaults, set `AUTH_PUBLIC_ORIGIN=http://localhost:5173` and open `http://localhost:5173/register`, enter a name, email, and password of at least 12 characters, then confirm the account can sign out and sign in again. Switching between `localhost` and `127.0.0.1` changes the browser's cookie host.
 
 The browser talks to the frontend BFF for authentication. The BFF stores tokens in HttpOnly, SameSite=Lax cookies and uses Secure, `__Host-` cookies when the canonical origin is HTTPS. The backend returns tokens to the BFF; the browser-facing sign-in response does not expose them. Keep `AUTH_JWT_SECRET` on the backend only.
 
