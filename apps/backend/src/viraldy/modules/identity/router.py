@@ -36,6 +36,7 @@ async def get_auth_config(
             scopes=settings.oidc_scopes if oidc_enabled else [],
             registration_url=settings.oidc_registration_url if oidc_enabled else None,
             end_session_url=settings.oidc_end_session_url if oidc_enabled else None,
+            revocation_url=settings.oidc_revocation_url if oidc_enabled else None,
         ).model_dump(mode="json"),
         request_id,
     )
@@ -46,7 +47,7 @@ async def get_me(
     current_user: CurrentUserDep,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
-    if current_user.display_name is None or current_user.phone_number is None:
+    if current_user.display_name is None:
         raise UnauthorizedError()
     return success(
         MeResponse(

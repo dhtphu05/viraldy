@@ -31,6 +31,7 @@ from viraldy.modules.deletion.router import router as deletion_router
 from viraldy.modules.domain_intelligence.router import router as domain_intelligence_router
 from viraldy.modules.feedback.router import router as feedback_router
 from viraldy.modules.generation.router import router as generation_router
+from viraldy.modules.identity.password_router import router as password_auth_router
 from viraldy.modules.identity.router import router as identity_router
 from viraldy.modules.jobs.router import router as jobs_router
 from viraldy.modules.media_analysis.router import router as media_analysis_router
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(product_import_media_router)
     app.include_router(system_router, prefix=api_v1)
     app.include_router(identity_router, prefix=api_v1)
+    app.include_router(password_auth_router, prefix=api_v1)
     app.include_router(workspaces_router, prefix=api_v1)
     app.include_router(products_router, prefix=api_v1)
     app.include_router(assets_router, prefix=api_v1)

@@ -3659,6 +3659,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "argon2-cffi" },
     { name = "asyncpg" },
     { name = "boto3" },
     { name = "celery", extra = ["redis"] },
@@ -3708,6 +3709,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "==1.14.0" },
+    { name = "argon2-cffi", specifier = "==25.1.0" },
     { name = "asyncpg", specifier = "==0.30.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = "==1.8.0" },
     { name = "beautifulsoup4", marker = "extra == 'crawler'", specifier = "==4.15.0" },

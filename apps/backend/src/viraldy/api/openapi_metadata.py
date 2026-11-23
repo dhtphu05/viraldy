@@ -15,6 +15,10 @@ PUBLIC_PATHS = {
     "/api/v1/ready",
     "/api/v1/system/ai-readiness",
     "/api/v1/auth/config",
+    "/api/v1/auth/register",
+    "/api/v1/auth/login",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
 }
 
 API_SUMMARY = (
@@ -469,6 +473,7 @@ FIELD_DESCRIPTIONS = {
 }
 
 FIELD_EXAMPLES: dict[str, Any] = {
+    "refresh_token": "example-refresh-token-replace-with-the-token-from-login",
     **PARAMETER_EXAMPLES,
     "name": "Summer Glow Launch",
     "slug": "summer-glow-launch",

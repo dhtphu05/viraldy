@@ -11,6 +11,7 @@ from viraldy.modules.workspaces.public import get_workspace_member_role
 from viraldy.platform.auth.current_user import CurrentUser
 from viraldy.platform.auth.local_test import LocalTestTokenVerifier
 from viraldy.platform.auth.oidc import OidcTokenVerifier
+from viraldy.platform.auth.password import PasswordTokenVerifier
 from viraldy.platform.auth.policy import (
     Permission,
     WorkspaceMembershipPolicy,
@@ -26,6 +27,8 @@ DbSession = Annotated[AsyncSession, Depends(get_async_session)]
 
 
 def get_token_verifier(settings: Annotated[Settings, Depends(get_settings)]) -> TokenVerifier:
+    if settings.auth_mode is AuthMode.PASSWORD:
+        return PasswordTokenVerifier(settings)
     if settings.auth_mode is AuthMode.LOCAL_TEST:
         return LocalTestTokenVerifier()
     return OidcTokenVerifier(settings)
@@ -43,6 +46,10 @@ async def get_current_user(
         raise UnauthorizedError()
     token = authorization.split(" ", 1)[1]
     verified = await verifier.verify(token)
+    if settings.auth_mode is AuthMode.PASSWORD:
+        from viraldy.modules.identity.password_service import get_password_current_user
+
+        return await get_password_current_user(db, verified)
     return await get_or_create_current_user(db, verified)
 
 

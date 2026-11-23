@@ -23,6 +23,11 @@ from viraldy.modules.domain_intelligence.models import (
 from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.generation.models import GenerationArtifactModel, GenerationRunModel
 from viraldy.modules.identity.models import UserModel
+from viraldy.modules.identity.password_models import (
+    PasswordCredentialModel,
+    PasswordRefreshTokenModel,
+    PasswordSessionModel,
+)
 from viraldy.modules.jobs.models import ProcessingJobEventModel, ProcessingJobModel
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
 from viraldy.modules.pattern_kits.models import (
@@ -87,6 +92,9 @@ __all__ = [
     "GenerationArtifactModel",
     "GenerationRunModel",
     "MediaArtifactModel",
+    "PasswordCredentialModel",
+    "PasswordRefreshTokenModel",
+    "PasswordSessionModel",
     "PatternKitActionModel",
     "PatternKitEvidenceLinkModel",
     "PatternKitModel",

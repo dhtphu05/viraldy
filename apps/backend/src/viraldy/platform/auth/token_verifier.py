@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -9,7 +10,8 @@ class VerifiedToken:
     external_auth_id: str
     email: str
     display_name: str
-    phone_number: str
+    phone_number: str | None
+    session_id: UUID | None = None
 
 
 class TokenVerifier(Protocol):
