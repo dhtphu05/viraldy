@@ -1,1396 +1,1117 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate, useRouteContext, useSearch } from "@tanstack/react-router";
 import {
     ArrowRight,
-    CheckCircle2,
-    FileImage,
-    FileVideo,
-    Link2,
-    Loader2,
-    Play,
+    Check,
+    ChevronLeft,
+    LoaderCircle,
+    Plus,
+    RefreshCw,
     Sparkles,
-    Upload,
-    Wand2,
-    type LucideIcon,
 } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useApiWorkspace } from "@/shared/hooks/use-workspace";
-import {
-    compileSmartRemake,
-    getSmartRemakeHealth,
-    type SmartRemakeCompileResult,
-} from "@/shared/api/smart-remake";
-import { crawlProductPreview, type ProductCrawlPreview } from "@/shared/api/products";
 import { AppShell } from "@/widgets/app-shell/app-shell";
+import { useApiWorkspace } from "@/shared/hooks/use-workspace";
 import { Button } from "@/shared/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
-import { PageHeader } from "@/shared/ui/page-header";
-import { StatusChip } from "@/shared/ui/status-chip";
-import { SurfaceCard } from "@/shared/ui/surface-card";
-import { Textarea } from "@/shared/ui/textarea";
-import { Input } from "@/shared/ui/input";
-import { cn } from "@/shared/lib/utils";
-import { consumeSmartRemakeHandoff } from "@/features/smart-remake/lib/smart-remake-handoff";
+import { RemakeInputs } from "../components/remake-inputs";
+import { RemakeStoryboard } from "../components/remake-storyboard";
+import { RemakeJourney } from "../components/remake-journey";
+import { RemakeOutput } from "../components/remake-output";
+import { RemakeActionConfirmation } from "../components/remake-action-confirmation";
+import { RemakeAnalysisLoading } from "../components/remake-analysis-loading";
+import { RemakeAnalysisRecovery } from "../components/remake-analysis-recovery";
+import { RemakeResultNextStep } from "../components/remake-result-next-step";
+import { RemakeProcessing } from "../components/remake-processing";
+import { getRemakeSceneLabel } from "../lib/remake-scene-label";
 import {
-    renderSmartRemakeVideo,
-    type SmartRemakeRenderState,
-} from "@/features/smart-remake/lib/smart-remake-render";
-import {
-    getSmartRemakeWorkflowProgress,
-    SMART_REMAKE_ANALYSIS_STEPS,
-} from "@/features/smart-remake/lib/smart-remake-progress";
+    getRemakeResultNextAction,
+    type RemakeResultNextAction,
+} from "../lib/remake-result-next-action";
+import { RemakeProjectInputs } from "../components/remake-project-inputs";
+import { RemakeInspector } from "../components/remake-inspector";
+import { RemakeProjectControls } from "../components/remake-project-controls";
+import { RemakePlayer } from "../components/remake-player";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { resolveInspectionEvidence, type InspectionSeekTarget } from "../lib/remake-inspection";
+import type { SmartRemakeInspectionEvidence } from "@/shared/api/smart-remake";
+import { useRemakeStudio } from "../lib/use-remake-studio";
+import { getRenderTaskCount } from "../lib/remake-groups";
+import { normalizeRemakeRequirements } from "../lib/remake-intake";
+import { getRemakeErrorMessage, getRemakeProviderGroupingError } from "../lib/smart-remake-render";
+import { getRemakeAnalysisRecovery } from "../lib/remake-analysis-recovery";
+import { restoreTimelineCompile } from "../lib/remake-timeline";
+import { ApiError } from "@/shared/api/errors";
+import { RemakeGenerationProgress } from "../components/remake-generation-progress";
+import { getRemakeGenerationProgress } from "../lib/remake-generation-progress";
+import "../components/remake-studio.css";
 
 export const Route = createFileRoute("/smart-remake")({
     head: () => ({ meta: [{ title: "Smart Remake - Viraldy" }] }),
     component: SmartRemakePage,
+    validateSearch: (
+        search: Record<string, unknown>,
+    ): { projectId?: string; newProject?: boolean } => {
+        const projectId =
+            typeof search.projectId === "string" &&
+            /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(search.projectId)
+                ? search.projectId
+                : undefined;
+        return {
+            projectId,
+            ...(!projectId && [true, "true", "1"].includes(search.newProject as boolean | string)
+                ? { newProject: true }
+                : {}),
+        };
+    },
 });
 
-const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-
-type CompileAssets = {
-    referenceVideo: File;
-    productImage?: File;
-    productLink?: ProductLinkSelection;
-};
-
-type ProductLinkSelection = {
-    sourceUrl: string;
-    title: string;
-    description: string | null;
-    imageUrls: string[];
-};
+const primary =
+    "min-h-11 bg-[var(--primary-active)] px-5 text-white hover:bg-[#c90939] motion-reduce:active:scale-100";
 
 function SmartRemakePage() {
-    const { workspaceId } = useApiWorkspace();
-    const health = useQuery({
-        queryKey: ["smart-remake", "health", workspaceId],
-        queryFn: () => getSmartRemakeHealth(workspaceId!),
-        enabled: Boolean(workspaceId),
-        staleTime: 60_000,
-    });
-    const [duration, setDuration] = useState<8 | 16>(8);
-    const [language, setLanguage] = useState("");
-    const [prompt, setPrompt] = useState("");
-    const [description, setDescription] = useState("");
-    const [referenceVideo, setReferenceVideo] = useState<File | null>(null);
-    const [productImages, setProductImages] = useState<File[]>([]);
-    const [productLink, setProductLink] = useState("");
-    const [linkedProduct, setLinkedProduct] = useState<ProductLinkSelection | null>(null);
-    const [compileResult, setCompileResult] = useState<SmartRemakeCompileResult | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<SmartRemakeRenderState | null>(null);
-    const [analysisStep, setAnalysisStep] = useState(0);
-    const [renderProgress, setRenderProgress] = useState(0);
-    const referenceVideoElementRef = useRef<HTMLVideoElement>(null);
+    const { auth } = useRouteContext({ from: "__root__" });
+    const { workspaceId, workspaces } = useApiWorkspace();
+    const { projectId, newProject } = useSearch({ from: "/smart-remake" });
+    if (!workspaceId)
+        return (
+            <AppShell>
+                <div className="rounded-3xl bg-surface p-8" role="status">
+                    {workspaces.isLoading
+                        ? "Đang mở workspace…"
+                        : workspaces.isError
+                          ? "Chưa mở được workspace. Bạn tải lại trang để thử nhé."
+                          : "Chọn workspace để bắt đầu tạo video."}
+                </div>
+            </AppShell>
+        );
+    return (
+        <SmartRemakeStudio
+            key={`${auth.user?.id}:${workspaceId}`}
+            workspaceId={workspaceId}
+            accountId={auth.user?.id}
+            projectId={projectId}
+            newProject={newProject}
+        />
+    );
+}
 
+function SmartRemakeStudio({
+    workspaceId,
+    accountId,
+    projectId,
+    newProject,
+}: {
+    workspaceId: string;
+    accountId?: string;
+    projectId?: string;
+    newProject?: boolean;
+}) {
+    const studio = useRemakeStudio(workspaceId, accountId, projectId, Boolean(newProject));
+    const navigate = useNavigate();
+    const linkedProject = useRef<string | undefined>(undefined);
     useEffect(() => {
-        const handoff = consumeSmartRemakeHandoff();
-        if (!handoff) return;
-        setReferenceVideo(handoff.referenceVideo);
-        setProductImages(handoff.productImages);
-        setProductLink("");
-        setLinkedProduct(null);
-        setCompileResult(null);
-        setResult(null);
-        setError(null);
-    }, []);
-
-    const referencePreviewUrl = usePreviewUrl(referenceVideo);
-    const uploadedProductPreviewUrls = usePreviewUrls(productImages);
-    const productPreviewUrls = linkedProduct?.imageUrls ?? uploadedProductPreviewUrls;
-    const productImageCount = productPreviewUrls.length;
-    const compile = useMutation({
-        mutationFn: ({ referenceVideo, productImage, productLink: linked }: CompileAssets) => {
-            if (!workspaceId) throw new Error("Chọn workspace trước khi phân tích video.");
-            return compileSmartRemake(workspaceId, {
-                targetDuration: duration,
-                language,
-                prompt,
-                description,
-                referenceVideo,
-                productImage,
-                productUrl: linked?.sourceUrl,
-                productTitle: linked?.title,
-                productDescription: linked?.description ?? undefined,
-            });
-        },
-        onMutate: () => {
-            setError(null);
-            setResult(null);
-            setAnalysisStep(0);
-        },
-        onSuccess: (data) => setCompileResult(data),
-        onError: (cause) =>
-            setError(cause instanceof Error ? cause.message : "Smart Remake compile failed."),
-    });
-    const productLinkPreview = useMutation({
-        mutationFn: (url: string) => {
-            if (!workspaceId) throw new Error("Chọn workspace trước khi thêm sản phẩm.");
-            return crawlProductPreview(workspaceId, url);
-        },
-        onMutate: () => setError(null),
-        onSuccess: (preview) => {
-            const selection = productLinkSelection(preview);
-            if (!selection.imageUrls.length) {
-                setLinkedProduct(null);
-                setError(
-                    "Link này chưa có ảnh sản phẩm để dùng. Hãy thử link khác hoặc tải ảnh lên nhé.",
-                );
-                return;
-            }
-            setProductLink(selection.sourceUrl);
-            setLinkedProduct(selection);
-            setProductImages([]);
-            setCompileResult(null);
-            setResult(null);
-        },
-        onError: () => setError("Chưa thể lấy ảnh từ link sản phẩm này. Hãy thử lại nhé."),
-    });
-
-    useEffect(() => {
-        if (!compile.isPending) return;
-        const timer = window.setInterval(
-            () =>
-                setAnalysisStep((step) =>
-                    Math.min(step + 1, SMART_REMAKE_ANALYSIS_STEPS.length - 1),
+        const identity = studio.project?.id;
+        if (!identity || linkedProject.current === identity) return;
+        linkedProject.current = identity;
+        if (identity !== projectId)
+            void navigate({ to: "/smart-remake", search: { projectId: identity }, replace: true });
+    }, [studio.project?.id, projectId, navigate]);
+    const analyzing = studio.busy === "analyze" || Boolean(studio.analysisUnresolved);
+    const controlsLocked =
+        Boolean(studio.busy || studio.actionLoading || studio.actionSubmitting) || analyzing;
+    const failedAnalysis = getRemakeAnalysisRecovery(studio.project);
+    const savedScriptIdentity = JSON.stringify([
+        failedAnalysis?.operationId,
+        studio.project?.id,
+        studio.project?.revision,
+        studio.sourceUrl,
+        studio.productUrls,
+        studio.primaryIndex,
+        studio.duration,
+        studio.requirements,
+    ]);
+    const [savedScriptView, setSavedScriptView] = useState<string | null>(null);
+    const viewingSavedScript = Boolean(
+        failedAnalysis &&
+        studio.step === "plan" &&
+        savedScriptView === savedScriptIdentity &&
+        studio.compiled,
+    );
+    const analysisRecoveryVisible = Boolean(
+        failedAnalysis && !analyzing && studio.step !== "result" && !viewingSavedScript,
+    );
+    const step = analysisRecoveryVisible ? "prepare" : studio.step;
+    const analysisErrorExplained = Boolean(
+        failedAnalysis &&
+        studio.errorCode === failedAnalysis.errorCode &&
+        [undefined, "SMART_REMAKE_GEMINI_OUTPUT_TRUNCATED"].some(
+            (causeCode) =>
+                studio.error ===
+                getRemakeErrorMessage(
+                    new ApiError(
+                        failedAnalysis.errorCode ?? "SMART_REMAKE_COMPILE_FAILED",
+                        "",
+                        409,
+                        causeCode ? { causeCode } : undefined,
+                    ),
                 ),
-            4_000,
+        ),
+    );
+    const directAnalysis =
+        studio.actionExecutingIntent?.action === "analyze" ||
+        studio.actionExecutingIntent?.action === "reanalyze"
+            ? studio.actionExecutingIntent
+            : null;
+    const actionSceneId =
+        studio.pendingAction?.action === "repair"
+            ? studio.pendingAction.sceneId
+            : studio.pendingAction?.action === "inspect" &&
+                studio.pendingAction.subject.kind === "scene"
+              ? studio.pendingAction.subject.sceneId
+              : null;
+    const actionSceneIndex = actionSceneId
+        ? (studio.project?.scenes.findIndex((scene) => scene.id === actionSceneId) ?? -1)
+        : -1;
+    const actionVersionId =
+        studio.pendingAction?.action === "inspect" && studio.pendingAction.subject.kind === "scene"
+            ? studio.pendingAction.subject.versionId
+            : null;
+    const actionVersionIndex = actionVersionId
+        ? (studio.project?.scenes[actionSceneIndex]?.versions.findIndex(
+              (version) => version.id === actionVersionId,
+          ) ?? -1)
+        : -1;
+    const heading = useRef<HTMLHeadingElement>(null);
+    const [attemptedInputs, setAttemptedInputs] = useState(false);
+    const [evidenceTarget, setEvidenceTarget] = useState<InspectionSeekTarget | null>(null);
+    const [evidenceError, setEvidenceError] = useState<string | null>(null);
+    const evidenceTrigger = useRef<HTMLElement | null>(null);
+    const inspectionDetails = useRef<HTMLDetailsElement>(null);
+    const projectDetails = useRef<HTMLDetailsElement>(null);
+    function seekEvidence(evidence: SmartRemakeInspectionEvidence) {
+        const resolved = resolveInspectionEvidence(
+            evidence,
+            studio.project?.inspectionMedia ?? [],
+            studio.project?.inspectionMappings ?? [],
+            evidence.timebase === "scene_local" ? "raw_group" : undefined,
         );
-        return () => window.clearInterval(timer);
-    }, [compile.isPending]);
-
-    const render = useMutation({
-        mutationFn: () => {
-            if (!compileResult) throw new Error("Hãy phân tích video trước khi tạo video mới.");
-            if (!workspaceId) throw new Error("Chọn workspace trước khi tạo video.");
-            return renderSmartRemakeVideo(workspaceId, {
-                compileResult,
-                productImage: productImages[0],
-                health: health.data,
-            });
-        },
-        onMutate: () => {
-            setError(null);
-            setRenderProgress(0);
-        },
-        onSuccess: (data) => {
-            setRenderProgress(100);
-            setResult(data);
-        },
-        onError: (cause) =>
-            setError(cause instanceof Error ? cause.message : "Smart Remake render failed."),
-    });
-
-    useEffect(() => {
-        if (!render.isPending) return;
-        const timer = window.setInterval(
-            () => setRenderProgress((progress) => Math.min(progress + 5, 95)),
-            1_000,
-        );
-        return () => window.clearInterval(timer);
-    }, [render.isPending]);
-
-    const validateFile = (file: File, kind: "video" | "image") => {
-        const validType =
-            kind === "video"
-                ? ["video/mp4", "video/webm", "video/quicktime"].includes(file.type)
-                : ["image/jpeg", "image/png", "image/webp"].includes(file.type);
-        const max = kind === "video" ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-        if (!validType) {
-            setError(
-                kind === "video"
-                    ? "Video này chưa thể dùng được. Hãy thử chọn video khác nhé."
-                    : "Ảnh này chưa thể dùng được. Hãy thử chọn ảnh khác nhé.",
+        if (!resolved) {
+            setEvidenceError(
+                "Bằng chứng chưa có media đúng hash và timebase, hoặc liên kết đã hết hạn. Làm mới dự án để kiểm tra.",
             );
-            return false;
-        }
-        if (file.size > max) {
-            setError(
-                kind === "video"
-                    ? "Video này hơi lớn. Hãy thử một video nhẹ hơn nhé."
-                    : "Ảnh này hơi lớn. Hãy thử một ảnh nhẹ hơn nhé.",
-            );
-            return false;
-        }
-        return true;
-    };
-
-    const chooseReferenceVideo = (file: File | null) => {
-        if (!file || compile.isPending) return;
-        if (!validateFile(file, "video")) return;
-        setError(null);
-        setReferenceVideo(file);
-        setCompileResult(null);
-        setResult(null);
-    };
-
-    const chooseProductImages = (files: File[]) => {
-        if (!files.length || compile.isPending) return;
-        const additions = files
-            .filter(
-                (file, index, items) =>
-                    index ===
-                    items.findIndex(
-                        (candidate) =>
-                            candidate.name === file.name &&
-                            candidate.size === file.size &&
-                            candidate.lastModified === file.lastModified,
-                    ),
-            )
-            .filter(
-                (file) =>
-                    !productImages.some(
-                        (existing) =>
-                            existing.name === file.name &&
-                            existing.size === file.size &&
-                            existing.lastModified === file.lastModified,
-                    ),
-            );
-        if (!additions.length || !additions.every((file) => validateFile(file, "image"))) return;
-        setError(null);
-        setProductLink("");
-        setLinkedProduct(null);
-        setProductImages((current) => [...current, ...additions]);
-        setCompileResult(null);
-        setResult(null);
-    };
-
-    const chooseProductLink = () => {
-        const url = productLink.trim();
-        if (!url || productLinkPreview.isPending || compile.isPending) return;
-        productLinkPreview.mutate(url);
-    };
-
-    const syncReferencePlayback = (playing: boolean) => {
-        const video = referenceVideoElementRef.current;
-        if (!video) return;
-
-        if (!playing) {
-            video.pause();
             return;
         }
-
-        video.currentTime = 0;
-        void video.play().catch(() => undefined);
+        document.querySelectorAll("video").forEach((video) => video.pause());
+        evidenceTrigger.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        setEvidenceError(null);
+        setEvidenceTarget(resolved);
+    }
+    const inputProps = {
+        requirements: studio.requirements,
+        rights: studio.rights,
+        budget: studio.budget,
+        characterFile: studio.characterFile,
+        characterUrl: studio.characterUrl,
+        onRequirementsChange: studio.onRequirementsChange,
+        onRightsChange: studio.onRightsChange,
+        onBudgetChange: studio.onBudgetChange,
+        onCharacterChange: studio.onCharacterChange,
+        disabled: controlsLocked,
+        onRightsConfirmationOpen: () =>
+            void studio.requestAction(studio.compiled ? "reanalyze" : "analyze"),
     };
+    const requirementsDetails = (
+        <details className="rounded-2xl bg-surface p-4">
+            <summary className="min-h-11 cursor-pointer py-3 font-medium">Yêu cầu bổ sung</summary>
+            <RemakeProjectInputs {...inputProps} presentation="details" />
+            {studio.contextDirty && (
+                <p className="my-3 text-sm text-warn" role="status">
+                    Yêu cầu mới sẽ được lưu khi bạn xác nhận hành động tiếp theo.
+                </p>
+            )}
+        </details>
+    );
+    const hasOutput = Boolean(
+        studio.result ||
+        studio.project?.generationRecovery ||
+        studio.project?.pendingOperation ||
+        studio.project?.scenes.some((scene) => scene.versions.length > 0),
+    );
+    const activeProductUrl =
+        studio.project?.productImageUrl ?? studio.productUrls[studio.primaryIndex];
+    const observedProduct = studio.project?.analysisProgress?.product;
+    const previewCompile =
+        studio.compiled &&
+        studio.project &&
+        studio.compiled.projectId === studio.project.id &&
+        studio.compiled.revision === studio.project.revision &&
+        studio.project.analysisProgress?.status === "completed" &&
+        observedProduct &&
+        Object.keys(studio.compiled.productLock ?? {}).length === 0
+            ? {
+                  ...studio.compiled,
+                  productLock: {
+                      productName: observedProduct.name,
+                      mustPreserve: observedProduct.details,
+                  },
+              }
+            : studio.compiled;
+    const progress = analyzing || studio.busy === "generate";
+    const analysisLoadingProps = {
+        action:
+            (directAnalysis ?? studio.pendingAction)?.action === "reanalyze"
+                ? ("reanalyze" as const)
+                : ("analyze" as const),
+        phase:
+            analyzing && !studio.analysisPreparing
+                ? ("analyzing" as const)
+                : ("preparing" as const),
+        sourceUrl: studio.sourceUrl,
+        productUrl: studio.productUrls[studio.primaryIndex] ?? studio.project?.productImageUrl,
+        productUrls: studio.productUrls,
+        primaryIndex: studio.primaryIndex,
+        durationSeconds: studio.sourceDuration ?? undefined,
+        progress: studio.analysisProgress,
+        startedAt: studio.analysisStartedAt,
+        statusError: studio.analysisStatusError,
+        onCheckStatus: studio.canCheckAnalysisStatus ? studio.checkAnalysisStatus : undefined,
+        checkingStatus: studio.checkingAnalysisStatus,
+    };
+    const invalidPrompts = studio.invalidPromptDraft;
+    const groupingError = getRemakeProviderGroupingError(studio.compiled ?? studio.project);
+    const needsPlanUpdate =
+        Boolean(groupingError) ||
+        (studio.compiled?.schemaVersion === 2 &&
+            (studio.compiled.expectationsVersion !== 1 ||
+                !/^[a-f0-9]{64}$/.test(studio.compiled.expectationsHash ?? "")));
+    const updateBeforeRender =
+        needsPlanUpdate || studio.sourcePlanDirty || studio.localMediaNeedsAnalysis;
+    const nextAction = getRemakeResultNextAction({
+        project: studio.project,
+        needsPlanUpdate: Boolean(
+            updateBeforeRender ||
+            (studio.project?.requirements &&
+                JSON.stringify(normalizeRemakeRequirements(studio.requirements)) !==
+                    JSON.stringify(normalizeRemakeRequirements(studio.project.requirements))),
+        ),
+        busy: Boolean(studio.busy),
+        receiptUncertain: studio.unresolvedRepairReceipt,
+        candidate: studio.unreadRepairCandidate,
+    });
+    const generationRecoveryVisible = step === "result" && nextAction.kind === "retry_render";
+    const videoProgress = getRemakeGenerationProgress(studio.project);
+    const hasGeneratedClips = Boolean(
+        studio.project?.scenes.some((scene) => scene.versions.some((version) => version.videoUrl)),
+    );
+    const generationProgressVisible = Boolean(
+        step === "result" &&
+        !generationRecoveryVisible &&
+        videoProgress &&
+        (studio.project?.generationProgress ||
+            studio.project?.pendingOperation?.kind === "render" ||
+            studio.project?.lastOperation?.kind === "render") &&
+        (studio.project?.generationProgress?.status !== "completed" || !hasGeneratedClips),
+    );
+    const generationErrorExplained = Boolean(
+        generationProgressVisible &&
+        studio.errorCode &&
+        studio.project?.generationProgress?.groups.some(
+            (group) => group.errorCode === studio.errorCode,
+        ),
+    );
+    const recoveryExplainsError = Boolean(
+        generationRecoveryVisible &&
+        studio.error &&
+        studio.errorCode &&
+        studio.errorCode === studio.project?.generationRecovery?.errorCode,
+    );
+    function revealDetails(target: HTMLDetailsElement | null, action: RemakeResultNextAction) {
+        if (!target) return;
+        let ancestor = target.parentElement;
+        while (ancestor) {
+            if (ancestor.tagName === "DETAILS") (ancestor as HTMLDetailsElement).open = true;
+            ancestor = ancestor.parentElement;
+        }
+        target.open = true;
+        const report = Array.from(
+            target.querySelectorAll<HTMLElement>("[data-inspection-report-id]"),
+        ).find((item) => item.dataset.inspectionReportId === action.reportId);
+        const finding =
+            report &&
+            Array.from(report.querySelectorAll<HTMLElement>("[data-inspection-finding-id]")).find(
+                (item) => item.dataset.inspectionFindingId === action.findingId,
+            );
+        const focus = finding ?? report ?? target.querySelector<HTMLElement>("summary");
+        if (focus) {
+            if (focus.tagName !== "SUMMARY") focus.tabIndex = -1;
+            focus.focus();
+            focus.scrollIntoView?.({ block: "center" });
+        }
+    }
+    function viewGenerationInspection(reportId: string) {
+        revealDetails(inspectionDetails.current, {
+            kind: "findings",
+            label: "Xem kết quả kiểm tra ảnh",
+            reason: "",
+            reportId,
+        });
+    }
+    function performNextAction(action: RemakeResultNextAction) {
+        switch (action.kind) {
+            case "retry_render":
+                void studio.requestAction("render");
+                break;
+            case "progress":
+                revealDetails(projectDetails.current, action);
+                void studio.refreshProject();
+                break;
+            case "update_plan":
+                void studio.requestAction("reanalyze");
+                break;
+            case "candidate":
+                void studio.viewRepairCandidate();
+                break;
+            case "scene":
+                if (action.sceneId)
+                    studio.navigateOutput(action.sceneId, action.view ?? "watch", action.versionId);
+                break;
+            case "compose":
+                void studio.publish();
+                break;
+            case "inspect":
+                if (action.assemblyId)
+                    void studio.requestAction("inspect", {
+                        subject: { kind: "assembly", assemblyId: action.assemblyId },
+                    });
+                break;
+            case "findings":
+                revealDetails(inspectionDetails.current, action);
+                break;
+            case "assembly_error":
+                revealDetails(projectDetails.current, action);
+                break;
+            case "approve":
+                if (action.assemblyId && action.reportId)
+                    void studio.approve(action.assemblyId, action.reportId);
+                break;
+            case "export":
+                if (action.assemblyId) void studio.exportAssembly(action.assemblyId);
+                break;
+        }
+    }
+    useEffect(() => {
+        heading.current?.focus({ preventScroll: true });
+    }, [step]);
 
-    const disabled = !workspaceId || !referenceVideo || !productImageCount || compile.isPending;
+    const title = analysisRecoveryVisible
+        ? "Chưa cập nhật được kịch bản"
+        : viewingSavedScript && step === "plan"
+          ? "Kịch bản đã lưu"
+          : step === "prepare"
+            ? "Dùng cách quay của video mẫu cho sản phẩm của bạn"
+            : step === "plan"
+              ? "Duyệt kịch bản từ video mẫu"
+              : "Video của bạn";
+    const lead = analysisRecoveryVisible
+        ? "Tư liệu đang chọn vẫn được giữ. Chọn bước tiếp theo bên dưới để tiếp tục."
+        : viewingSavedScript && step === "plan"
+          ? "Đang xem kịch bản trước lượt phân tích gần nhất. Yêu cầu vừa rồi chưa cập nhật bản này."
+          : step === "prepare"
+            ? "Thêm video mẫu và ảnh sản phẩm. AI dựa vào cách quay, hành động và nhịp của mẫu để soạn kịch bản cho bạn duyệt trước khi tạo video."
+            : step === "plan"
+              ? "AI đã phân tích video mẫu và soạn kịch bản cho sản phẩm của bạn. Xem lại từng cảnh rồi bấm tạo video."
+              : generationRecoveryVisible || generationProgressVisible
+                ? null
+                : "Xem video, sửa cảnh cần thiết rồi hoàn thiện bản để tải về.";
+
     return (
-        <AppShell>
-            <div className="space-y-6">
-                <PageHeader
-                    title="Smart Remake"
-                    description="Chọn video mẫu và ảnh sản phẩm. Chúng tôi sẽ chuẩn bị kịch bản video mới cho bạn."
-                    actions={
-                        <StatusChip tone={health.data?.enabled ? "ok" : "warn"} dot>
-                            {health.data?.enabled
-                                ? `${health.data.mode === "live" ? "Sẵn sàng" : "Chế độ thử"}`
-                                : "Đang kiểm tra"}
-                        </StatusChip>
-                    }
-                />
-
-                <SmartRemakeFlow
-                    referenceVideo={referenceVideo}
-                    productImages={productImages}
-                    referencePreviewUrl={referencePreviewUrl}
-                    productPreviewUrls={productPreviewUrls}
-                    linkedProduct={linkedProduct}
-                    productLink={productLink}
-                    compileResult={compileResult}
-                    result={result}
-                    isCompiling={compile.isPending}
-                    isRendering={render.isPending}
-                    analysisStep={analysisStep}
-                    renderProgress={renderProgress}
-                    uploadDisabled={compile.isPending}
-                    referenceVideoElementRef={referenceVideoElementRef}
-                    onReferenceVideoChange={chooseReferenceVideo}
-                    onProductImagesChange={chooseProductImages}
-                    onProductLinkChange={setProductLink}
-                    onProductLinkSubmit={chooseProductLink}
-                    isProductLinkLoading={productLinkPreview.isPending}
-                    onOutputPlaybackChange={syncReferencePlayback}
-                />
-
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Wand2 className="size-5 text-primary" />
-                                Bạn muốn video mới thế nào?
-                            </CardTitle>
-                            <CardDescription>
-                                Hai mục này là lựa chọn thêm. Bạn có thể để nguyên gợi ý mặc định.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-5">
-                            <div>
-                                <div className="mb-2 text-sm font-medium text-text-primary">
-                                    Độ dài video
-                                </div>
-                                <div
-                                    className="grid grid-cols-2 gap-2"
-                                    role="radiogroup"
-                                    aria-label="Độ dài video"
-                                >
-                                    {[8, 16].map((value) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            role="radio"
-                                            aria-checked={duration === value}
-                                            onClick={() => {
-                                                setDuration(value as 8 | 16);
-                                                setCompileResult(null);
-                                                setResult(null);
-                                            }}
-                                            className={cn(
-                                                "rounded-lg border px-4 py-3 text-left transition",
-                                                duration === value
-                                                    ? "border-primary bg-primary/10"
-                                                    : "border-control-border bg-surface hover:bg-surface-soft",
-                                            )}
+        <AppShell
+            footer={
+                step !== "result" && !analysisRecoveryVisible ? (
+                    <div className="remake-studio rounded-2xl bg-surface p-3 shadow-[0_-6px_24px_rgb(0_0_0/0.03)] sm:p-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div
+                                id="smart-remake-prepare-status"
+                                className="min-w-0 flex-1 basis-full text-xs text-text-secondary lg:basis-0"
+                                aria-live="polite"
+                            >
+                                {studio.busy ? (
+                                    <span className="flex items-center gap-2">
+                                        <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                                        {busyLabel(studio.busy)}
+                                    </span>
+                                ) : studio.submissionStatusError ? (
+                                    studio.submissionStatusError
+                                ) : studio.checkingSubmissionStatus ? (
+                                    "Đang kiểm tra trạng thái yêu cầu đã gửi…"
+                                ) : step === "prepare" ? (
+                                    studio.sourceExcerptError && studio.sourceUrl ? (
+                                        studio.sourceExcerptError
+                                    ) : !studio.sourceUrl ? (
+                                        "Thêm video mẫu để tiếp tục."
+                                    ) : !studio.productUrls.length ? (
+                                        "Thêm ảnh sản phẩm để tiếp tục."
+                                    ) : studio.sourceCutsError ? (
+                                        studio.sourceCutsError
+                                    ) : studio.health.isError ? (
+                                        "Chưa kết nối được dịch vụ Smart Remake. Bấm Kết nối lại để thử."
+                                    ) : studio.health.data && !studio.health.data.enabled ? (
+                                        "Smart Remake chưa được bật cho môi trường này."
+                                    ) : studio.health.isPending ? (
+                                        "Đang kiểm tra dịch vụ tạo video."
+                                    ) : (
+                                        `Phân tích toàn bộ video · Đầu ra ${studio.duration} giây`
+                                    )
+                                ) : step === "plan" ? (
+                                    studio.sourceCutsError ? (
+                                        studio.sourceCutsError
+                                    ) : studio.sourcePlanDirty ? (
+                                        "Mốc cắt hoặc nhóm cảnh đã thay đổi. Cập nhật kịch bản trước khi tạo nhé."
+                                    ) : studio.generationSetupError ? (
+                                        studio.generationSetupError
+                                    ) : invalidPrompts ? (
+                                        "Hướng dẫn tạo cảnh chưa hợp lệ. Kiểm tra mục nâng cao nếu đã chỉnh, hoặc phân tích lại video mẫu. Bản sửa prompt video tối đa 12.000 ký tự."
+                                    ) : studio.hasDraftChanges ? (
+                                        "Đã giữ thay đổi trong phiên này. Hệ thống sẽ dùng bản chỉnh khi tạo video."
+                                    ) : (
+                                        `${studio.compiled?.sourceSceneMap?.scenes.length ?? studio.compiled?.sceneMap.sceneCount} cảnh · ${getRenderTaskCount(studio.compiled?.renderPlan) || studio.compiled?.sceneMap.sceneCount} lượt tạo · Video hoàn chỉnh ${studio.duration} giây`
+                                    )
+                                ) : studio.project ? (
+                                    `Bản đang dùng v${studio.project.revision} · ${studio.project.targetDuration} giây`
+                                ) : studio.result?.isDemo ? (
+                                    "Đây là video ví dụ, không phải kết quả AI vừa tạo."
+                                ) : (
+                                    "Chỉ tải được sau khi video hoàn tất."
+                                )}
+                            </div>
+                            {step === "prepare" && (
+                                <>
+                                    <Button
+                                        variant="ghost"
+                                        disabled={controlsLocked}
+                                        onClick={() => void studio.loadSample()}
+                                        className="min-h-11"
+                                    >
+                                        Thử với tư liệu mẫu
+                                    </Button>
+                                    <Button
+                                        className={primary}
+                                        disabled={controlsLocked}
+                                        aria-describedby="smart-remake-prepare-status"
+                                        onClick={() => {
+                                            if (
+                                                studio.submissionStatusError ||
+                                                studio.checkingSubmissionStatus
+                                            ) {
+                                                void studio.checkSubmissionStatus();
+                                                return;
+                                            }
+                                            setAttemptedInputs(true);
+                                            if (studio.project?.pendingOperation) {
+                                                studio.setStep("result");
+                                                void studio.refreshProject();
+                                                return;
+                                            }
+                                            void studio.requestAction("analyze");
+                                            const label =
+                                                !studio.sourceUrl ||
+                                                studio.sourceExcerptError ||
+                                                studio.sourceReuploadRequired
+                                                    ? "Chọn file video mẫu"
+                                                    : !studio.productUrls.length
+                                                      ? "Chọn ảnh sản phẩm"
+                                                      : null;
+                                            if (label)
+                                                document
+                                                    .querySelector<HTMLInputElement>(
+                                                        `[aria-label="${label}"]`,
+                                                    )
+                                                    ?.closest("section")
+                                                    ?.querySelector("button")
+                                                    ?.focus();
+                                        }}
+                                    >
+                                        {studio.submissionStatusError ||
+                                        studio.checkingSubmissionStatus
+                                            ? "Kiểm tra trạng thái"
+                                            : studio.project?.pendingOperation
+                                              ? "Xem tiến trình"
+                                              : "Tạo kịch bản"}{" "}
+                                        <ArrowRight />
+                                    </Button>
+                                </>
+                            )}
+                            {step === "plan" && (
+                                <>
+                                    <Button
+                                        variant="ghost"
+                                        disabled={controlsLocked}
+                                        onClick={() => studio.setStep("prepare")}
+                                    >
+                                        <ChevronLeft /> Quay lại
+                                    </Button>
+                                    {studio.health.data?.mode === "fixture" && (
+                                        <Button
+                                            variant="ghost"
+                                            disabled={controlsLocked}
+                                            onClick={() => void studio.generate(true)}
                                         >
-                                            <div className="font-semibold text-text-primary">
-                                                Video {value} giây
-                                            </div>
-                                            <div className="text-xs text-text-secondary">
-                                                {value === 8
-                                                    ? "Một mạch nội dung"
-                                                    : "Hai phần nội dung"}{" "}
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <label className="space-y-2 text-sm font-medium text-text-primary">
-                                    Ngôn ngữ hiển thị
-                                    <input
-                                        value={language}
-                                        onChange={(event) => setLanguage(event.target.value)}
-                                        placeholder="Ví dụ: Tiếng Việt"
-                                        className="flex h-10 w-full rounded-[10px] border border-control-border bg-surface px-3 text-sm"
-                                    />
-                                </label>
-                                <label className="space-y-2 text-sm font-medium text-text-primary">
-                                    Phong cách bạn muốn
-                                    <Textarea
-                                        value={prompt}
-                                        onChange={(event) => setPrompt(event.target.value)}
-                                        placeholder="Mô tả phong cách, nhịp điệu hoặc thông điệp bạn muốn cho video mới"
-                                        rows={3}
-                                    />
-                                </label>
-                            </div>
-                            <label className="block space-y-2 text-sm font-medium text-text-primary">
-                                Những điều phải giữ nguyên
-                                <Textarea
-                                    value={description}
-                                    onChange={(event) => setDescription(event.target.value)}
-                                    placeholder="Nêu chi tiết sản phẩm hoặc nhận diện thương hiệu cần giữ nguyên"
-                                    rows={4}
-                                />
-                            </label>
-                            {error && (
-                                <div
-                                    role="alert"
-                                    className="rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2 text-sm text-destructive"
+                                            Xem video ví dụ
+                                        </Button>
+                                    )}
+                                    <Button
+                                        className={primary}
+                                        disabled={controlsLocked}
+                                        onClick={() => {
+                                            if (studio.project?.pendingOperation) {
+                                                studio.setStep("result");
+                                                void studio.refreshProject();
+                                            } else
+                                                void studio.requestAction(
+                                                    updateBeforeRender ? "reanalyze" : "render",
+                                                );
+                                        }}
+                                    >
+                                        <Sparkles />{" "}
+                                        {studio.project?.pendingOperation
+                                            ? "Xem tiến trình"
+                                            : updateBeforeRender
+                                              ? "Cập nhật kịch bản"
+                                              : `Tạo video · ${studio.compiled?.inputSummary.targetDuration} giây`}
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                ) : undefined
+            }
+        >
+            <div className="remake-studio space-y-6 pb-3">
+                <RemakeJourney
+                    step={step}
+                    hasPlan={Boolean(studio.compiled) && !analysisRecoveryVisible}
+                    hasResult={hasOutput}
+                    busy={controlsLocked}
+                    sourceUrl={studio.sourceUrl}
+                    productUrl={studio.productUrls[studio.primaryIndex]}
+                    outputUrl={studio.project?.finalVideoUrl || studio.result?.finalVideoUrl}
+                    onChange={studio.setStep}
+                />
+                <div className="mx-auto w-full max-w-6xl space-y-6">
+                    <header className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <p className="text-xs font-medium tracking-wide text-text-secondary">
+                                SMART REMAKE
+                            </p>
+                            {studio.health.data?.mode === "fixture" && (
+                                <span className="rounded-full bg-warn-soft px-2.5 py-1 text-xs text-warn">
+                                    Chế độ kiểm thử · Không tạo video AI
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h1
+                                ref={heading}
+                                tabIndex={-1}
+                                className="w-fit rounded text-2xl font-semibold tracking-tight text-text-primary outline-none sm:text-3xl"
+                            >
+                                {title}
+                            </h1>
+                            {step === "result" && (
+                                <Button
+                                    variant="ghost"
+                                    disabled={controlsLocked}
+                                    onClick={() => studio.setStep("prepare")}
                                 >
-                                    {error}
+                                    <Plus aria-hidden="true" /> Chỉnh tư liệu
+                                </Button>
+                            )}
+                        </div>
+                        {lead && (
+                            <p className="max-w-2xl text-sm leading-relaxed text-text-secondary">
+                                {lead}
+                            </p>
+                        )}
+                    </header>
+                    {studio.health.isError && (
+                        <div
+                            className="flex flex-wrap items-center gap-3 rounded-2xl bg-warn-soft p-4 text-sm text-warn"
+                            role="alert"
+                        >
+                            <span>Chưa kết nối được dịch vụ Smart Remake.</span>
+                            <Button variant="ghost" onClick={() => void studio.health.refetch()}>
+                                <RefreshCw /> Kết nối lại
+                            </Button>
+                        </div>
+                    )}
+                    {studio.health.data && !studio.health.data.enabled && (
+                        <div
+                            className="rounded-2xl bg-warn-soft p-4 text-sm text-warn"
+                            role="status"
+                        >
+                            Smart Remake chưa được bật cho môi trường này.
+                        </div>
+                    )}
+                    {studio.submissionStatusError && (
+                        <p role="status" className="rounded-2xl bg-warn-soft p-4 text-sm text-warn">
+                            {studio.submissionStatusError}
+                        </p>
+                    )}
+                    {studio.error &&
+                        !generationErrorExplained &&
+                        !recoveryExplainsError &&
+                        !(
+                            analysisErrorExplained &&
+                            (analysisRecoveryVisible || viewingSavedScript)
+                        ) && (
+                            <div
+                                className="rounded-2xl bg-destructive-soft p-4 text-sm text-destructive"
+                                role="alert"
+                            >
+                                {studio.error}
+                            </div>
+                        )}
+                    {analysisRecoveryVisible && studio.project && (
+                        <RemakeAnalysisRecovery
+                            project={studio.project}
+                            busy={controlsLocked}
+                            onRetry={() => void studio.requestAction("reanalyze")}
+                            onCheckStatus={() => void studio.refreshProject()}
+                            onViewSavedScript={
+                                restoreTimelineCompile(studio.project)
+                                    ? () => {
+                                          setSavedScriptView(savedScriptIdentity);
+                                          studio.viewSavedScript();
+                                      }
+                                    : undefined
+                            }
+                        />
+                    )}
+                    {studio.busy && step === "result" && (
+                        <div
+                            role="status"
+                            className="flex items-center gap-3 rounded-2xl bg-primary-soft p-4 text-sm"
+                        >
+                            <LoaderCircle className="size-5 animate-spin text-primary motion-reduce:animate-none" />
+                            {busyLabel(studio.busy)} Bản đang dùng vẫn được giữ.
+                        </div>
+                    )}
+                    {analyzing ? (
+                        <section
+                            aria-label="Tiến trình phân tích video"
+                            className="remake-enter mx-auto w-full max-w-4xl rounded-3xl bg-surface p-5 sm:p-8"
+                        >
+                            <RemakeAnalysisLoading
+                                {...analysisLoadingProps}
+                                presentation="inline"
+                            />
+                        </section>
+                    ) : progress ? (
+                        <RemakeProcessing
+                            kind="generate"
+                            sourceUrl={studio.sourceUrl}
+                            productUrl={activeProductUrl}
+                        />
+                    ) : step === "prepare" ? (
+                        <div className="remake-enter space-y-5">
+                            <RemakeInputs
+                                validationErrors={
+                                    attemptedInputs
+                                        ? {
+                                              video: !studio.sourceUrl
+                                                  ? "Thêm video mẫu để bắt đầu."
+                                                  : (studio.sourceExcerptError ??
+                                                    studio.sourceCutsError ??
+                                                    (studio.sourceReuploadRequired
+                                                        ? "Thêm lại video mẫu để tạo kịch bản với thời lượng mới."
+                                                        : undefined)),
+                                              product: !studio.productUrls.length
+                                                  ? "Thêm ảnh sản phẩm để tiếp tục."
+                                                  : undefined,
+                                          }
+                                        : undefined
+                                }
+                                sourceUrl={studio.sourceUrl}
+                                sourceName={studio.video?.name ?? null}
+                                productUrls={studio.productUrls}
+                                primaryIndex={studio.primaryIndex}
+                                onPrimaryChange={studio.onPrimaryChange}
+                                onVideo={studio.onVideo}
+                                onImages={studio.onImages}
+                                onRemoveImage={studio.onRemoveImage}
+                                link={studio.link}
+                                onLinkChange={studio.onLinkChange}
+                                onLinkSubmit={() => void studio.importLink()}
+                                isLinkLoading={studio.busy === "link"}
+                                linkedTitle={studio.linkedProduct?.title}
+                                duration={studio.duration}
+                                timelineStartFrame={studio.timelineStartFrame}
+                                onTimelineStartFrameChange={studio.onTimelineStartFrameChange}
+                                onSourceMetadata={studio.onSourceMetadata}
+                                sourceDurationSeconds={studio.sourceDuration}
+                                sourceCutFrames={
+                                    studio.compiled?.sourceSceneMap?.timingMode === "fit_target" ||
+                                    !studio.compiled
+                                        ? studio.sourceCutFrames
+                                        : undefined
+                                }
+                                onSourceCutFramesChange={studio.onSourceCutFramesChange}
+                                onDuration={studio.onDuration}
+                                language={studio.language}
+                                onLanguage={studio.onLanguage}
+                                description={studio.description}
+                                onDescription={studio.onDescription}
+                                brief={studio.brief}
+                                onBrief={studio.onBrief}
+                                disabled={controlsLocked}
+                                isSample={studio.isSample}
+                            />
+                            <details
+                                id="smart-remake-intake"
+                                className="mx-auto max-w-4xl rounded-2xl bg-surface p-4"
+                            >
+                                <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
+                                    Yêu cầu bổ sung{" "}
+                                    <span className="font-normal text-text-secondary">
+                                        · Không bắt buộc
+                                    </span>
+                                </summary>
+                                <RemakeProjectInputs {...inputProps} presentation="details" />
+                            </details>
+                        </div>
+                    ) : step === "plan" && studio.compiled ? (
+                        <div className="remake-enter space-y-4">
+                            {viewingSavedScript && (
+                                <div
+                                    role="status"
+                                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface p-4 text-sm"
+                                >
+                                    <p>Kịch bản đã lưu trước lượt phân tích gần nhất.</p>
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => {
+                                            setSavedScriptView(null);
+                                            studio.setStep("prepare");
+                                        }}
+                                    >
+                                        Quay lại xử lý phân tích
+                                    </Button>
                                 </div>
                             )}
-                            <Button
-                                className="w-full"
-                                size="lg"
-                                disabled={disabled}
-                                onClick={() => {
-                                    if (referenceVideo && (productImages[0] || linkedProduct)) {
-                                        compile.mutate({
-                                            referenceVideo,
-                                            productImage: productImages[0],
-                                            productLink: linkedProduct ?? undefined,
-                                        });
-                                    }
-                                }}
-                            >
-                                {compile.isPending ? (
-                                    <>
-                                        <Loader2 className="animate-spin" />
-                                        Đang phân tích video…
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles />
-                                        {compileResult ? "Phân tích lại video" : "Phân tích video"}
-                                    </>
-                                )}
-                            </Button>
-                        </CardContent>
-                    </Card>
-
-                    <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Kịch bản video của bạn</CardTitle>
-                                <CardDescription>
-                                    {compileResult
-                                        ? "Đây là câu chuyện video sẽ kể, trước khi bạn tạo video mới."
-                                        : "Sau khi phân tích, bạn sẽ xem và kiểm tra kịch bản trước khi tạo video."}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {compileResult ? (
-                                    <CompilePreview result={compileResult} />
-                                ) : (
-                                    <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-control-border bg-surface-soft text-center text-sm text-text-secondary">
-                                        <Sparkles className="mb-3 size-8 text-primary/60" />
-                                        <span>
-                                            Chọn tư liệu rồi bấm Phân tích video để tạo kịch bản.
-                                        </span>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                        {compileResult && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Tạo video mới</CardTitle>
-                                    <CardDescription>
-                                        Khi bạn hài lòng với kịch bản, hãy tạo video hoàn chỉnh.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
+                            {needsPlanUpdate && (
+                                <div role="status" className="space-y-3 rounded-2xl bg-surface p-5">
+                                    <p className="text-sm text-text-secondary">
+                                        {groupingError ??
+                                            "Kịch bản này cần cập nhật để bước tạo ảnh, tạo video và kiểm tra dùng cùng thông tin sản phẩm và từng cảnh."}
+                                    </p>
                                     <Button
-                                        className="w-full"
-                                        size="lg"
-                                        disabled={render.isPending}
-                                        onClick={() => render.mutate()}
-                                    >
-                                        {render.isPending ? (
-                                            <>
-                                                <Loader2 className="animate-spin" />
-                                                Đang hoàn thiện video… {renderProgress}%
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Play />
-                                                Tạo video {duration} giây
-                                            </>
+                                        disabled={Boolean(
+                                            studio.busy || studio.project?.pendingOperation,
                                         )}
+                                        onClick={() => void studio.requestAction("reanalyze")}
+                                    >
+                                        Cập nhật kịch bản
                                     </Button>
-                                    {result && (
-                                        <div className="space-y-3 rounded-lg border border-ok/30 bg-ok-soft p-3 text-sm">
-                                            <div className="flex items-center gap-2 font-medium text-ok">
-                                                <CheckCircle2 className="size-4" />
-                                                {result.status === "completed"
-                                                    ? "Video đã sẵn sàng"
-                                                    : "Đã bắt đầu tạo video"}
-                                            </div>
-                                            {result.finalVideoUrl && (
-                                                <a
-                                                    className="text-primary underline"
-                                                    href={result.finalVideoUrl}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                >
-                                                    Mở video đã tạo
-                                                </a>
-                                            )}
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
-                    </div>
+                                </div>
+                            )}
+                            <RemakeStoryboard
+                                compileResult={previewCompile ?? studio.compiled}
+                                referenceUrl={studio.sourceUrl}
+                                productUrl={studio.productUrls[studio.primaryIndex]}
+                                onSceneChange={studio.onSceneChange}
+                                sourceCutFrames={studio.sourceCutFrames}
+                                onSourceCutFramesChange={studio.onSourceCutFramesChange}
+                                onRecompile={() => void studio.requestAction("reanalyze")}
+                                renderGroupBreaks={studio.renderGroupBreaks}
+                                onRenderGroupBreaksChange={studio.onRenderGroupBreaksChange}
+                                sourcePlanDirty={studio.sourcePlanDirty}
+                                sourceCutsDirty={studio.sourceCutsDirty}
+                                sourceCutsError={studio.sourceCutsError}
+                                isRecompiling={studio.busy === "analyze"}
+                                disabled={controlsLocked}
+                            />
+                            {studio.compiled.warnings.length > 0 && (
+                                <details className="rounded-2xl bg-surface p-4 text-sm">
+                                    <summary className="cursor-pointer text-text-secondary">
+                                        Lưu ý từ bước phân tích ({studio.compiled.warnings.length})
+                                    </summary>
+                                    <ul className="mt-3 list-disc space-y-2 pl-5 text-text-secondary">
+                                        {studio.compiled.warnings.map((warning) => (
+                                            <li key={warning}>{warning}</li>
+                                        ))}
+                                    </ul>
+                                </details>
+                            )}
+                        </div>
+                    ) : step === "result" ? (
+                        <div className="space-y-5">
+                            {!generationProgressVisible && (
+                                <RemakeResultNextStep
+                                    action={nextAction}
+                                    budget={studio.project?.budget}
+                                    technicalError={recoveryExplainsError ? studio.error : null}
+                                    onViewScript={
+                                        studio.compiled ? () => studio.setStep("plan") : undefined
+                                    }
+                                    busy={controlsLocked && nextAction.kind !== "progress"}
+                                    onAction={performNextAction}
+                                    onDismissCandidate={() => void studio.dismissRepairCandidate()}
+                                />
+                            )}
+                            {generationProgressVisible && studio.project && (
+                                <RemakeGenerationProgress
+                                    project={studio.project}
+                                    busy={controlsLocked}
+                                    onCheckStatus={() => void studio.refreshProject()}
+                                    onViewInspection={viewGenerationInspection}
+                                    onViewScript={() => studio.viewSavedScript()}
+                                />
+                            )}
+                            {studio.repairReceiptError && (
+                                <p role="alert" className="text-sm text-warn">
+                                    {studio.repairReceiptError}
+                                </p>
+                            )}
+                            {!generationProgressVisible && (
+                                <RemakeOutput
+                                    key={
+                                        studio.project?.id ??
+                                        studio.result?.finalVideoUrl ??
+                                        "pending"
+                                    }
+                                    workspaceId={workspaceId}
+                                    project={studio.project}
+                                    result={studio.result}
+                                    productUrl={activeProductUrl}
+                                    busy={controlsLocked}
+                                    onRepair={async (sceneId, repairIntent) => {
+                                        await studio.requestAction("repair", {
+                                            sceneId,
+                                            repairIntent,
+                                        });
+                                        return null;
+                                    }}
+                                    guided
+                                    generationRecoveryVisible={generationRecoveryVisible}
+                                    repairCandidate={studio.unreadRepairCandidate}
+                                    navigation={studio.outputNavigation}
+                                    initialSceneId={studio.selectedSceneId}
+                                    onSceneChange={studio.onOutputSceneChange}
+                                    repairDrafts={studio.repairDrafts}
+                                    repairFailures={studio.repairFailures}
+                                    onRepairDraftChange={studio.onRepairDraftChange}
+                                    repairDraftSaveStatus="Yêu cầu sửa đang được giữ trong phiên này"
+                                    onAccept={studio.accept}
+                                    onRefresh={() => void studio.refreshProject()}
+                                    onViewGenerationInspection={viewGenerationInspection}
+                                    onTimelineSave={studio.saveTimeline}
+                                    onPublish={studio.publish}
+                                    savingTimeline={studio.busy === "timeline"}
+                                    publishing={
+                                        studio.busy === "compose" ||
+                                        studio.project?.pendingOperation?.kind === "compose"
+                                    }
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        <div className="rounded-3xl bg-surface p-8 text-sm text-text-secondary">
+                            Thêm tư liệu và phân tích video để xem kịch bản nhé.
+                        </div>
+                    )}
+                    {studio.project && step === "plan" && requirementsDetails}
+                    {studio.project && step === "result" && (
+                        <details className="text-sm text-text-secondary">
+                            <summary className="min-h-11 w-fit cursor-pointer rounded-lg py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                Tùy chọn và thông tin
+                            </summary>
+                            <div className="mt-2 space-y-3 rounded-2xl bg-surface p-2">
+                                {requirementsDetails}
+                                <details
+                                    ref={inspectionDetails}
+                                    className="rounded-2xl bg-surface p-4"
+                                >
+                                    <summary className="min-h-11 cursor-pointer py-3 font-medium focus-visible:ring-2 focus-visible:ring-ring">
+                                        Kiểm tra và bằng chứng
+                                    </summary>
+                                    <RemakeInspector
+                                        project={studio.project}
+                                        busy={controlsLocked}
+                                        onInspect={async (subject) => {
+                                            await studio.requestAction("inspect", { subject });
+                                        }}
+                                        onReview={studio.review}
+                                        onSeek={seekEvidence}
+                                    />
+                                </details>
+                                <details
+                                    ref={projectDetails}
+                                    className="rounded-2xl bg-surface p-4"
+                                >
+                                    <summary className="min-h-11 cursor-pointer py-3 font-medium focus-visible:ring-2 focus-visible:ring-ring">
+                                        Tiến trình, quyền và thông tin dự án
+                                    </summary>
+                                    <RemakeProjectControls
+                                        project={studio.project}
+                                        busy={controlsLocked}
+                                        onApprove={studio.approve}
+                                        onExport={studio.exportAssembly}
+                                        onRestore={studio.restore}
+                                        onDelete={studio.deleteProject}
+                                        onRightsReview={studio.rightsReview}
+                                    />
+                                </details>
+                            </div>
+                        </details>
+                    )}
+                    {evidenceError && (
+                        <p role="alert" className="rounded-2xl bg-warn-soft p-4 text-sm text-warn">
+                            {evidenceError}
+                        </p>
+                    )}
+                    <Dialog
+                        open={Boolean(evidenceTarget)}
+                        onOpenChange={(open) => {
+                            if (!open) setEvidenceTarget(null);
+                        }}
+                    >
+                        <DialogContent
+                            className="max-w-3xl motion-reduce:animate-none"
+                            onCloseAutoFocus={(event) => {
+                                event.preventDefault();
+                                evidenceTrigger.current?.focus();
+                            }}
+                        >
+                            <DialogTitle>Bằng chứng kiểm tra</DialogTitle>
+                            <DialogDescription>
+                                Media gốc của bằng chứng · {evidenceTarget?.timebase} · Nhấn Escape
+                                để quay lại kết quả.
+                            </DialogDescription>
+                            {evidenceTarget?.kind === "image" ? (
+                                <img
+                                    className="mx-auto max-h-[60dvh] max-w-full object-contain"
+                                    src={evidenceTarget.url}
+                                    alt="Ảnh bằng chứng đã xác minh hash"
+                                />
+                            ) : (
+                                evidenceTarget && (
+                                    <RemakePlayer
+                                        url={evidenceTarget.url}
+                                        scope={{
+                                            start: evidenceTarget.startSecond!,
+                                            end: evidenceTarget.endSecond!,
+                                        }}
+                                        versionLabel="Bằng chứng"
+                                    />
+                                )
+                            )}
+                        </DialogContent>
+                    </Dialog>
+                    <Dialog open={Boolean(directAnalysis) && !analyzing}>
+                        <DialogContent
+                            className="max-w-3xl rounded-3xl p-5 sm:p-7"
+                            showCloseButton={false}
+                            onEscapeKeyDown={(event) => event.preventDefault()}
+                            onPointerDownOutside={(event) => event.preventDefault()}
+                            onCloseAutoFocus={(event) => {
+                                if (analyzing) event.preventDefault();
+                            }}
+                        >
+                            {directAnalysis && <RemakeAnalysisLoading {...analysisLoadingProps} />}
+                        </DialogContent>
+                    </Dialog>
+                    <RemakeActionConfirmation
+                        intent={studio.pendingAction ?? null}
+                        preflight={studio.actionPreflight ?? null}
+                        snapshot={{
+                            requirements: studio.requirements,
+                            rights: studio.rights,
+                            budget: studio.budget,
+                        }}
+                        loading={studio.actionLoading ?? false}
+                        submitting={studio.actionSubmitting ?? false}
+                        analysisPhase={studio.busy === "analyze" ? "analyzing" : "preparing"}
+                        analysisInFlight={analyzing}
+                        analysisProgress={studio.analysisProgress}
+                        analysisStartedAt={studio.analysisStartedAt}
+                        analysisStatusError={studio.analysisStatusError}
+                        checkingAnalysisStatus={studio.checkingAnalysisStatus}
+                        onCheckAnalysisStatus={
+                            studio.canCheckAnalysisStatus ? studio.checkAnalysisStatus : undefined
+                        }
+                        sourceUrl={studio.sourceUrl}
+                        error={studio.actionError ?? null}
+                        errorCode={studio.actionErrorCode ?? null}
+                        hasCharacter={Boolean(studio.characterFile || studio.characterUrl)}
+                        productUrl={analysisLoadingProps.productUrl}
+                        productUrls={studio.productUrls}
+                        primaryIndex={studio.primaryIndex}
+                        sceneNumber={
+                            actionSceneIndex >= 0
+                                ? studio.project!.scenes[actionSceneIndex].index + 1
+                                : undefined
+                        }
+                        sceneLabel={
+                            studio.project && actionSceneId
+                                ? getRemakeSceneLabel(
+                                      studio.project,
+                                      actionSceneId,
+                                      actionSceneIndex,
+                                  )
+                                : undefined
+                        }
+                        versionNumber={actionVersionIndex >= 0 ? actionVersionIndex + 1 : undefined}
+                        onConfirm={studio.confirmAction}
+                        onCancel={studio.cancelAction}
+                        onRetry={() => {
+                            if (
+                                studio.actionPreflight?.blockers.some(
+                                    (item) =>
+                                        item.action === "reconcile" || item.action === "refresh",
+                                )
+                            ) {
+                                studio.cancelAction();
+                                studio.setStep("result");
+                                void studio.refreshProject();
+                            } else void studio.retryAction();
+                        }}
+                    />
+                    {studio.notice && !generationProgressVisible && (
+                        <p
+                            role="status"
+                            aria-live="polite"
+                            className="flex items-start gap-2 text-xs leading-relaxed text-text-secondary"
+                        >
+                            <Check className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                            {studio.notice}
+                        </p>
+                    )}
                 </div>
-
-                {compileResult && (
-                    <Card className="overflow-hidden border-primary/25">
-                        <CardHeader className="border-b border-primary/15 bg-primary/[0.04]">
-                            <CardTitle className="flex items-center gap-2">
-                                <Sparkles className="size-5 text-primary" />
-                                Prompt tạo video
-                            </CardTitle>
-                            <CardDescription>
-                                Nội dung đầy đủ hệ thống sẽ dùng để tạo video mới cho bạn.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <PromptInspector result={compileResult} />
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </AppShell>
     );
 }
 
-function SmartRemakeFlow({
-    referenceVideo,
-    productImages,
-    referencePreviewUrl,
-    productPreviewUrls,
-    linkedProduct,
-    productLink,
-    compileResult,
-    result,
-    isCompiling,
-    isRendering,
-    analysisStep,
-    renderProgress,
-    uploadDisabled,
-    referenceVideoElementRef,
-    onReferenceVideoChange,
-    onProductImagesChange,
-    onProductLinkChange,
-    onProductLinkSubmit,
-    isProductLinkLoading,
-    onOutputPlaybackChange,
-}: {
-    referenceVideo: File | null;
-    productImages: File[];
-    referencePreviewUrl: string | null;
-    productPreviewUrls: string[];
-    linkedProduct: ProductLinkSelection | null;
-    productLink: string;
-    compileResult: SmartRemakeCompileResult | null;
-    result: SmartRemakeRenderState | null;
-    isCompiling: boolean;
-    isRendering: boolean;
-    analysisStep: number;
-    renderProgress: number;
-    uploadDisabled: boolean;
-    referenceVideoElementRef: RefObject<HTMLVideoElement | null>;
-    onReferenceVideoChange: (file: File | null) => void;
-    onProductImagesChange: (files: File[]) => void;
-    onProductLinkChange: (value: string) => void;
-    onProductLinkSubmit: () => void;
-    isProductLinkLoading: boolean;
-    onOutputPlaybackChange: (playing: boolean) => void;
-}) {
+function busyLabel(kind: string) {
     return (
-        <Card className="overflow-hidden">
-            <CardHeader className="border-b border-control-border bg-surface-soft/50">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                        <CardTitle>Video của bạn sẽ được làm mới như thế nào?</CardTitle>
-                        <CardDescription>Video mẫu → sản phẩm của bạn → video mới.</CardDescription>
-                    </div>
-                    <StatusChip tone={result?.status === "completed" ? "ok" : "info"}>
-                        {result?.status === "completed"
-                            ? "Video sẵn sàng"
-                            : compileResult
-                              ? "Kịch bản sẵn sàng"
-                              : "Chọn nội dung"}
-                    </StatusChip>
-                </div>
-            </CardHeader>
-            <CardContent className="p-4 md:p-6">
-                <div className="grid items-stretch gap-3 sm:grid-cols-[minmax(0,0.8fr)_auto_minmax(0,1.3fr)_auto_minmax(0,0.8fr)]">
-                    <FlowInputSlot
-                        label="Video mẫu"
-                        icon={FileVideo}
-                        file={referenceVideo}
-                        accept="video/mp4,video/webm,video/quicktime"
-                        description="Tải video mẫu để bắt đầu"
-                        previewUrl={referencePreviewUrl}
-                        portraitFrame
-                        disabled={uploadDisabled}
-                        videoElementRef={referenceVideoElementRef}
-                        onChange={onReferenceVideoChange}
-                    />
-                    <FlowArrow />
-                    <ProductImagesSlot
-                        files={productImages}
-                        previewUrls={productPreviewUrls}
-                        linkedProduct={linkedProduct}
-                        productLink={productLink}
-                        disabled={uploadDisabled}
-                        onChange={onProductImagesChange}
-                        onProductLinkChange={onProductLinkChange}
-                        onProductLinkSubmit={onProductLinkSubmit}
-                        isProductLinkLoading={isProductLinkLoading}
-                    />
-                    <FlowArrow />
-                    <OutputSlot
-                        compileResult={compileResult}
-                        isCompiling={isCompiling}
-                        isRendering={isRendering}
-                        analysisStep={analysisStep}
-                        renderProgress={renderProgress}
-                        result={result}
-                        onPlaybackChange={onOutputPlaybackChange}
-                    />
-                </div>
-                <WorkflowProgress
-                    complete={Boolean(compileResult)}
-                    isCompiling={isCompiling}
-                    isRendering={isRendering}
-                    analysisStep={analysisStep}
-                    renderProgress={renderProgress}
-                />
-            </CardContent>
-        </Card>
-    );
-}
-
-function FlowInputSlot({
-    label,
-    icon: Icon,
-    file,
-    accept,
-    description,
-    previewUrl,
-    isProduct = false,
-    portraitFrame = false,
-    disabled = false,
-    videoElementRef,
-    onChange,
-}: {
-    label: string;
-    icon: LucideIcon;
-    file: File | null;
-    accept: string;
-    description: string;
-    previewUrl: string | null;
-    isProduct?: boolean;
-    portraitFrame?: boolean;
-    disabled?: boolean;
-    videoElementRef?: RefObject<HTMLVideoElement | null>;
-    onChange: (file: File | null) => void;
-}) {
-    const ref = useRef<HTMLInputElement>(null);
-    const isVideo = accept.startsWith("video/");
-
-    return (
-        <SurfaceCard
-            className={cn("h-full min-w-0", isProduct && "border-primary/35 bg-primary/[0.03]")}
-            highlight={isProduct && Boolean(file)}
-            padding="sm"
-            variant={file ? "raised" : "outlined"}
-        >
-            <div className="flex h-full min-h-64 flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                        <Icon className={cn("size-4", isProduct && "text-primary")} />
-                        {label}
-                    </div>
-                    {file && <StatusChip tone="ok">Đã chọn</StatusChip>}
-                </div>
-                <div
-                    className={cn(
-                        "flex flex-1",
-                        portraitFrame && "mx-auto w-full max-w-40 items-center justify-center",
-                    )}
-                >
-                    <button
-                        type="button"
-                        aria-label={`Chọn ${label.toLowerCase()}`}
-                        disabled={disabled}
-                        onClick={() => ref.current?.click()}
-                        className={cn(
-                            "group relative flex min-h-40 w-full flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-control-border bg-surface-soft text-center transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70",
-                            portraitFrame && "aspect-[9/16] min-h-0",
-                        )}
-                    >
-                        {previewUrl ? (
-                            isVideo ? (
-                                <video
-                                    ref={videoElementRef}
-                                    aria-hidden="true"
-                                    className="size-full object-cover"
-                                    autoPlay
-                                    loop
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                    src={previewUrl}
-                                />
-                            ) : (
-                                <img
-                                    alt={`${label} preview`}
-                                    className="size-full object-cover"
-                                    src={previewUrl}
-                                />
-                            )
-                        ) : (
-                            <span className="flex flex-col items-center gap-2 px-4">
-                                <span className="grid size-10 place-items-center rounded-full bg-surface text-text-secondary shadow-sm">
-                                    <Upload className="size-4" aria-hidden="true" />
-                                </span>
-                                <span className="text-sm font-medium text-text-primary">
-                                    {portraitFrame ? "Chọn video" : `Chọn ${label.toLowerCase()}`}
-                                </span>
-                            </span>
-                        )}
-                        {previewUrl && !disabled && (
-                            <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-surface to-transparent px-3 pb-3 pt-8 text-left text-xs font-medium text-text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                Thay {label.toLowerCase()}
-                            </span>
-                        )}
-                    </button>
-                </div>
-                <div className="space-y-1">
-                    <p className="truncate text-sm font-medium text-text-primary">
-                        {file?.name ?? (isProduct ? "Ảnh sản phẩm của bạn" : "Video mẫu của bạn")}
-                    </p>
-                    <p className="text-xs text-text-secondary">{description}</p>
-                </div>
-            </div>
-            <input
-                ref={ref}
-                className="sr-only"
-                type="file"
-                accept={accept}
-                onChange={(event) => onChange(event.target.files?.[0] ?? null)}
-            />
-        </SurfaceCard>
-    );
-}
-
-function ProductImagesSlot({
-    files,
-    previewUrls,
-    linkedProduct,
-    productLink,
-    disabled,
-    onChange,
-    onProductLinkChange,
-    onProductLinkSubmit,
-    isProductLinkLoading,
-}: {
-    files: File[];
-    previewUrls: string[];
-    linkedProduct: ProductLinkSelection | null;
-    productLink: string;
-    disabled: boolean;
-    onChange: (files: File[]) => void;
-    onProductLinkChange: (value: string) => void;
-    onProductLinkSubmit: () => void;
-    isProductLinkLoading: boolean;
-}) {
-    const ref = useRef<HTMLInputElement>(null);
-    const imageCount = previewUrls.length;
-
-    return (
-        <SurfaceCard
-            className="h-full min-w-0 border-primary/35 bg-primary/[0.03]"
-            highlight={imageCount > 0}
-            padding="sm"
-            variant={imageCount ? "raised" : "outlined"}
-        >
-            <div className="flex h-full min-h-64 flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                        <FileImage className="size-4 text-primary" />
-                        Ảnh sản phẩm
-                    </div>
-                    {imageCount > 0 && <StatusChip tone="ok">Đã có {imageCount} ảnh</StatusChip>}
-                </div>
-                <button
-                    type="button"
-                    aria-label="Chọn ảnh sản phẩm"
-                    disabled={disabled}
-                    onClick={() => ref.current?.click()}
-                    className={cn(
-                        "group grid flex-1 gap-2 rounded-lg border border-dashed border-control-border bg-surface-soft p-2 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70",
-                        previewUrls.length <= 1
-                            ? "grid-cols-1"
-                            : previewUrls.length === 2
-                              ? "grid-cols-2"
-                              : "grid-cols-2 lg:grid-cols-3",
-                    )}
-                >
-                    {previewUrls.length ? (
-                        previewUrls.map((imageUrl, index) => (
-                            <div
-                                className="relative min-h-40 overflow-hidden rounded-md bg-surface"
-                                key={imageUrl}
-                            >
-                                <img
-                                    alt={`Ảnh sản phẩm ${index + 1}`}
-                                    className="size-full object-cover"
-                                    src={imageUrl}
-                                />
-                                <span className="absolute bottom-2 left-2 rounded bg-surface/90 px-1.5 py-0.5 text-[10px] font-semibold text-text-primary">
-                                    Ảnh {index + 1}
-                                </span>
-                            </div>
-                        ))
-                    ) : (
-                        <span className="col-span-full flex min-h-40 flex-col items-center justify-center gap-2 rounded-md bg-surface px-3 text-center">
-                            <span className="grid size-9 place-items-center rounded-full bg-surface-soft text-text-secondary shadow-sm">
-                                <Upload className="size-4" aria-hidden="true" />
-                            </span>
-                            <span className="text-sm font-medium text-text-primary">
-                                Tải ảnh sản phẩm
-                            </span>
-                        </span>
-                    )}
-                </button>
-                <div className="space-y-1">
-                    <p className="text-sm font-medium text-text-primary">
-                        {linkedProduct
-                            ? linkedProduct.title
-                            : imageCount
-                              ? `${imageCount} ảnh đã chọn`
-                              : "Tải ảnh sản phẩm"}
-                    </p>
-                    <p className="text-xs text-text-secondary">
-                        {linkedProduct
-                            ? "Ảnh được lấy từ link sản phẩm của bạn."
-                            : "Bạn có thể thêm nhiều ảnh cùng lúc."}
-                    </p>
-                </div>
-                <div className="border-t border-control-border pt-3">
-                    <p className="mb-2 text-xs font-medium text-text-secondary">
-                        Hoặc dán link sản phẩm
-                    </p>
-                    <div className="flex gap-2">
-                        <Input
-                            aria-label="Link sản phẩm"
-                            type="url"
-                            value={productLink}
-                            placeholder="Dán link sản phẩm"
-                            disabled={disabled || isProductLinkLoading}
-                            onChange={(event) => onProductLinkChange(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    onProductLinkSubmit();
-                                }
-                            }}
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="shrink-0"
-                            disabled={disabled || isProductLinkLoading || !productLink.trim()}
-                            onClick={onProductLinkSubmit}
-                        >
-                            {isProductLinkLoading ? (
-                                <Loader2 className="animate-spin" aria-label="Đang lấy ảnh" />
-                            ) : (
-                                <Link2 />
-                            )}
-                            {isProductLinkLoading ? "Đang lấy" : "Lấy ảnh"}
-                        </Button>
-                    </div>
-                </div>
-            </div>
-            <input
-                ref={ref}
-                className="sr-only"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={(event) => {
-                    const selectedFiles = Array.from(event.target.files ?? []);
-                    event.currentTarget.value = "";
-                    onChange(selectedFiles);
-                }}
-            />
-        </SurfaceCard>
-    );
-}
-
-function FlowArrow() {
-    return (
-        <div className="flex items-center justify-center" aria-hidden="true">
-            <div className="grid size-9 rotate-90 place-items-center rounded-full border border-control-border bg-surface text-primary shadow-sm sm:rotate-0">
-                <ArrowRight className="size-4" />
-            </div>
-        </div>
-    );
-}
-
-function OutputSlot({
-    compileResult,
-    result,
-    isCompiling,
-    isRendering,
-    analysisStep,
-    renderProgress,
-    onPlaybackChange,
-}: {
-    compileResult: SmartRemakeCompileResult | null;
-    result: SmartRemakeRenderState | null;
-    isCompiling: boolean;
-    isRendering: boolean;
-    analysisStep: number;
-    renderProgress: number;
-    onPlaybackChange: (playing: boolean) => void;
-}) {
-    const completedVideo = result?.status === "completed" ? result.finalVideoUrl : null;
-    const workflow = getSmartRemakeWorkflowProgress({
-        analysisStep,
-        isCompiling,
-        isRendering,
-        renderProgress,
-    });
-    const currentAnalysis = workflow.steps[workflow.currentStep];
-    const statusLabel = isRendering
-        ? `Đang hoàn thiện video · ${renderProgress}%`
-        : isCompiling
-          ? currentAnalysis.label
-          : completedVideo
-            ? "Video đã tạo"
-            : compileResult
-              ? "Sẵn sàng tạo video"
-              : "Đợi video và ảnh";
-
-    return (
-        <SurfaceCard
-            className="h-full min-w-0"
-            padding="sm"
-            variant={completedVideo ? "raised" : "outlined"}
-        >
-            <div className="flex h-full min-h-64 flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                        <Sparkles className="size-4 text-primary" aria-hidden="true" />
-                        Video mới
-                    </div>
-                    {completedVideo && <StatusChip tone="ok">Sẵn sàng</StatusChip>}
-                </div>
-                <div className="mx-auto flex aspect-[9/16] w-full max-w-40 items-center justify-center overflow-hidden rounded-lg border border-dashed border-control-border bg-surface-soft">
-                    {completedVideo ? (
-                        <video
-                            className="size-full object-cover"
-                            controls
-                            onEnded={() => onPlaybackChange(false)}
-                            onPause={() => onPlaybackChange(false)}
-                            onPlay={() => onPlaybackChange(true)}
-                            playsInline
-                            preload="metadata"
-                            src={completedVideo}
-                        />
-                    ) : isRendering ? (
-                        <div className="flex w-full flex-col items-center gap-3 px-4 text-center">
-                            <Loader2
-                                className="size-7 animate-spin text-primary"
-                                aria-label={statusLabel}
-                            />
-                            <div>
-                                <p className="text-sm font-medium text-text-primary">
-                                    Đang hoàn thiện video
-                                </p>
-                                <p className="mt-1 text-xs text-text-secondary">
-                                    {renderProgress}% · chỉ còn một chút nữa
-                                </p>
-                            </div>
-                            <div
-                                aria-label="Tiến độ tạo video"
-                                aria-valuemax={100}
-                                aria-valuemin={0}
-                                aria-valuenow={renderProgress}
-                                className="h-1.5 w-full overflow-hidden rounded-full bg-control-border"
-                                role="progressbar"
-                            >
-                                <div
-                                    className="h-full rounded-full bg-primary transition-[width] duration-500"
-                                    style={{ width: `${renderProgress}%` }}
-                                />
-                            </div>
-                        </div>
-                    ) : isCompiling ? (
-                        <div
-                            className="flex w-full flex-col items-center gap-3 px-4 text-center"
-                            aria-live="polite"
-                        >
-                            <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
-                                <Sparkles className="size-5 animate-pulse" aria-hidden="true" />
-                            </span>
-                            <div>
-                                <p className="text-sm font-medium text-text-primary">
-                                    {currentAnalysis.label}
-                                </p>
-                                <p className="mt-1 text-xs leading-5 text-text-secondary">
-                                    {currentAnalysis.detail}
-                                </p>
-                            </div>
-                            <p className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium tabular-nums text-primary">
-                                Bước {workflow.currentStep + 1}/{workflow.steps.length}
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center gap-2 px-5 text-center">
-                            <span className="grid size-10 place-items-center rounded-full bg-surface text-primary shadow-sm">
-                                <Wand2 className="size-4" aria-hidden="true" />
-                            </span>
-                            <span className="text-sm font-medium text-text-primary">
-                                Video mới sẽ xuất hiện ở đây
-                            </span>
-                        </div>
-                    )}
-                </div>
-                <div className="space-y-1">
-                    <p className="text-sm font-medium text-text-primary">{statusLabel}</p>
-                    <p className="text-xs text-text-secondary">
-                        {isCompiling
-                            ? "Đang biến tư liệu bạn chọn thành kịch bản có thể xem trước."
-                            : compileResult
-                              ? `${compileResult.sceneMap.sceneCount === 1 ? "Một phần nội dung" : "Hai phần nội dung"} · ${compileResult.inputSummary.targetDuration} giây`
-                              : "Chọn tư liệu, sau đó bấm Phân tích video để tiếp tục."}
-                    </p>
-                </div>
-            </div>
-        </SurfaceCard>
-    );
-}
-
-function WorkflowProgress({
-    complete,
-    isCompiling,
-    isRendering,
-    analysisStep,
-    renderProgress,
-}: {
-    complete: boolean;
-    isCompiling: boolean;
-    isRendering: boolean;
-    analysisStep: number;
-    renderProgress: number;
-}) {
-    if (!isCompiling && !isRendering && !complete) return null;
-
-    const workflow = getSmartRemakeWorkflowProgress({
-        analysisStep,
-        isCompiling,
-        isRendering,
-        renderProgress,
-    });
-    const isComplete = complete && !isCompiling && !isRendering;
-    const activeStep = workflow.steps[workflow.currentStep];
-    const heading = isRendering
-        ? "Đang tạo video mới"
-        : isCompiling
-          ? "Đang phân tích video của bạn"
-          : "Kịch bản đã sẵn sàng";
-
-    return (
-        <section
-            aria-label="Tiến trình Smart Remake"
-            aria-live="polite"
-            className="mt-5 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-surface to-surface shadow-sm"
-        >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-primary/15 px-5 py-4 sm:px-6">
-                <div className="flex min-w-0 items-start gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                        {isComplete ? (
-                            <CheckCircle2 className="size-5" aria-hidden="true" />
-                        ) : (
-                            <Sparkles className="size-5 animate-pulse" aria-hidden="true" />
-                        )}
-                    </span>
-                    <div>
-                        <p className="text-sm font-semibold text-text-primary">{heading}</p>
-                        <p className="mt-1 text-sm leading-5 text-text-secondary">
-                            {isComplete
-                                ? "Bạn có thể xem prompt, kiểm tra kịch bản và tạo video khi sẵn sàng."
-                                : activeStep.detail}
-                        </p>
-                    </div>
-                </div>
-                <StatusChip tone={isComplete ? "ok" : "info"}>
-                    {isComplete ? "Hoàn tất" : `${workflow.percentage}% hoàn thành`}
-                </StatusChip>
-            </div>
-            <div className="px-5 py-5 sm:px-6">
-                <div
-                    aria-label={isRendering ? "Tiến độ tạo video" : "Tiến độ Smart Remake"}
-                    aria-valuemax={100}
-                    aria-valuemin={0}
-                    aria-valuenow={workflow.percentage}
-                    className="mb-5 h-2.5 overflow-hidden rounded-full bg-primary/10"
-                    role="progressbar"
-                >
-                    <div
-                        className="h-full rounded-full bg-primary transition-[width] duration-500"
-                        style={{ width: `${workflow.percentage}%` }}
-                    />
-                </div>
-                <ol
-                    className={cn(
-                        "grid gap-2 sm:grid-cols-2",
-                        workflow.steps.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4",
-                    )}
-                >
-                    {workflow.steps.map((item, index) => {
-                        const done = isComplete || index < workflow.currentStep;
-                        const current = !isComplete && index === workflow.currentStep;
-                        return (
-                            <li
-                                className={cn(
-                                    "rounded-xl border p-3 transition-colors",
-                                    done
-                                        ? "border-primary/25 bg-primary/5"
-                                        : current
-                                          ? "border-primary bg-surface shadow-sm"
-                                          : "border-control-border bg-surface/70",
-                                )}
-                                key={item.label}
-                            >
-                                <div className="mb-2 flex items-center justify-between gap-2">
-                                    <span
-                                        className={cn(
-                                            "grid size-6 place-items-center rounded-full border text-xs font-semibold",
-                                            done
-                                                ? "border-primary bg-primary text-primary-foreground"
-                                                : current
-                                                  ? "border-primary bg-primary/10 text-primary"
-                                                  : "border-control-border text-text-secondary",
-                                        )}
-                                    >
-                                        {done ? (
-                                            <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                                        ) : (
-                                            index + 1
-                                        )}
-                                    </span>
-                                    {current && (
-                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                                            Đang thực hiện
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-sm font-semibold leading-5 text-text-primary">
-                                    {item.label}
-                                </p>
-                                <p className="mt-1 text-xs leading-5 text-text-secondary">
-                                    {item.detail}
-                                </p>
-                            </li>
-                        );
-                    })}
-                </ol>
-            </div>
-        </section>
-    );
-}
-
-function usePreviewUrl(file: File | null) {
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!file) {
-            setPreviewUrl(null);
-            return;
-        }
-
-        const objectUrl = URL.createObjectURL(file);
-        setPreviewUrl(objectUrl);
-        return () => URL.revokeObjectURL(objectUrl);
-    }, [file]);
-
-    return previewUrl;
-}
-
-function usePreviewUrls(files: File[]) {
-    const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-
-    useEffect(() => {
-        const objectUrls = files.map((file) => URL.createObjectURL(file));
-        setPreviewUrls(objectUrls);
-        return () => objectUrls.forEach((url) => URL.revokeObjectURL(url));
-    }, [files]);
-
-    return previewUrls;
-}
-
-function CompilePreview({ result }: { result: SmartRemakeCompileResult }) {
-    const lock = result.productLock;
-    return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-surface-soft p-3">
-                    <div className="text-xs text-text-secondary">Sản phẩm chính</div>
-                    <div className="mt-1 font-medium text-text-primary">
-                        {String(lock.productName ?? "Sản phẩm của bạn")}
-                    </div>
-                </div>
-                <div className="rounded-lg bg-surface-soft p-3">
-                    <div className="text-xs text-text-secondary">Thời lượng</div>
-                    <div className="mt-1 font-medium text-text-primary">
-                        {result.inputSummary.targetDuration} giây
-                    </div>
-                </div>
-            </div>
-            <div className="space-y-3">
-                {result.sceneMap.scenes.map((scene, index) => (
-                    <StoryCard
-                        key={String(scene.sceneId ?? index)}
-                        scene={scene}
-                        sceneIndex={index}
-                    />
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function PromptInspector({ result }: { result: SmartRemakeCompileResult }) {
-    return (
-        <div className="space-y-6">
-            <div className="space-y-4">
-                {result.compiledPrompts.map((compiledPrompt, index) => (
-                    <div className="space-y-3" key={index}>
-                        <div className="flex items-center gap-2">
-                            <span className="grid size-7 place-items-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                {index + 1}
-                            </span>
-                            <p className="text-sm font-semibold text-text-primary">
-                                Prompt phần {index + 1}
-                            </p>
-                        </div>
-                        <pre className="min-h-72 max-h-[38rem] overflow-auto whitespace-pre-wrap break-words rounded-2xl border-2 border-primary/25 bg-primary/[0.035] p-5 font-mono text-sm leading-7 text-text-primary shadow-sm">
-                            {rawPromptFromCompiled(compiledPrompt)}
-                        </pre>
-                    </div>
-                ))}
-            </div>
-            <details className="rounded-xl border border-control-border bg-surface-soft px-4 py-3">
-                <summary className="cursor-pointer text-sm font-medium text-text-secondary">
-                    Xem dữ liệu chi tiết
-                </summary>
-                <pre className="mt-4 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-control-border bg-surface p-3 font-mono text-xs leading-5 text-text-primary">
-                    {JSON.stringify(result, null, 2)}
-                </pre>
-            </details>
-        </div>
-    );
-}
-
-function rawPromptFromCompiled(compiledPrompt: Record<string, unknown>) {
-    const promptKeys = ["prompt", "videoPrompt", "imagePrompt", "negativePrompt", "rawPrompt"];
-    const sections = promptKeys.flatMap((key) => {
-        const value = compiledPrompt[key];
-        return typeof value === "string" && value.trim() ? [`${key}:\n${value.trim()}`] : [];
-    });
-
-    return sections.length ? sections.join("\n\n") : JSON.stringify(compiledPrompt, null, 2);
-}
-
-function StoryCard({ scene, sceneIndex }: { scene: Record<string, unknown>; sceneIndex: number }) {
-    const story = storyFromScene(scene);
-    return (
-        <div className="rounded-lg border border-control-border p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="font-medium text-text-primary">Phần {sceneIndex + 1}</p>
-                <StatusChip tone="info">{story.duration} giây</StatusChip>
-            </div>
-            <div className="space-y-3">
-                {story.beats.map((beat) => (
-                    <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3" key={beat.label}>
-                        <span className="text-xs font-medium text-primary">{beat.label}</span>
-                        <p className="text-sm leading-6 text-text-primary">{beat.text}</p>
-                    </div>
-                ))}
-            </div>
-            {story.onScreenText ? (
-                <div className="mt-4 rounded-md bg-surface-soft px-3 py-2 text-sm text-text-secondary">
-                    <span className="font-medium text-text-primary">
-                        Thông điệp trên màn hình:{" "}
-                    </span>
-                    {story.onScreenText}
-                </div>
-            ) : null}
-        </div>
-    );
-}
-
-function storyFromScene(scene: Record<string, unknown>) {
-    const shotPlan = recordValue(scene.shotPlan);
-    const shots = Array.isArray(shotPlan?.shots)
-        ? shotPlan.shots
-              .map(recordValue)
-              .filter((shot): shot is Record<string, unknown> => Boolean(shot))
-        : [];
-    const actionFor = (roles: string[], fallback: string) => {
-        const shot = roles
-            .map((role) => shots.find((item) => String(item.role ?? "") === role))
-            .find(Boolean);
-        return readableText(shot?.action, fallback);
-    };
-    const duration = Number(shotPlan?.targetDuration ?? 8);
-
-    return {
-        duration: Number.isFinite(duration) ? duration : 8,
-        beats: [
+        (
             {
-                label: "Mở đầu",
-                text: actionFor(
-                    ["hook", "setup"],
-                    "Mở ngay bằng khoảnh khắc khiến người xem chú ý đến sản phẩm.",
-                ),
-            },
-            {
-                label: "Điểm nổi bật",
-                text: actionFor(
-                    ["demonstration", "action", "feature", "proof"],
-                    "Cho sản phẩm vào tình huống sử dụng thực tế và làm rõ lợi ích chính.",
-                ),
-            },
-            {
-                label: "Kết thúc",
-                text: actionFor(
-                    ["result", "payoff", "cta"],
-                    "Khép lại bằng kết quả rõ ràng và hình ảnh sản phẩm dễ nhớ.",
-                ),
-            },
-        ],
-        onScreenText: readableText(scene.textOverlay, ""),
-    };
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-    return value && typeof value === "object" && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : null;
-}
-
-function readableText(value: unknown, fallback: string) {
-    if (typeof value !== "string" || !value.trim()) return fallback;
-    const normalized = value.replace(/\s+/g, " ").trim();
-    return normalized.length > 220 ? `${normalized.slice(0, 217).trimEnd()}…` : normalized;
-}
-
-function productLinkSelection(preview: ProductCrawlPreview): ProductLinkSelection {
-    const metadata = preview.product_draft.metadata_json;
-    const imageUrls = [
-        metadata.image_url,
-        preview.crawl.image,
-        ...stringValues(metadata.screenshots),
-        ...stringValues(metadata.buyer_images),
-    ].filter((value, index, values): value is string => {
-        if (typeof value !== "string" || !isPublicImageUrl(value)) return false;
-        return values.indexOf(value) === index;
-    });
-
-    return {
-        sourceUrl: preview.source_url,
-        title: preview.product_draft.name,
-        description: preview.product_draft.description ?? null,
-        imageUrls,
-    };
-}
-
-function stringValues(value: unknown): string[] {
-    return Array.isArray(value)
-        ? value.filter((item): item is string => typeof item === "string")
-        : [];
-}
-
-function isPublicImageUrl(value: string): boolean {
-    try {
-        const url = new URL(value);
-        return url.protocol === "https:" || url.protocol === "http:";
-    } catch {
-        return false;
-    }
+                analyze: "Đang phân tích video mẫu…",
+                generate: "Đang tạo video cho bạn…",
+                repair: "Đang tạo lại cảnh đã chọn…",
+                compose: "Đang ghép video…",
+                restore: "Đang mở các phiên bản…",
+                sample: "Đang thêm tư liệu mẫu…",
+                link: "Đang lấy thông tin sản phẩm…",
+                timeline: "Đang lưu đoạn đã chọn…",
+                context: "Đang lưu yêu cầu và quyền…",
+                inspect: "Đang gửi yêu cầu kiểm tra…",
+                review: "Đang lưu quyết định xem xét…",
+                approve: "Đang duyệt thành phẩm…",
+                export: "Đang kiểm tra và cấp bản xuất…",
+                delete: "Đang ngừng dùng hoặc xóa tư liệu…",
+            } as Record<string, string>
+        )[kind] ?? "Đang xử lý…"
+    );
 }

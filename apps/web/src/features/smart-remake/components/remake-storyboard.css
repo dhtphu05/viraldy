@@ -1,0 +1,204 @@
+.remake-storyboard {
+    min-width: 0;
+}
+.remake-storyboard-overview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 4px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+.remake-storyboard-overview > span {
+    color: var(--color-text-tertiary);
+}
+.remake-storyboard-workspace {
+    display: grid;
+    min-width: 0;
+    align-items: stretch;
+    gap: 20px;
+}
+.remake-storyboard-reference,
+.remake-storyboard-review {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 22px;
+    background: var(--color-surface);
+    box-shadow:
+        0 4px 18px #21172504,
+        0 16px 40px #21172503;
+    scroll-margin-top: 24px;
+}
+.remake-storyboard-section-heading {
+    display: flex;
+    min-height: 70px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 24px 14px;
+}
+.remake-storyboard-section-heading h2 {
+    color: var(--color-text-primary);
+    font-size: 15px;
+    font-weight: 600;
+}
+.remake-storyboard-section-heading p {
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    line-height: 1.6;
+}
+.remake-storyboard-source {
+    padding: 0 24px 24px;
+}
+.remake-storyboard-source > section {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+.remake-storyboard-source section > div > div > div:first-child {
+    background: #19171d;
+}
+.remake-storyboard-source video {
+    box-shadow: 0 10px 28px #00000026;
+}
+.remake-storyboard-source .remake-filmstrip-scene {
+    min-height: 106px;
+    padding-inline: 10px;
+}
+.remake-storyboard-product {
+    display: flex;
+    min-width: 0;
+    align-items: start;
+    gap: 16px;
+    margin-top: auto;
+    padding: 22px 24px;
+    background: #faf9fb;
+}
+.remake-storyboard-product__image {
+    width: 88px;
+    height: 104px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 12px;
+}
+.remake-storyboard-product__image .remake-image-preview__trigger .remake-image-preview__surface {
+    height: 104px;
+}
+.remake-storyboard-product__image .remake-image-preview__surface > img {
+    padding: 8px;
+}
+.remake-storyboard-product__image .remake-image-preview__trigger {
+    box-shadow: none;
+}
+.remake-storyboard-product__image .remake-image-preview__badge {
+    right: 4px;
+    bottom: 4px;
+    gap: 0;
+    padding: 4px;
+    border: 0;
+    box-shadow: none;
+    font-size: 0;
+}
+.remake-storyboard-product__details {
+    display: grid;
+    gap: 5px;
+    margin-top: 8px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.6;
+}
+.remake-script-scene {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.remake-script-scene__header {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 14px;
+}
+.remake-script-scene__thumbnail {
+    width: 54px;
+    height: 60px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 8px;
+}
+.remake-script-scene__timing {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+}
+.remake-script-scene__timing p {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.remake-script-scene__timing svg {
+    width: 13px;
+    height: 13px;
+}
+.remake-script-scene__action {
+    padding-block: 8px;
+}
+.remake-script-scene__action > p {
+    font-size: 16px;
+    line-height: 1.85;
+    color: var(--color-text-primary);
+}
+.remake-script-scene__intent {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1.8;
+}
+.remake-script-scene__advanced {
+    border: 0;
+    background: #f8f8fa;
+}
+.remake-storyboard-generation {
+    min-width: 0;
+    padding: 4px;
+    border: 0;
+    background: transparent;
+    scroll-margin-top: 24px;
+}
+.remake-storyboard-generation > summary {
+    min-height: 44px;
+    padding-block: 12px;
+    border-radius: 6px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+}
+.remake-storyboard-generation > summary:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 4px;
+}
+.remake-storyboard-generation > section {
+    margin-top: 8px;
+    border: 0;
+    background: var(--color-surface);
+}
+.remake-storyboard-next {
+    padding: 0 4px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1.7;
+}
+@media (min-width: 1100px) {
+    .remake-storyboard-workspace {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

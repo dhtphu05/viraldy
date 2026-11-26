@@ -1,0 +1,379 @@
+.remake-generation-progress {
+    min-width: 0;
+    overflow: hidden;
+    padding: clamp(18px, 3vw, 28px);
+    border: 1px solid var(--control-border, #ececf0);
+    border-radius: 28px;
+    background: var(--surface, #fff);
+    color: var(--text-primary, #202028);
+}
+.remake-generation-progress__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+.remake-generation-progress__header h2 {
+    max-width: 40ch;
+    margin: 10px 0 8px;
+    font-size: clamp(20px, 2.5vw, 26px);
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.025em;
+}
+.remake-generation-progress__eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-secondary, #666674);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+}
+.remake-generation-progress__eyebrow svg {
+    width: 15px;
+    height: 15px;
+    color: #e00b41;
+}
+.remake-generation-progress__description {
+    max-width: 70ch;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary, #666674);
+}
+.remake-generation-progress__clock {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: 14px auto;
+    align-items: center;
+    gap: 5px;
+    border-radius: 12px;
+    padding: 10px;
+    background: var(--surface-soft, #f7f7f9);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.remake-generation-progress__clock svg {
+    width: 14px;
+    height: 14px;
+}
+.remake-generation-progress__clock > span {
+    grid-column: 1 / -1;
+    font-size: 9px;
+    color: var(--text-secondary, #666674);
+}
+.remake-generation-progress__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0;
+    font-size: 12px;
+}
+.remake-generation-progress__summary > span {
+    padding: 7px 10px;
+    border: 1px solid var(--control-border, #ececf0);
+    border-radius: 100px;
+}
+.remake-generation-progress__summary > span:first-child {
+    color: #b90836;
+    background: #fff1f5;
+    border-color: #ffdae4;
+}
+.remake-generation-progress__references {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 22px;
+    padding: 12px;
+    border-radius: 16px;
+    background: var(--surface-soft, #f7f7f9);
+}
+.remake-generation-progress__references figure {
+    display: flex;
+    flex: 1 1 180px;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+}
+.remake-generation-progress__references figure > img,
+.remake-generation-progress__references video {
+    flex-shrink: 0;
+    width: 46px;
+    height: 56px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: white;
+}
+.remake-generation-progress__references figcaption {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.remake-generation-progress__references figcaption svg {
+    margin-top: 2px;
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    color: #e00b41;
+}
+.remake-generation-progress__references small {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-secondary, #666674);
+    font-size: 10px;
+    font-weight: 400;
+}
+.remake-generation-progress__groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.remake-generation-progress__group {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--control-border, #ececf0);
+    border-radius: 20px;
+}
+.remake-generation-progress__group[data-stage="blocked"] {
+    border-color: #f1d7b5;
+}
+.remake-generation-progress__group[data-active="true"] {
+    border-color: #f5a7bd;
+    box-shadow: 0 0 0 3px #fff3f7;
+}
+.remake-generation-progress__group-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 16px;
+}
+.remake-generation-progress__group-heading h3 {
+    font-size: 14px;
+    font-weight: 600;
+}
+.remake-generation-progress__group-heading > span {
+    color: var(--text-secondary, #666674);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.remake-generation-progress__poster {
+    position: relative;
+    height: clamp(180px, 20vw, 260px);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 40%, #fff7fa, #f1eef2);
+}
+.remake-generation-progress__poster > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 10px 14px 34px;
+}
+.remake-generation-progress__poster-frame {
+    position: absolute;
+    inset: 12px;
+    border: 1px solid #ffffffd9;
+    border-radius: 12px;
+    pointer-events: none;
+}
+.remake-generation-progress__media-label {
+    position: absolute;
+    bottom: 12px;
+    left: 16px;
+    right: 16px;
+    text-align: center;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #fffffff0;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #55505c;
+}
+.remake-generation-progress__placeholder {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 12px;
+    color: #bca5af;
+}
+.remake-generation-progress__placeholder svg {
+    width: 36px;
+    height: 36px;
+    stroke-width: 1;
+}
+.remake-generation-progress__placeholder span {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+}
+.remake-generation-progress__group-body {
+    min-height: 110px;
+    padding: 16px;
+}
+.remake-generation-progress__stage {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 600;
+}
+.remake-generation-progress__stage svg {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: #e00b41;
+}
+.remake-generation-progress__group[data-stage="blocked"] .remake-generation-progress__stage svg {
+    color: #a66a14;
+}
+.remake-generation-progress__submission,
+.remake-generation-progress__scenes {
+    margin-top: 7px;
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--text-secondary, #666674);
+    overflow-wrap: anywhere;
+}
+.remake-generation-progress__scenes {
+    color: var(--text-tertiary, #7c7b86);
+}
+.remake-generation-progress__scan {
+    position: absolute;
+    inset: -50% 0 auto;
+    height: 50%;
+    border-bottom: 1px solid #e00b4170;
+    background: linear-gradient(transparent, #e00b4110);
+    animation: remake-generation-scan 3s ease-in-out infinite;
+    pointer-events: none;
+}
+.remake-generation-progress__group[data-active="true"] .remake-generation-progress__stage svg {
+    animation: remake-generation-spin 1.4s linear infinite;
+}
+.remake-generation-progress__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 18px;
+    color: var(--text-secondary, #666674);
+    font-size: 11px;
+    line-height: 1.7;
+}
+.remake-generation-progress__footer p {
+    flex: 1 1 260px;
+}
+@keyframes remake-generation-scan {
+    0%,
+    100% {
+        transform: translateY(0);
+        opacity: 0;
+    }
+    25% {
+        opacity: 1;
+    }
+    80% {
+        transform: translateY(300%);
+        opacity: 0;
+    }
+}
+@keyframes remake-generation-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (max-width: 600px) {
+    .remake-generation-progress__header {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .remake-generation-progress__clock {
+        display: flex;
+        flex-wrap: wrap;
+        width: fit-content;
+    }
+    .remake-generation-progress__clock > span {
+        margin-left: 4px;
+    }
+    .remake-generation-progress__groups {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .remake-generation-progress__references figure {
+        flex-basis: 140px;
+    }
+    .remake-generation-progress__poster {
+        height: 220px;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .remake-generation-progress *,
+    .remake-generation-progress *::before,
+    .remake-generation-progress *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+.remake-generation-progress__poster[data-kind="images"] {
+    height: auto;
+}
+.remake-generation-progress__image-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    padding: 12px 12px 42px;
+}
+.remake-generation-progress__image {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #fff;
+    border-radius: 10px;
+    background: #ffffffb8;
+    text-align: center;
+}
+.remake-generation-progress__image:focus-visible {
+    outline: 2px solid #e00b41;
+    outline-offset: 2px;
+}
+.remake-generation-progress__image img {
+    display: block;
+    width: 100%;
+    height: 180px;
+    object-fit: contain;
+    padding: 5px;
+}
+.remake-generation-progress__image > span {
+    display: block;
+    padding: 8px 5px;
+    font-size: 10px;
+    color: var(--text-secondary, #666674);
+}
+.remake-generation-progress__poster > video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #17131a;
+}
+.remake-generation-progress__poster[data-kind="video"] {
+    height: 320px;
+}
+.remake-generation-progress__retained-images {
+    margin-top: 10px;
+    border-top: 1px solid var(--control-border, #ececf0);
+}
+.remake-generation-progress__retained-images summary {
+    cursor: pointer;
+    min-height: 44px;
+    padding: 14px 0;
+    font-size: 11px;
+    color: var(--text-secondary, #666674);
+}
+.remake-generation-progress__retained-images .remake-generation-progress__image-grid {
+    padding: 0;
+}

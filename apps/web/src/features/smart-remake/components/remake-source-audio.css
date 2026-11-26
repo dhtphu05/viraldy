@@ -1,0 +1,98 @@
+.remake-source-audio {
+    display: grid;
+    min-width: 0;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 20px;
+    background: var(--color-surface-soft);
+    overflow-wrap: anywhere;
+}
+.remake-source-audio > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+}
+.remake-source-audio h3 {
+    font-size: 14px;
+    font-weight: 600;
+}
+.remake-source-audio > header > span,
+.remake-source-audio > small {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.6;
+}
+.remake-source-audio__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    gap: 12px;
+    margin: 0;
+}
+.remake-source-audio__facts > div {
+    min-width: 0;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--color-surface);
+}
+.remake-source-audio__facts dt,
+.remake-source-audio__pending {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+.remake-source-audio svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: var(--color-primary);
+}
+.remake-source-audio__facts dd {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.remake-source-audio__facts .remake-source-audio__detail {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.remake-source-audio__transcript {
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--color-surface);
+    font-size: 12px;
+    line-height: 1.7;
+}
+.remake-source-audio__transcript summary {
+    min-height: 28px;
+    cursor: pointer;
+    font-weight: 500;
+}
+.remake-source-audio__transcript summary:focus-visible,
+.remake-source-audio__transcript p:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+}
+.remake-source-audio__transcript p {
+    margin: 8px 0 0;
+    max-height: 18rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+.remake-source-audio__pending svg {
+    animation: remake-source-audio-spin 1.5s linear infinite;
+}
+@keyframes remake-source-audio-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .remake-source-audio__pending svg {
+        animation: none;
+    }
+}

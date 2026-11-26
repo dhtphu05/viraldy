@@ -1,5 +1,6 @@
 import {
     BarChart3,
+    FolderOpen,
     Images,
     LayoutDashboard,
     Megaphone,
@@ -58,6 +59,11 @@ export const navigationGroups: ShellNavGroup[] = [
                 icon: Wand2,
             },
             {
+                to: "/projects",
+                label: "Project",
+                icon: FolderOpen,
+            },
+            {
                 to: "/tiktok-scorer",
                 label: "TikTok Scorer",
                 icon: ScanSearch,
@@ -103,3 +109,12 @@ export const navigationGroups: ShellNavGroup[] = [
 ];
 
 export const navigationItems = navigationGroups.flatMap((group) => group.items);
+
+export const sidebarNavigationGroups = navigationGroups
+    .map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+            ["/smart-remake", "/projects", "/creative-library"].includes(item.to),
+        ),
+    }))
+    .filter((group) => group.items.length > 0);

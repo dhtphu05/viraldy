@@ -5,7 +5,7 @@ import { cn } from "@/shared/lib/utils";
 import { BrandLogo } from "@/shared/ui/brand-logo";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/shared/ui/tooltip";
 import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
-import { navigationGroups, type ShellNavItem } from "./navigation";
+import { sidebarNavigationGroups, type ShellNavItem } from "./navigation";
 
 function NavLinkRow({ item, collapsed }: { item: ShellNavItem; collapsed: boolean }) {
     const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -104,7 +104,7 @@ export function AppSidebar() {
                 </div>
 
                 <nav className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-4">
-                    {navigationGroups.map((group, index) => (
+                    {sidebarNavigationGroups.map((group, index) => (
                         <div
                             key={group.label}
                             className={cn(
@@ -138,7 +138,7 @@ export function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }
                 <BrandLogo className="h-10 w-[150px]" />
             </div>
             <nav className="flex-1 overflow-y-auto px-2 pb-4">
-                {navigationGroups.map((group) => (
+                {sidebarNavigationGroups.map((group) => (
                     <div key={group.label} className="mt-3 first:mt-0">
                         <p className="mb-1 px-2 text-[10px] font-semibold uppercase text-text-tertiary">
                             {group.label}
