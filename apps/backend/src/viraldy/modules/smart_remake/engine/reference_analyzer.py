@@ -1,4 +1,9 @@
+import copy
+import math
 from typing import Any
+
+from viraldy.modules.smart_remake.source_audio import normalize_source_audio
+from viraldy.shared.errors.base import AppError
 
 from .creative_router import normalize_creative_structure, route_creative_structure
 from .errors import SmartRemakeSecurityError, SmartRemakeValidationError
@@ -35,7 +40,9 @@ def _default_audio_plan(raw: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def _normalize_pacing_plan(raw: dict[str, Any] | None, motion_beats: list[dict[str, Any]], target_duration: int) -> dict[str, Any]:
+def _normalize_pacing_plan(
+    raw: dict[str, Any] | None, motion_beats: list[dict[str, Any]], target_duration: float
+) -> dict[str, Any]:
     raw = raw if isinstance(raw, dict) else {}
     action_beats = raw.get("actionBeats") if isinstance(raw.get("actionBeats"), list) else []
     if not action_beats:
@@ -63,10 +70,17 @@ def _normalize_pacing_plan(raw: dict[str, Any] | None, motion_beats: list[dict[s
     }
 
 
-def _normalize_opening_shot(raw: dict[str, Any] | None, output: dict[str, Any], motion_beats: list[dict[str, Any]], target_duration: int) -> dict[str, Any]:
+def _normalize_opening_shot(
+    raw: dict[str, Any] | None,
+    output: dict[str, Any],
+    motion_beats: list[dict[str, Any]],
+    target_duration: float,
+) -> dict[str, Any]:
     raw = raw if isinstance(raw, dict) else {}
-    camera = output.get("cameraStyle") if isinstance(output.get("cameraStyle"), dict) else {}
-    setting = output.get("setting") if isinstance(output.get("setting"), dict) else {}
+    raw_camera = output.get("cameraStyle")
+    raw_setting = output.get("setting")
+    camera = raw_camera if isinstance(raw_camera, dict) else {}
+    setting = raw_setting if isinstance(raw_setting, dict) else {}
     first_action = motion_beats[0]["action"] if motion_beats else "show product"
     return {
         "durationSeconds": float(raw.get("durationSeconds") or min(2, target_duration)),
@@ -142,14 +156,18 @@ def _assert_no_identity_clone_instruction(value: Any) -> None:
         )
 
 
-def normalize_reference_analysis(raw_output: Any, target_duration: int) -> dict[str, Any]:
+def normalize_reference_analysis(raw_output: Any, target_duration: float) -> dict[str, Any]:
     if isinstance(raw_output, dict) and isinstance(raw_output.get("referenceAnalysis"), dict):
         raw_output = raw_output["referenceAnalysis"]
     if not isinstance(raw_output, dict):
         raise SmartRemakeValidationError("Reference analysis must be a JSON object.", "INVALID_REFERENCE_ANALYSIS")
-    _assert_no_identity_clone_instruction(raw_output)
+    # Heard source words are display-only evidence, never generation instructions.
+    _assert_no_identity_clone_instruction({
+        key: value for key, value in raw_output.items() if key != "sourceAudio"
+    })
 
-    motion_beats_raw = raw_output.get("motionBeats") if isinstance(raw_output.get("motionBeats"), list) else []
+    raw_beats = raw_output.get("motionBeats")
+    motion_beats_raw = raw_beats if isinstance(raw_beats, list) else []
     motion_beats = []
     for index, beat in enumerate(motion_beats_raw):
         if not isinstance(beat, dict):
@@ -174,9 +192,12 @@ def normalize_reference_analysis(raw_output: Any, target_duration: int) -> dict[
     if not motion_beats:
         motion_beats = [{"startSecond": 0, "endSecond": target_duration, "action": "show the key product action", "role": "hook", "priority": "mandatory"}]
 
-    camera = raw_output.get("cameraStyle") if isinstance(raw_output.get("cameraStyle"), dict) else {}
-    setting = raw_output.get("setting") if isinstance(raw_output.get("setting"), dict) else {}
-    creative = raw_output.get("creativeConcept") if isinstance(raw_output.get("creativeConcept"), dict) else {}
+    raw_camera = raw_output.get("cameraStyle")
+    raw_setting = raw_output.get("setting")
+    raw_creative = raw_output.get("creativeConcept")
+    camera = raw_camera if isinstance(raw_camera, dict) else {}
+    setting = raw_setting if isinstance(raw_setting, dict) else {}
+    creative = raw_creative if isinstance(raw_creative, dict) else {}
     audio_plan = _default_audio_plan(raw_output.get("audioPlan") if isinstance(raw_output.get("audioPlan"), dict) else None)
     pacing_plan = _normalize_pacing_plan(raw_output.get("pacingPlan") if isinstance(raw_output.get("pacingPlan"), dict) else None, motion_beats, target_duration)
     opening_shot = _normalize_opening_shot(raw_output.get("openingShot") if isinstance(raw_output.get("openingShot"), dict) else None, {**raw_output, "cameraStyle": camera, "setting": setting}, motion_beats, target_duration)
@@ -212,6 +233,8 @@ def normalize_reference_analysis(raw_output: Any, target_duration: int) -> dict[
         "openingShot": opening_shot,
         "openingForbiddenSubstitutions": string_list(raw_output.get("openingForbiddenSubstitutions")),
     }
+    if source_audio := normalize_source_audio(raw_output.get("sourceAudio")):
+        base["sourceAudio"] = source_audio
     creative_structure = normalize_creative_structure(raw_output.get("creativeStructure") or raw_output, base)
     route = route_creative_structure({**base, **raw_output, "creativeStructure": creative_structure})
     base.update(
@@ -233,11 +256,12 @@ def normalize_reference_analysis(raw_output: Any, target_duration: int) -> dict[
 
 async def analyze_reference_video(
     *,
-    target_duration: int,
+    target_duration: float,
     prompt: str | None,
     description: str | None,
     reference_video: UploadedMedia | None,
     gemini: SmartRemakeGeminiClient,
+    source_cut_frames: list[int] | None = None,
 ) -> dict[str, Any]:
     if reference_video:
         assert_reference_video(reference_video)
@@ -247,10 +271,107 @@ async def analyze_reference_video(
         prompt=prompt,
         description=description,
         has_video=bool(reference_video),
+        source_cut_frames=source_cut_frames,
     )
     raw = await gemini.generate_json(
         system_instruction=system,
         prompt=user_prompt,
         media=[{"mime_type": reference_video.mime_type, "bytes": reference_video.bytes}] if reference_video else None,
     )
-    return normalize_reference_analysis(raw, target_duration)
+    normalized = normalize_reference_analysis(raw, target_duration)
+    return normalized if reference_video else {
+        key: value for key, value in normalized.items() if key != "sourceAudio"
+    }
+
+
+def validate_source_analysis(
+    analysis: dict[str, Any], *, target_duration: float | None = None
+) -> None:
+    error = AppError(
+        "SMART_REMAKE_SOURCE_ANALYSIS_INCOMPLETE",
+        "The source needs observed actions covering every scene before generation.", 409,
+    )
+    shots = analysis.get("sourceShots")
+    if not isinstance(shots, list) or not shots:
+        raise error
+    previous_end = 0.0
+    for shot in shots:
+        try:
+            start, end = float(shot["startSecond"]) * 24, float(shot["endSecond"]) * 24
+            action = shot.get("action", "").strip().lower()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            raise error from None
+        if (
+            not math.isfinite(start) or not math.isfinite(end)
+            or abs(start - previous_end) > 1 or end <= start
+            or action in {"", "show product", "show the key product action"}
+        ):
+            raise error
+        previous_end = end
+    if target_duration is not None and abs(previous_end - target_duration * 24) > 1:
+        raise error
+
+
+async def resolve_source_cut_semantics(
+    *, analysis: dict[str, Any], target_duration: float, prompt: str | None,
+    description: str | None, reference_video: UploadedMedia | None,
+    gemini: SmartRemakeGeminiClient,
+    requested_cut_frames: list[int] | None = None,
+) -> dict[str, Any]:
+    """One budget-wrapped analysis may resolve newly measured visual boundaries."""
+    detection = analysis.get("sourceCutDetection") or {}
+    cuts = detection.get("cutFrames") if detection.get("requiresSemanticReanalysis") else None
+    shots = analysis.get("sourceShots") or []
+    known_boundaries = {
+        round(float(shot[field]) * 24)
+        for shot in shots for field in ("startSecond", "endSecond")
+    }
+    if requested_cut_frames and any(cut not in known_boundaries for cut in requested_cut_frames):
+        cuts = sorted({*known_boundaries, *(cuts or []), *requested_cut_frames})
+        detection = {**detection, "includesRenderBoundaries": True, "cutFrames": cuts}
+    if cuts is None:
+        return analysis
+    error = AppError(
+        "SMART_REMAKE_SOURCE_ANALYSIS_INCOMPLETE",
+        "Source cuts need complete per-scene actions. Update the analysis before generating.",
+        409,
+    )
+    if reference_video is None or not isinstance(cuts, list) or len(cuts) < 2:
+        raise error
+    # Use the exact injected client: P0's ledger keeps this call within the
+    # existing cap/attempt/time policy, including unknown-submit reconciliation.
+    resolved = await analyze_reference_video(
+        target_duration=target_duration, prompt=prompt, description=description,
+        reference_video=reference_video, gemini=gemini, source_cut_frames=cuts,
+    )
+    shots = resolved.get("sourceShots") or []
+    if len(shots) != len(cuts) - 1:
+        raise error
+    aligned = []
+    for shot, start, end in zip(shots, cuts[:-1], cuts[1:], strict=True):
+        try:
+            observed = (float(shot["startSecond"]) * 24, float(shot["endSecond"]) * 24)
+        except (KeyError, TypeError, ValueError):
+            raise error from None
+        if (
+            any(not math.isfinite(value) for value in observed)
+            or abs(observed[0] - start) > 1 or abs(observed[1] - end) > 1
+            or shot.get("action") in {None, "", "show product", "show the key product action"}
+        ):
+            raise error
+        aligned.append({
+            **shot, "startSecond": start / 24, "endSecond": end / 24,
+            "durationSeconds": (end - start) / 24,
+        })
+    source_audio = normalize_source_audio(resolved.get("sourceAudio")) or normalize_source_audio(
+        analysis.get("sourceAudio")
+    )
+    return {
+        **resolved,
+        **({"sourceAudio": source_audio} if source_audio else {}),
+        "sourceShots": aligned, "shotPreservationMode": "exact",
+        "sourceCutDetection": {
+            **detection, "requiresSemanticReanalysis": False,
+            "originalSourceShots": copy.deepcopy(analysis.get("sourceShots", [])),
+        },
+    }

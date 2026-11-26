@@ -303,7 +303,7 @@ class WorkerJobRepository:
         )
         retry_job_ids: list[UUID] = []
         for job in jobs:
-            definition = get_job_definition(job.job_type)
+            definition = get_job_definition(job.job_type, input_json=job.input_json)
             recovery_age_seconds = max(
                 minimum_stale_seconds,
                 definition.hard_timeout_seconds + timeout_margin_seconds,

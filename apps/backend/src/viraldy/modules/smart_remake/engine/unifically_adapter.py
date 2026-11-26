@@ -1,6 +1,7 @@
 from typing import Any
 
 from .errors import SmartRemakeValidationError
+from .prompt_edits import scene_edit_directions
 
 
 MAX_UNIFICALLY_VIDEO_PROMPT_CHARS = 5000
@@ -851,7 +852,24 @@ def build_unifically_video_input(
             str(scene.get("videoPrompt") or "").strip(),
         ]
 
-    if is_multi_segment and product_image_url:
+    edited_prompt = scene_edit_directions(scene)
+    if edited_prompt and product_image_url:
+        # The source-segment compactor reconstructs its prompt from the shot map
+        # and otherwise omits videoPrompt. Edited directions must reach the model.
+        input_data["prompt"] = "\n\n".join(part for part in [
+            _compact_16s_identity_lock(product_lock, product_token=product_token),
+            _context_identity_instruction(context_urls=context_urls, product_token=product_token),
+            "EDITED SCENE DIRECTION: apply the following direction only inside "
+            "this 8-second scene. Product identity and source segment boundaries remain fixed.",
+            edited_prompt,
+            _bounded_16s_section(
+                _compact_16s_source_segment(scene, product_token=product_token), 430
+            ),
+            _bounded_16s_section(
+                _compact_16s_product_demo_lock(product_lock, product_token=product_token), 350
+            ),
+        ] if part)
+    elif is_multi_segment and product_image_url:
         input_data["prompt"] = _build_unifically_16s_compact_prompt(
             scene=scene,
             product_lock=product_lock,

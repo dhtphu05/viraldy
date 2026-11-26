@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import after_setup_logger, after_setup_task_logger
 
 from viraldy.platform.config.settings import get_settings
+from viraldy.platform.observability.logging import configure_http_log_redaction
+
+after_setup_logger.connect(configure_http_log_redaction, weak=False)
+after_setup_task_logger.connect(configure_http_log_redaction, weak=False)
 
 settings = get_settings()
 

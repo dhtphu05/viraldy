@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 
 import boto3
@@ -46,11 +47,15 @@ class S3StorageAdapter:
             expires_at=utc_now() + timedelta(seconds=self._settings.s3_presigned_expiry_seconds),
         )
 
-    def create_presigned_download(self, key: str) -> str:
+    def create_presigned_download(self, key: str, *, filename: str | None = None) -> str:
+        params = {"Bucket": self._settings.s3_bucket, "Key": key}
+        if filename:
+            safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)[:160] or "download"
+            params["ResponseContentDisposition"] = f'attachment; filename="{safe_name}"'
         return str(
             self._client.generate_presigned_url(
                 ClientMethod="get_object",
-                Params={"Bucket": self._settings.s3_bucket, "Key": key},
+                Params=params,
                 ExpiresIn=self._settings.s3_presigned_expiry_seconds,
             )
         )

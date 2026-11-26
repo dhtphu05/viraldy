@@ -106,7 +106,12 @@ class JobService:
         await self._repository.record_dispatch_requested(job)
         await self._session.commit()
         try:
-            result = self._dispatcher.dispatch_job(job.id, job.job_type)
+            if job.job_type == JobType.SMART_REMAKE_KIE and "kie_runtime" in (job.input_json or {}):
+                result = self._dispatcher.dispatch_job(
+                    job.id, job.job_type, input_json=job.input_json
+                )
+            else:
+                result = self._dispatcher.dispatch_job(job.id, job.job_type)
         except Exception as exc:
             await self._repository.record_dispatch_failed(job, str(exc))
             await self._session.commit()

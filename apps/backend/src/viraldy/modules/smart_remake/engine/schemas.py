@@ -74,7 +74,7 @@ CreativeRouteStrategy = Literal[
     "simplified_sequential",
 ]
 SmartRemakePacingProfile = Literal["fast_social", "balanced", "slow_cinematic"]
-RenderProvider = Literal["flowkit", "unifically"]
+RenderProvider = Literal["flowkit", "unifically", "kie"]
 
 
 class UploadedMedia(BaseModel):
@@ -359,19 +359,34 @@ class SmartRemakeScene(BaseModel):
     sourceFrames: list[dict[str, Any]] = Field(default_factory=list)
     sourceSegment: dict[str, Any] | None = None
     shotPlan: dict[str, Any] | None = None
+    targetDurationFrames: int | None = Field(default=None, gt=0, le=192)
+    rawDurationFrames: Literal[192] | None = None
 
 
 class SceneMap(BaseModel):
+    schemaVersion: Literal[1, 2] = 1
     version: str = "smart-remake-scene-map-v1"
     mode: Literal["smart_remake", "montage"] = "smart_remake"
     targetDuration: Literal[8, 16, 24, 32]
     aspectRatio: Literal["9:16"]
     orientation: Literal["VERTICAL"] = "VERTICAL"
-    sceneCount: Literal[1, 2, 3, 4]
+    sceneCount: int = Field(ge=1)
     scenes: list[SmartRemakeScene]
 
     @model_validator(mode="after")
     def _valid_count(self) -> "SceneMap":
+        if self.schemaVersion == 2:
+            if self.targetDuration not in (8, 16) or len(self.scenes) != self.sceneCount:
+                raise ValueError("timeline scene count must match its render plan")
+            if any(
+                scene.targetDurationFrames is None or scene.rawDurationFrames != 192
+                for scene in self.scenes
+            ) or (
+                sum(scene.targetDurationFrames or 0 for scene in self.scenes)
+                != self.targetDuration * 24
+            ):
+                raise ValueError("timeline frames must exactly cover the target duration")
+            return self
         expected = self.targetDuration // 8
         if self.sceneCount != expected or len(self.scenes) != expected:
             raise ValueError("scene count does not match target duration")

@@ -174,7 +174,10 @@ def recover_stale_processing_jobs() -> dict[str, object]:
             job = WorkerJobRepository(session).load_job(job_id)
             if job is None:
                 continue
-            dispatcher.dispatch_job(job.id, job.job_type)
+            if job.job_type == JobType.SMART_REMAKE_KIE and "kie_runtime" in (job.input_json or {}):
+                dispatcher.dispatch_job(job.id, job.job_type, input_json=job.input_json)
+            else:
+                dispatcher.dispatch_job(job.id, job.job_type)
         return {"recovered_job_ids": [str(job_id) for job_id in retry_ids]}
     finally:
         session.close()
@@ -205,6 +208,39 @@ def _execute_job(
     session: Session,
 ) -> dict[str, object]:
     job_type = normalize_job_type(job.job_type)
+    if job_type == JobType.SMART_REMAKE_INSPECT.value:
+        from viraldy.modules.smart_remake.inspection_tasks import execute_inspection_job
+
+        if job.subject_type != "smart_remake_project":
+            raise AppError("SMART_REMAKE_JOB_SUBJECT_INVALID", "Invalid Smart Remake job target.")
+
+        def ensure_inspection_attempt() -> None:
+            repo.update_progress(job, 50, "inspecting_media")
+            session.commit()
+
+        return execute_inspection_job(job, get_settings(), ensure_inspection_attempt)
+    if job_type == JobType.SMART_REMAKE_COMPOSE.value:
+        from viraldy.modules.smart_remake.timeline_worker import execute_compose_job
+
+        if job.subject_type != "smart_remake_project":
+            raise AppError("SMART_REMAKE_JOB_SUBJECT_INVALID", "Invalid Smart Remake job target.")
+
+        def ensure_timeline_attempt() -> None:
+            repo.update_progress(job, 50, "assembling_timeline")
+            session.commit()
+
+        return execute_compose_job(job, get_settings(), ensure_timeline_attempt)
+    if job_type == JobType.SMART_REMAKE_KIE.value:
+        from viraldy.modules.smart_remake.kie_worker import execute_kie_job
+
+        if job.subject_type != "smart_remake_project":
+            raise AppError("SMART_REMAKE_JOB_SUBJECT_INVALID", "Invalid Smart Remake job target.")
+
+        def ensure_smart_remake_attempt() -> None:
+            repo.update_progress(job, 30, "generating_scenes")
+            session.commit()
+
+        return execute_kie_job(job, get_settings(), ensure_smart_remake_attempt)
     if job_type == JobType.MEDIA_ANALYSIS.value:
         asset_id = UUID(str(job.input_json["asset_id"]))
         asset_version_id = UUID(str(job.input_json["asset_version_id"]))

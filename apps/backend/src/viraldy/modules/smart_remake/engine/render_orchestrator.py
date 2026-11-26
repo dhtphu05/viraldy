@@ -2,7 +2,8 @@ import json
 import os
 import uuid
 import zlib
-from typing import Any, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from .asset_cleanup import cleanup_render_assets, cleanup_smart_remake_assets, cleanup_stale_smart_remake_outputs
 from .audio_assets import mux_reference_music
@@ -118,6 +119,12 @@ def _stable_unifically_seed(input_data: RenderSmartRemakeInput) -> int:
 
 
 def _should_retry_unifically_video(error: SmartRemakeError) -> bool:
+    if (
+        isinstance(error.details, dict)
+        and isinstance(error.details.get("status"), int)
+        and error.details["status"] >= 500
+    ):
+        return False  # Submission may have succeeded upstream; do not duplicate a paid job.
     if error.code not in {"UNIFICALLY_TASK_FAILED", "UNIFICALLY_TASK_CREATE_FAILED", "UNIFICALLY_VALIDATION_FAILED"}:
         return False
     message = str(error).lower()
@@ -143,8 +150,15 @@ async def render_smart_remake(
     probe: Callable[[bytes], dict[str, Any]] | None = None,
     polling_interval_seconds: float = 2.0,
     polling_timeout_seconds: float = 900.0,
+    on_scene_output: Callable[[int, bytes, dict[str, Any]], Awaitable[None]] | None = None,
+    on_task_submitted: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     _assert_render_input(input_data)
+    if input_data.provider == "kie":
+        raise SmartRemakeValidationError(
+            "KIE rendering must run through a persisted background job.",
+            "KIE_DURABLE_JOB_REQUIRED",
+        )
     cleanup_smart_remake_assets()
     cleanup_stale_smart_remake_outputs()
     try:
@@ -154,6 +168,8 @@ async def render_smart_remake(
                 unifically=unifically,
                 concat_urls=concat_urls,
                 probe=probe,
+                on_scene_output=on_scene_output,
+                on_task_submitted=on_task_submitted,
             )
         return await _render_with_flowkit(
             input_data,
@@ -162,12 +178,36 @@ async def render_smart_remake(
             probe=probe,
             polling_interval_seconds=polling_interval_seconds,
             polling_timeout_seconds=polling_timeout_seconds,
+            on_scene_output=on_scene_output,
+            on_task_submitted=on_task_submitted,
         )
     finally:
         cleanup_render_assets(
             scene_map=input_data.sceneMap,
             reference_analysis=input_data.referenceAnalysis,
         )
+
+
+async def _capture_flowkit_outputs(
+    flowkit: Any, prepared: dict[str, Any], request_ids: list[str], handler: Any
+) -> int:
+    from .concat import _fetch_scene_video_bytes
+
+    records = await flowkit.list_scenes(prepared["videoId"])
+    positions = {int(scene["smartRemakeDisplayOrder"]): index
+                 for index, scene in enumerate(prepared["scenes"])}
+    captured = 0
+    for record in records:
+        scene_url = record.get("vertical_video_url")
+        index = positions.get(int(record.get("display_order", -1)))
+        if index is None or not isinstance(scene_url, str) or not scene_url:
+            continue
+        await handler(index, await _fetch_scene_video_bytes(scene_url, index), {
+            "providerSceneId": record.get("id"),
+            "providerRequestId": request_ids[index] if index < len(request_ids) else None,
+        })
+        captured += 1
+    return captured
 
 
 async def _render_with_flowkit(
@@ -178,6 +218,8 @@ async def _render_with_flowkit(
     probe: Callable[[bytes], dict[str, Any]] | None = None,
     polling_interval_seconds: float = 2.0,
     polling_timeout_seconds: float = 900.0,
+    on_scene_output: Callable[[int, bytes, dict[str, Any]], Awaitable[None]] | None = None,
+    on_task_submitted: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     flowkit = flowkit or FlowKitClient()
     concat = concat or concat_flowkit_video
@@ -200,6 +242,10 @@ async def _render_with_flowkit(
     assert_no_reference_video_in_render_payload(image_requests)
     image_batch = await flowkit.create_batch_requests(image_requests)
     image_request_ids = _request_ids(image_batch)
+    if on_task_submitted:
+        await on_task_submitted(
+            {"provider": "flowkit", "stage": "image", "requestIds": image_request_ids}
+        )
     await wait_for_batch(
         image_request_ids,
         flowkit.get_request_status,
@@ -219,13 +265,30 @@ async def _render_with_flowkit(
     assert_no_reference_video_in_render_payload(video_requests)
     video_batch = await flowkit.create_batch_requests(video_requests)
     video_request_ids = _request_ids(video_batch)
-    video_statuses = await wait_for_batch(
-        video_request_ids,
-        flowkit.get_request_status,
-        failure_code="FLOWKIT_VIDEO_GENERATION_FAILED",
-        interval_seconds=polling_interval_seconds,
-        timeout_seconds=polling_timeout_seconds,
-    )
+    if on_task_submitted:
+        await on_task_submitted({
+            "provider": "flowkit", "stage": "video", "requestIds": video_request_ids,
+            "videoId": prepared["videoId"],
+            "sceneIds": [item["flowKitSceneId"] for item in prepared["scenes"]],
+        })
+    try:
+        video_statuses = await wait_for_batch(
+            video_request_ids,
+            flowkit.get_request_status,
+            failure_code="FLOWKIT_VIDEO_GENERATION_FAILED",
+            interval_seconds=polling_interval_seconds,
+            timeout_seconds=polling_timeout_seconds,
+        )
+    except SmartRemakeError:
+        if on_scene_output:
+            await _capture_flowkit_outputs(flowkit, prepared, video_request_ids, on_scene_output)
+        raise
+
+    captured_count = 0
+    if on_scene_output:
+        captured_count = await _capture_flowkit_outputs(
+            flowkit, prepared, video_request_ids, on_scene_output
+        )
 
     if not _has_video_output(video_statuses):
         return {
@@ -245,6 +308,11 @@ async def _render_with_flowkit(
             "warnings": warnings,
         }
 
+    if on_scene_output and captured_count != len(prepared["scenes"]):
+        raise SmartRemakeError(
+            "FlowKit returned an incomplete scene manifest.", "FLOWKIT_INVALID_RESPONSE"
+        )
+
     output_bytes = await concat(
         flowkit=flowkit,
         video_id=prepared["videoId"],
@@ -252,6 +320,7 @@ async def _render_with_flowkit(
         title=input_data.projectName,
         text_overlays=_text_overlays(input_data.sceneMap["scenes"]),
     )
+    retained_final: list[bytes] = []
     final_url = _finalize_and_save_output(
         output_bytes,
         project_id=prepared["projectId"],
@@ -260,7 +329,10 @@ async def _render_with_flowkit(
         audio_required=input_data.audioRequired,
         warnings=warnings,
         probe=probe,
+        capture_output=retained_final.append if on_scene_output else None,
     )
+    if on_scene_output:
+        await on_scene_output(-1, retained_final[0], {})
     return {
         "success": True,
         "mode": "smart_remake",
@@ -285,6 +357,8 @@ async def _render_with_unifically(
     unifically: Any | None = None,
     concat_urls: Callable[..., Any] | None = None,
     probe: Callable[[bytes], dict[str, Any]] | None = None,
+    on_scene_output: Callable[[int, bytes, dict[str, Any]], Awaitable[None]] | None = None,
+    on_task_submitted: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     client = unifically or UnificallyClient()
     concat_urls = concat_urls or concat_video_urls
@@ -301,7 +375,7 @@ async def _render_with_unifically(
     video_urls: list[str] = []
     video_seed = _stable_unifically_seed(input_data)
 
-    for scene in scenes:
+    for scene_index, scene in enumerate(scenes):
         # Keep the Veo reference set unambiguous: only the raw product upload
         # is a visual ingredient. The source video contributes its DNA through
         # the compiled shot plan, not through a competing product image.
@@ -317,6 +391,10 @@ async def _render_with_unifically(
             video_task = await client.create_task(model=get_unifically_video_model(), input_data=video_input)
             video_task_id = video_task["task_id"]
             video_request_ids.append(video_task_id)
+            if on_task_submitted:
+                await on_task_submitted({
+                    "provider": "unifically", "stage": "video", "requestIds": [video_task_id],
+                })
             video_status = await wait_for_unifically_task(
                 video_task_id,
                 client.get_task,
@@ -338,6 +416,10 @@ async def _render_with_unifically(
             video_task = await client.create_task(model=get_unifically_video_model(), input_data=fallback_video_input)
             video_task_id = video_task["task_id"]
             video_request_ids.append(video_task_id)
+            if on_task_submitted:
+                await on_task_submitted({
+                    "provider": "unifically", "stage": "video", "requestIds": [video_task_id],
+                })
             video_status = await wait_for_unifically_task(
                 video_task_id,
                 client.get_task,
@@ -352,6 +434,10 @@ async def _render_with_unifically(
                 {"taskId": video_task_id, "status": video_status},
             )
         video_urls.append(video_url)
+        if on_scene_output:
+            await on_scene_output(scene_index, await client.download_file(video_url), {
+                "providerSceneId": scene_ids[scene_index], "providerRequestId": video_task_id,
+            })
 
     if len(video_urls) == 1:
         output_bytes = await client.download_file(video_urls[0])
@@ -364,6 +450,7 @@ async def _render_with_unifically(
         )
 
     video_id = video_request_ids[0] if len(video_request_ids) == 1 else f"concat_{uuid.uuid4().hex[:12]}"
+    retained_final: list[bytes] = []
     final_url = _finalize_and_save_output(
         output_bytes,
         project_id=project_id,
@@ -372,7 +459,10 @@ async def _render_with_unifically(
         audio_required=input_data.audioRequired,
         warnings=warnings,
         probe=probe,
+        capture_output=retained_final.append if on_scene_output else None,
     )
+    if on_scene_output:
+        await on_scene_output(-1, retained_final[0], {})
 
     return {
         "success": True,
@@ -401,6 +491,7 @@ def _finalize_and_save_output(
     audio_required: bool,
     warnings: list[str],
     probe: Callable[[bytes], dict[str, Any]],
+    capture_output: Callable[[bytes], None] | None = None,
 ) -> str:
     media_probe = probe(output_bytes)
     if not media_probe.get("hasVideo"):
@@ -426,5 +517,7 @@ def _finalize_and_save_output(
                     {"cause": str(exc)},
                 ) from exc
 
+    if capture_output:
+        capture_output(output_bytes)
     _, final_url = save_smart_remake_output(project_id, video_id, output_bytes)
     return final_url

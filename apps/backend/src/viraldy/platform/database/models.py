@@ -46,13 +46,15 @@ from viraldy.modules.recommendations.models import (
 )
 from viraldy.modules.reference_boards.models import ReferenceBoardModel
 from viraldy.modules.references.models import ReferenceModel
+from viraldy.modules.smart_remake.budget_models import SmartRemakeAttemptModel
+from viraldy.modules.smart_remake.models import SmartRemakeOperationModel, SmartRemakeProjectModel
 from viraldy.modules.tiktok_commercial_content.models import (
     AnalyticsAttributionModel,
     BatchReviewItemModel,
     BatchReviewModel,
+    CreativeDirectionModel,
     CreativeFamilyMemberModel,
     CreativeFamilyModel,
-    CreativeDirectionModel,
     CreativeSourceLinkModel,
     DecisionLogModel,
     ExternalSourceRecordModel,
@@ -132,6 +134,9 @@ __all__ = [
     "ProcessingJobModel",
     "ProductModel",
     "ReferenceBoardModel",
+    "SmartRemakeOperationModel",
+    "SmartRemakeAttemptModel",
+    "SmartRemakeProjectModel",
     "ReferenceModel",
     "RecommendationActionModel",
     "RecommendationModel",

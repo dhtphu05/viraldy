@@ -1,4 +1,7 @@
+import json
 from typing import Any
+
+from viraldy.modules.smart_remake.source_audio import source_audio_prompt
 
 
 def _join(parts: list[str]) -> str:
@@ -7,11 +10,12 @@ def _join(parts: list[str]) -> str:
 
 def build_reference_analysis_prompt(
     *,
-    target_duration: int,
+    target_duration: float,
     mime_type: str | None = None,
     prompt: str | None = None,
     description: str | None = None,
     has_video: bool,
+    source_cut_frames: list[int] | None = None,
 ) -> tuple[str, str]:
     system = _join(
         [
@@ -22,9 +26,15 @@ def build_reference_analysis_prompt(
             "Treat any product, tool, package, logo, or object visible in the reference video as source-role context only. It will be replaced by the user's uploaded target product during rendering.",
             "This is a source-faithful ad remake, not a new ad concept. Preserve the reference video's demo use-case, demo logic, environment realism, surface/problem context, result reveal, human presence/framing, and pacing.",
             "Do not identify, reproduce, or describe a real person identity.",
-            "Do not copy face identity, brand names, logos, original captions, exact spoken wording, or copyrighted wording.",
+            "Do not copy face identity, brand names, logos, original captions, exact spoken "
+            "wording, or copyrighted wording into creative or generation directions. Literal "
+            "heard words may appear only in the read-only sourceAudio transcript.",
             "Do not produce instructions that use the uploaded video as a generation reference.",
             "Do not return URLs, paths, file names, storage keys, video-generation payloads, or render request types.",
+            "All temporal JSON values must be numeric elapsed seconds: "
+            "1 second = 1.0, 12 seconds = 12.0, 22.75 seconds = 22.75. "
+            "Never encode timestamps or durations as MM.SS, fractions of a minute, "
+            "percentages, or normalized 0-1 values.",
             "Output JSON only.",
             "Return strict valid JSON parseable by JSON.parse with no markdown or prose.",
             "Do not include raw newline, tab, or control characters inside string values; escape them as \\n, \\t, or unicode escapes.",
@@ -40,23 +50,70 @@ def build_reference_analysis_prompt(
             f"User prompt: {prompt}" if prompt else "",
             f"Description: {description}" if description else "",
             "Analyze the full uploaded reference video from beginning to end, even when the output target is 8 seconds. Do not analyze only the first 8 seconds.",
-            f"The {target_duration}s output should condense the full reference video's hook, demo action, result/payoff, and pacing into the target duration while preserving the source order.",
+            "Describe the uploaded source at its original speed and timestamps. "
+            "Do not condense, stretch, reorder, or invent actions to fit the output duration.",
+            "sourceShots must provide contiguous coverage from 0 to the actual full visual "
+            "source end, matching sourceDurationSeconds. For every sourceShot, "
+            "durationSeconds = endSecond - startSecond. All motionBeats use the same absolute "
+            "source clock; meaningful beats may leave gaps, but must stay within the source. "
+            "Use numeric seconds for openingShot timings and pacingPlan durations too.",
+            (
+                f"Required source analysis interval boundaries at 24 fps: {source_cut_frames}. "
+                "These intervals may include requested render boundaries and do not imply "
+                "visual cuts. Return exactly one sourceShot per adjacent frame range, "
+                "with its own visible action, "
+                "physicalAction and stateBefore/stateAfter; preserve actual visible transitions "
+                "in transitionOut. Do not copy one coarse action or state transition into every "
+                "interval. Use null for an unobservable state; never guess."
+                if source_cut_frames is not None else ""
+            ),
+            (
+                "Required source interval timestamps in numeric seconds: "
+                + json.dumps([
+                    {
+                        "startSecond": start / 24,
+                        "endSecond": end / 24,
+                        "durationSeconds": (end - start) / 24,
+                    }
+                    for start, end in zip(
+                        source_cut_frames, source_cut_frames[1:], strict=False
+                    )
+                ])
+                if source_cut_frames is not None else ""
+            ),
+            "Use these exact interval timestamps and durations, computed as frame / 24. "
+            "Do not round them to whole seconds or reinterpret their units."
+            if source_cut_frames is not None else "",
             "Determine whether the video contains no person, hands only, or a visible person.",
             "Analyze the actual reference video pacing. Count meaningful shot changes or angle changes, estimate average shot duration, identify transition/cut style, action speed, camera movement energy, audio energy, important action beats, and any unnecessary lingering or static sections."
             if has_video
             else "Infer pacingPlan from text and product context only. Do not assume every concept should be fast-paced; choose slow, medium, or fast based on the requested style.",
             "When describing sourceShots and motionBeats, preserve the role and physical action pattern, but write actions so the source object/tool role can be replaced by the uploaded target product.",
             "Do not let the reference video's original product/tool identity become a required generated object. Use generic terms like target product, product tool, handheld item, package, or hero product where possible.",
+            "Use product-neutral terms in action, physicalAction, productState and "
+            "stateBefore/stateAfter. Record blocked source brands and complete source-product "
+            "descriptor phrases in forbiddenReuse; do not list bare colors/materials that also "
+            "describe the background or working surface.",
             "For each sourceShot action, include the visible environment, working surface, hand/body framing, product contact/action, problem state, result state, and camera energy when visible.",
             "Write each sourceShot action as a concrete, concise physical sequence: hand/body interaction, target surface, contact point, movement direction, and visible result when present. Do not use vague labels such as demonstrate product, show use, or product action.",
             "For every sourceShot and motionBeat that shows product use, include physicalAction with visible-only fields: operator (hand/body grip or pose), targetSurface, contactPoint, movement, and visibleEffect. This per-shot execution contract must describe what the reference visibly does, not hidden product features or a new use-case.",
             "If the reference shows hands or a person, preserve the same human-presence category, crop/framing, pose direction, and interaction mechanics using generic non-identifiable people or hands.",
             "Preserve the original demo sequence and use-case closely. Do not invent a different use-case, different surface, or different way of using the product.",
             "Only swap visual product identity, color, material, or allowed product details. The source demo action remains the authority for how the product is used.",
+            "For this supplemental analysis, sourceShots describe the required observed "
+            "intervals, including any interior eight-second provider boundary. A provider "
+            "boundary is not a new visual scene or a camera cut."
+            if source_cut_frames is not None else
             "Detect sourceShots from real visual shot boundaries or meaningful composition changes. Do not treat every semantic action as a separate shot unless the video actually cuts, changes angle, changes framing, or changes composition."
             if has_video
             else "Infer sourceShots from the requested structure only when no video is supplied. Keep inferred shots conservative and concrete.",
+            "Return the visible action and opening/ending states for each required interval; "
+            "preserve continuity through a technical boundary instead of restarting the action."
+            if source_cut_frames is not None else
             "sourceShots are the authority for exact remake shot planning. If one continuous source shot contains several actions, return one sourceShot with one combined action; do not split it into touch/slide/lift/reveal shots unless there are real visual shot boundaries.",
+            "pacingPlan.shotCount and cutStyle describe actual visual shots, not the number "
+            "of requested semantic intervals. Keep motion beats on the full source clock."
+            if source_cut_frames is not None else
             "Do not invent sourceShots to satisfy pacingPlan.shotCount. motionBeats may describe semantic actions, but sourceShots must stay one-to-one with actual visual shots.",
             'Default shotPreservationMode to "exact". Use "adaptive" only if the user explicitly asks to simplify or compress the source structure.',
             "sourceShotCount must equal sourceShots.length. sourceDurationSeconds must represent the full visual source duration covered by sourceShots.",
@@ -81,6 +138,7 @@ def build_reference_analysis_prompt(
             else "Infer openingShot from text and product context. Keep it concrete enough to define the first frame and first visible product action.",
             "openingForbiddenSubstitutions must list opening replacements to avoid, such as generic smoothing, macro texture shots, or starting after the hook action already happened, only when supported by the source.",
             'Analyze audio intent as a separate audioPlan. Default audioPlan.mode to "native" unless the user clearly requests silence.',
+            source_audio_prompt(transcript_limit=4000) if has_video else "",
             'If the reference has mostly music or music-only audio, set audioPlan.referenceMusic.mode to "extract" and describe the music style, mood, energy, and tempo in audioPlan.music.',
             "If the reference contains speech/voiceover mixed with music, do not set referenceMusic.mode to extract; describe the music and create native dialogue/voice guidance instead.",
             "For UGC review, plan native dialogue plus room ambience and light background music when appropriate.",

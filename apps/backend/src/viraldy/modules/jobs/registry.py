@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import Any
+
+from viraldy.modules.smart_remake.runtime_limits import kie_worker_timeout_seconds
 
 
 class JobType(StrEnum):
@@ -17,6 +20,9 @@ class JobType(StrEnum):
     UGC_REVIEW = "ugc_review_v1"
     RETENTION_CLEANUP = "retention_cleanup"
     TIKTOK_MEDIA_IMPORT = "tiktok_media_import"
+    SMART_REMAKE_KIE = "smart_remake_kie"
+    SMART_REMAKE_COMPOSE = "smart_remake_compose"
+    SMART_REMAKE_INSPECT = "smart_remake_inspect"
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +162,25 @@ JOB_DEFINITIONS.update(
             required_stages=("downloading_media", "validating_media", "persisting_results"),
             result_subject_type="asset",
         ),
+        JobType.SMART_REMAKE_KIE.value: _workflow_definition(
+            JobType.SMART_REMAKE_KIE,
+            timeout_seconds=7200,
+            required_stages=("loading_sources", "generating_scenes", "persisting_results"),
+            result_subject_type="smart_remake_project",
+        ),
+        JobType.SMART_REMAKE_COMPOSE.value: _workflow_definition(
+            JobType.SMART_REMAKE_COMPOSE,
+            timeout_seconds=900,
+            required_stages=("loading_sources", "assembling_timeline", "persisting_results"),
+            result_subject_type="smart_remake_project",
+        ),
+        JobType.SMART_REMAKE_INSPECT.value: _workflow_definition(
+            JobType.SMART_REMAKE_INSPECT,
+            max_attempts=1,
+            timeout_seconds=900,
+            required_stages=("loading_sources", "inspecting_media", "persisting_results"),
+            result_subject_type="smart_remake_project",
+        ),
     }
 )
 
@@ -179,5 +204,12 @@ def equivalent_job_types(job_type: str) -> tuple[str, ...]:
     return (normalized, *legacy)
 
 
-def get_job_definition(job_type: str) -> JobDefinition:
-    return JOB_DEFINITIONS[normalize_job_type(job_type)]
+def get_job_definition(job_type: str, *, input_json: dict[str, Any] | None = None) -> JobDefinition:
+    definition = JOB_DEFINITIONS[normalize_job_type(job_type)]
+    if definition.job_type == JobType.SMART_REMAKE_KIE:
+        timeout = kie_worker_timeout_seconds(input_json)
+        if timeout is not None:
+            return replace(
+                definition, soft_timeout_seconds=timeout - 60, hard_timeout_seconds=timeout
+            )
+    return definition

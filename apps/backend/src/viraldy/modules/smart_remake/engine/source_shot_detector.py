@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 import subprocess
@@ -8,8 +9,6 @@ from typing import Any
 from .media_binaries import ffmpeg_path, ffprobe_path
 from .schemas import UploadedMedia
 
-
-MAX_DETECTED_SOURCE_SHOTS = 12
 MIN_SOURCE_SHOT_DURATION_SECONDS = 0.35
 DEFAULT_SCENE_THRESHOLD = 0.18
 FALLBACK_SCENE_THRESHOLD = 0.10
@@ -30,7 +29,8 @@ def enrich_reference_analysis_with_detected_cuts(
 
     try:
         duration, cut_times = detect_source_cuts(reference_video)
-        source_shots = analysis.get("sourceShots") if isinstance(analysis.get("sourceShots"), list) else []
+        raw_shots = analysis.get("sourceShots")
+        source_shots = raw_shots if isinstance(raw_shots, list) else []
         if _should_recover_missed_cuts(analysis, source_shots, cut_times):
             try:
                 fallback_duration, fallback_cut_times = detect_source_cuts(
@@ -44,22 +44,28 @@ def enrich_reference_analysis_with_detected_cuts(
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError, json.JSONDecodeError):
         return analysis
 
-    if duration <= 0 or len(cut_times) + 1 <= len(source_shots):
+    if duration <= 0:
         return analysis
+    known = [float(shot.get("startSecond", 0)) for shot in source_shots]
+    if not any(all(abs(cut - boundary) > 1 / 24 for boundary in known) for cut in cut_times):
+        return analysis
+    # A missed measured boundary matters even if the model returned the same
+    # number of shots at different times. Retain its existing intervals too;
+    # the semantic pass will describe each interval without inventing cuts.
+    semantic_cuts = sorted({*cut_times, *(value for value in known if 0 < value < duration)})
 
     expanded = expand_source_shots_to_cut_boundaries(
         analysis,
         duration_seconds=duration,
-        cut_times=cut_times,
+        cut_times=semantic_cuts,
     )
-    if len(expanded) <= len(source_shots):
-        return analysis
     return {
         **analysis,
         **expanded,
         "sourceCutDetection": {
+            **expanded.get("sourceCutDetection", {}),
             "detectedCutCount": len(cut_times),
-            "sourceShotCount": len(expanded["sourceShots"]),
+            "sourceShotCount": len(semantic_cuts) + 1,
         },
     }
 
@@ -103,7 +109,8 @@ def _should_recover_missed_cuts(
     if len(cut_times) >= 2 or len(source_shots) > 1:
         return False
 
-    pacing = analysis.get("pacingPlan") if isinstance(analysis.get("pacingPlan"), dict) else {}
+    raw_pacing = analysis.get("pacingPlan")
+    pacing = raw_pacing if isinstance(raw_pacing, dict) else {}
     shot_count = pacing.get("shotCount")
     try:
         expects_multiple_shots = int(shot_count or 0) > 1
@@ -130,33 +137,29 @@ def expand_source_shots_to_cut_boundaries(
     if len(boundaries) < 3:
         return analysis
 
-    existing = analysis.get("sourceShots") if isinstance(analysis.get("sourceShots"), list) else []
-    motion_beats = analysis.get("motionBeats") if isinstance(analysis.get("motionBeats"), list) else []
+    raw_shots = analysis.get("sourceShots")
+    existing = raw_shots if isinstance(raw_shots, list) else []
     shots: list[dict[str, Any]] = []
-    for index, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
+    for index, (start, end) in enumerate(zip(boundaries, boundaries[1:], strict=False)):
         parent = _containing_item(existing, (start + end) / 2)
-        fallback = _containing_item(motion_beats, (start + end) / 2)
-        template = parent or fallback or {}
-        action = str(template.get("action") or "continue the source demo action").strip()
-        if parent and not _same_time_range(parent, start, end):
-            action = f"{action}; preserve this source cut and continue the same physical demo action"
+        if parent is None or not _same_time_range(parent, start, end):
+            # A visual boundary measures time, not what happened on either side.
+            # Keep the original evidence rather than inventing per-cut semantics.
+            return {
+                "shotPreservationMode": "unverified",
+                "sourceShots": copy.deepcopy(existing),
+                "sourceCutDetection": {
+                    "requiresSemanticReanalysis": True,
+                    "cutFrames": [round(value * 24) for value in boundaries],
+                },
+            }
         shots.append(
             {
+                **copy.deepcopy(parent),
                 "shotIndex": index,
                 "startSecond": round(start, 3),
                 "endSecond": round(end, 3),
                 "durationSeconds": round(end - start, 3),
-                "role": template.get("role") or ("hook" if index == 0 else "payoff" if index == len(boundaries) - 2 else "action"),
-                "priority": template.get("priority") or "supporting",
-                "framing": template.get("framing") or (analysis.get("cameraStyle") or {}).get("framing") or "product shot",
-                "cameraAngle": template.get("cameraAngle") or (analysis.get("cameraStyle") or {}).get("angle") or "front",
-                "cameraMovement": template.get("cameraMovement") or (analysis.get("cameraStyle") or {}).get("movement") or "static",
-                "subjectPresence": template.get("subjectPresence") or analysis.get("subjectPresence", "none"),
-                "action": action,
-                "productState": template.get("productState"),
-                "stateBefore": template.get("stateBefore"),
-                "stateAfter": template.get("stateAfter"),
-                "transitionOut": template.get("transitionOut"),
             }
         )
 
@@ -165,6 +168,7 @@ def expand_source_shots_to_cut_boundaries(
         "sourceShotCount": len(shots),
         "sourceDurationSeconds": duration,
         "sourceShots": shots,
+        "sourceCutDetection": {"requiresSemanticReanalysis": False},
     }
 
 
@@ -189,7 +193,7 @@ def _normalize_cut_times(values: list[float], duration: float) -> list[float]:
         rounded = round(value, 3)
         if not normalized or rounded - normalized[-1] >= MIN_SOURCE_SHOT_DURATION_SECONDS:
             normalized.append(rounded)
-    return normalized[: MAX_DETECTED_SOURCE_SHOTS - 1]
+    return normalized
 
 
 def _boundaries(cut_times: list[float], duration: float) -> list[float]:
@@ -212,7 +216,7 @@ def _containing_item(items: list[Any], second: float) -> dict[str, Any] | None:
 def _same_time_range(item: dict[str, Any], start: float, end: float) -> bool:
     item_start = float(item.get("startSecond") or 0)
     item_end = float(item.get("endSecond") or item_start)
-    return abs(item_start - start) < 0.1 and abs(item_end - end) < 0.1
+    return abs(item_start - start) <= 1 / 24 and abs(item_end - end) <= 1 / 24
 
 
 def _video_suffix(mime_type: str) -> str:

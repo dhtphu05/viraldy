@@ -34,7 +34,7 @@ class StoragePort(Protocol):
     def create_presigned_upload(self, key: str, content_type: str) -> PresignedUpload:
         raise NotImplementedError
 
-    def create_presigned_download(self, key: str) -> str:
+    def create_presigned_download(self, key: str, *, filename: str | None = None) -> str:
         raise NotImplementedError
 
     def object_exists(self, key: str) -> bool:
