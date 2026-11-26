@@ -13,11 +13,7 @@ export type VideoGenerationPrompt = {
     source_concept_id: string;
 };
 
-export function VideoGenerationPromptPanel({
-    artifact,
-}: {
-    artifact: VideoGenerationPrompt;
-}) {
+export function VideoGenerationPromptPanel({ artifact }: { artifact: VideoGenerationPrompt }) {
     const copyPrompt = async () => {
         try {
             await navigator.clipboard.writeText(artifact.prompt_text);
