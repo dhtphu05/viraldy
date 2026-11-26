@@ -1,0 +1,12 @@
+{
+  "schema_version": "smart_remake_protocol_v1",
+  "protocol_id": "btc-official-definitions-pending-v1",
+  "status": "pending",
+  "variants": {},
+  "ablations": {},
+  "main_matrix": [20, 3],
+  "ablation_matrix": [8, 3],
+  "rubric_version": "remake-human-v1",
+  "source_record": null,
+  "disagreement_policy": "Retain all ratings; report disagreement; human adjudication required."
+}

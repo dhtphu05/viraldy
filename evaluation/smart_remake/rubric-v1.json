@@ -1,0 +1,10 @@
+{
+  "rubric_version": "remake-human-v1",
+  "categories": ["product", "character", "action", "structure", "claims", "physics", "usefulness"],
+  "scale": {"1": "Unusable or contradicts the confirmed requirement", "2": "Major correction required", "3": "Usable after a bounded correction", "4": "Meets confirmed requirement with minor concerns", "5": "Clearly meets confirmed requirement"},
+  "labels": ["passed", "failed", "needs_review", "insufficient_evidence"],
+  "character_policy": "N/A when the case has no character requirement; omit, never assign zero.",
+  "blinding": "Rate source/reference and anonymized output without provider, variant, prompt or checker conclusion. Keep output-to-run mapping in a separate restricted file.",
+  "disagreement": "Retain every independent rating. Report conflicting run/category labels and require human adjudication before a release decision. Missing judgments remain unmeasured.",
+  "meaning": "Scores are ordinal reviewer observations, not probabilities of correctness or measures of sales or virality."
+}
