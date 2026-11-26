@@ -83,7 +83,7 @@ def test_render_preflight_no_longer_reserves_automatic_image_inspections(duratio
     ) == expected
 
 
-def test_structured_repair_preflight_keeps_normalizer_but_removes_automatic_image_inspection():
+def test_structured_repair_preflight_reserves_two_bookends_and_normalizer_without_image_checks():
     from tests.unit.test_smart_remake_preflight import run
 
     value = run(
@@ -98,4 +98,4 @@ def test_structured_repair_preflight_keeps_normalizer_but_removes_automatic_imag
         value.calls.video,
         value.calls.inspection,
         value.calls.total,
-    ) == (1, 1, 1, 0, 3)
+    ) == (1, 2, 1, 0, 4)

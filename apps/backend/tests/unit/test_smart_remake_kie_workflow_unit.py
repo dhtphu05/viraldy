@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import uuid4
@@ -8,7 +9,9 @@ from uuid import uuid4
 import pytest
 
 from tests.smart_remake_expectations import install_expectations
+from viraldy.modules.smart_remake import image_workflow
 from viraldy.modules.smart_remake import kie_workflow as module
+from viraldy.modules.smart_remake.engine import kie_adapter
 from viraldy.modules.smart_remake.kie_workflow import KieWorkflow
 from viraldy.shared.errors.base import AppError
 
@@ -41,7 +44,7 @@ class Repository:
 
 class Media:
     async def read(self, key):
-        return b"product"
+        return key.encode()
 
     async def put(self, prefix, data, mime_type):
         return "stored-candidate"
@@ -127,6 +130,7 @@ def workflow(monkeypatch):
             "referenceAnalysis": {},
             "audioRequired": False,
             "renderPlan": {
+                "imageModel": "gpt-image-2.6-sunburst",
                 "units": [
                     {
                         "id": scene["id"],
@@ -143,25 +147,41 @@ def workflow(monkeypatch):
     op = SimpleNamespace(id=uuid4(), status="running", result_json={"kind": "render", "tasks": {}})
     repair = Repair(row, op)
     client = Client(repair.repository)
+    real_prepare = image_workflow.prepare_scene_image
+
+    async def prepare_scene_image(**kwargs):
+        if kwargs["operation"] is not op:
+            return await real_prepare(**kwargs)
+        frame_role = kwargs.get("frame_role", "opening")
+        key = f"conditioned-{frame_role}"
+        return {
+            "storageKey": key,
+            "mimeType": "image/png",
+            "mediaHash": hashlib.sha256(key.encode()).hexdigest(),
+            "expectationsHash": kwargs["operation"].result_json["expectationsHash"],
+            "frameRole": frame_role,
+        }
+
+    monkeypatch.setattr(image_workflow, "prepare_scene_image", prepare_scene_image)
     monkeypatch.setattr(
-        module,
-        "build_kie_video_request",
+        kie_adapter,
+        "build_kie_group_request",
         lambda **kwargs: {
             "model": "veo-3-1",
             "input": {
                 "model": "veo3_lite",
-                "generation_type": "REFERENCE_2_VIDEO",
+                "generation_type": "FIRST_AND_LAST_FRAMES_2_VIDEO",
                 "aspect_ratio": "9:16",
                 "duration": 8,
                 "resolution": "720p",
                 "enable_translation": False,
-                "prompt": kwargs["scene"]["prompt"],
-                "image_urls": [kwargs["product_image_url"]],
+                "prompt": kwargs["scenes"][0]["prompt"],
+                "image_urls": kwargs["reference_image_urls"],
             },
         },
     )
     monkeypatch.setattr(module, "get_kie_poll_timeout_seconds", lambda: 0)
-    return KieWorkflow(repair, client=client), repair, client, row, op
+    return KieWorkflow(repair, client=client, image_client=object()), repair, client, row, op
 
 
 @pytest.mark.asyncio
@@ -351,7 +371,7 @@ async def test_pre_submit_failures_are_terminal_and_leave_no_paid_task(
         def invalid(**kwargs):
             raise SmartRemakeValidationError("prompt too long", "KIE_VALIDATION_FAILED")
 
-        monkeypatch.setattr(module, "build_kie_video_request", invalid)
+        monkeypatch.setattr(kie_adapter, "build_kie_group_request", invalid)
     with pytest.raises(AppError):
         await runner.execute(row.id, op.id)
     assert op.status == "failed"

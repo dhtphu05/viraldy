@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
+import re
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -13,8 +13,7 @@ from viraldy.modules.smart_remake.engine.kie_adapter import (
     build_kie_group_request,
     validate_kie_video_input,
 )
-from viraldy.modules.smart_remake.generation_budget import saved_requirements_prompt
-from viraldy.modules.smart_remake.generation_expectations import expectations_hash
+from viraldy.modules.smart_remake.engine.video_directions import video_requirements
 from viraldy.modules.smart_remake.preflight_contracts import PreflightRequest
 from viraldy.modules.smart_remake.preflight_service import calculate_preflight
 from viraldy.modules.smart_remake.provider_group_planning import freeze_provider_groups
@@ -64,42 +63,35 @@ def assert_requests_fit(value, plan):
     snapshot = value["generationExpectations"]
     by_id = {scene["renderUnitId"]: scene for scene in snapshot["scenes"]}
     units = {unit["id"]: unit for unit in plan["units"]}
-    suffix = "\n\nGENERATION EXPECTATIONS HASH: " + expectations_hash(snapshot)
-    suffix += saved_requirements_prompt({**value, "renderPlan": plan})
+    suffix = video_requirements({**value, "renderPlan": plan})
     for group in plan["groups"]:
         scenes = [{**units[identity], **by_id[identity]} for identity in group["renderUnitIds"]]
         request = build_kie_group_request(
             scenes=scenes,
             segments=group["segments"],
-            reference_image_urls=["https://1.1.1.1/product.png"],
+            reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
             has_character_reference=bool(value.get("characterKey")),
             product_lock=snapshot["productLock"],
             reference_analysis=snapshot["sourceContext"],
         )
         request["input"]["prompt"] += suffix
         validate_kie_video_input(request["input"])
-        lines = request["input"]["prompt"].splitlines()
-        shared_prefix = "SHARED SCENE DIRECTION TEXT: "
-        shared = next(
-            (
-                json.loads(line.removeprefix(shared_prefix))
-                for line in lines
-                if line.startswith(shared_prefix)
-            ),
-            {},
+        prompt = request["input"]["prompt"]
+        blocks = re.findall(
+            r"(\[00:\d+\.\d{3}–00:\d+\.\d{3}\] SCENE \d+\n.*?)"
+            r"(?=\n\n\[00:|\Z)", prompt, re.DOTALL,
         )
-        direction_prefix = "Scene direction (shotPlan times are local to THIS scene): "
-        serialized = [
-            json.loads(line.removeprefix(direction_prefix))
-            for line in lines
-            if line.startswith(direction_prefix)
-        ]
-        assert [direction["renderUnitId"] for direction in serialized] == group["renderUnitIds"]
-        for scene, direction in zip(scenes, serialized, strict=True):
-            restored = direction["videoPrompt"]
-            for token, literal in shared.items():
-                restored = restored.replace(token, literal)
-            assert restored == scene["videoPrompt"]
+        assert len(blocks) == len(group["renderUnitIds"])
+        for index, (scene, segment, block) in enumerate(zip(
+            scenes, group["segments"], blocks, strict=True,
+        )):
+            assert block.startswith(
+                f"[00:{segment['inFrame'] / 24:06.3f}–00:{segment['outFrame'] / 24:06.3f}] "
+                f"SCENE {index + 1}\n"
+            )
+            assert scene["videoPrompt"] in block
+        assert "blue color" in prompt and "Keep every source scene." in prompt
+        assert "SHARED SCENE DIRECTION TEXT" not in prompt
 
 
 def test_many_logical_scenes_remain_one_provider_call_when_payload_and_duration_fit():
@@ -165,3 +157,24 @@ def test_legacy_group_plan_is_unchanged():
     value = context()
     value["sourceSceneMap"].pop("timingMode")
     assert freeze_provider_groups(value) == value["renderPlan"]
+
+
+@pytest.mark.parametrize("character", [False, True])
+@pytest.mark.parametrize("scene_count", [1, 12])
+def test_planner_validates_two_composed_frames_for_every_provider_window(
+    monkeypatch, character, scene_count
+):
+    from viraldy.modules.smart_remake import provider_group_planning
+
+    value = context(count=scene_count, character=character, target_duration=16)
+    original = provider_group_planning.build_kie_group_request
+    references = []
+
+    def capture(**kwargs):
+        references.append(kwargs["reference_image_urls"])
+        assert len(kwargs["reference_image_urls"]) == 2
+        return original(**kwargs)
+
+    monkeypatch.setattr(provider_group_planning, "build_kie_group_request", capture)
+    plan = freeze_provider_groups(value)
+    assert len(plan["groups"]) == len(references) == 2

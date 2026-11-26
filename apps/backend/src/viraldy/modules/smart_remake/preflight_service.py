@@ -250,7 +250,7 @@ def _scope(
         unit: dict[str, Any] = next(
             (unit for unit in plan.get("units", []) if unit["id"] == request.sceneId), {}
         )
-        image_count = int(bool(plan.get("imageModel")))
+        image_count = 2 if plan.get("imageModel") else 0
         scope = scope.model_copy(
             update={
                 "sceneCount": 1,
@@ -270,12 +270,7 @@ def _scope(
             total=1 + image_count + int(request.repairIntent is not None),
         )
     else:
-        character = bool(context.get("characterKey"))
-        image_count = (
-            sum(1 if character else min(2, len(set(group["renderUnitIds"]))) for group in groups)
-            if plan.get("imageModel")
-            else 0
-        )
+        image_count = 2 * len(groups) if plan.get("imageModel") else 0
         scope = scope.model_copy(update={"imageCount": image_count})
         calls = PreflightCalls(
             image=image_count,

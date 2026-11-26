@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Awaitable, Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
 from uuid import UUID
 
 from PIL import Image
@@ -43,6 +43,8 @@ from .generation_expectations import (
 )
 
 OPENING_FRAME_EXTRACTOR_VERSION = "source-opening-frame-v1"
+PRESENTER_IDENTITY_POLICY_VERSION = "fictional-vietnamese-presenter-v1"
+ConditioningFrameRole = Literal["opening", "ending"]
 
 
 def _asset_invalid() -> AppError:
@@ -79,7 +81,11 @@ def extract_layout_frame(data: bytes, frame: int) -> bytes:
         return target.read_bytes()
 
 
-async def _references(repair: Any, row: Any, index: int) -> tuple[UploadedMedia, UploadedMedia]:
+async def _references(
+    repair: Any, row: Any, index: int, *, frame_role: ConditioningFrameRole = "opening",
+) -> tuple[UploadedMedia, UploadedMedia]:
+    if frame_role not in {"opening", "ending"}:
+        raise _asset_invalid()
     context = row.context_json
     product_data = await repair.media.read(context["productKey"])
     product_hash = hashlib.sha256(product_data).hexdigest()
@@ -91,15 +97,16 @@ async def _references(repair: Any, row: Any, index: int) -> tuple[UploadedMedia,
     source_hash = hashlib.sha256(source_data).hexdigest()
     if context.get("sourceMediaHash") not in {None, source_hash}:
         raise _asset_invalid()
-    layout_data = await run_in_threadpool(
-        extract_layout_frame, source_data, source_range["startFrame"]
-    )
-    if opening != {
-        "sourceMediaHash": source_hash,
-        "frame": source_range["startFrame"],
-        "layoutHash": hashlib.sha256(layout_data).hexdigest(),
-        "extractorVersion": OPENING_FRAME_EXTRACTOR_VERSION,
-    }:
+    frame = source_range["startFrame"] if frame_role == "opening" else source_range["endFrame"] - 1
+    layout_data = await run_in_threadpool(extract_layout_frame, source_data, frame)
+    if opening.get("sourceMediaHash") != source_hash or (
+        frame_role == "opening" and opening != {
+            "sourceMediaHash": source_hash,
+            "frame": source_range["startFrame"],
+            "layoutHash": hashlib.sha256(layout_data).hexdigest(),
+            "extractorVersion": OPENING_FRAME_EXTRACTOR_VERSION,
+        }
+    ):
         raise _asset_invalid()
     try:
         with Image.open(BytesIO(layout_data)) as image:
@@ -141,37 +148,61 @@ def _source_binding(
     return {"startFrame": start, "endFrame": end}, opening
 
 
-def _image_prompt(context: dict[str, Any], scene: dict[str, Any]) -> str:
-    direction = scene.get("imagePrompt")
+def _image_prompt(
+    context: dict[str, Any], scene: dict[str, Any], *,
+    frame_role: ConditioningFrameRole = "opening", presenter_anchor: bool = False,
+) -> str:
+    direction = scene.get("videoPrompt") if frame_role == "ending" else scene.get("imagePrompt")
     if not isinstance(direction, str) or not direction.strip():
-        raise AppError("OPENAI_IMAGE_VALIDATION_FAILED", "An opening-frame direction is required.")
+        raise AppError(
+            "OPENAI_IMAGE_VALIDATION_FAILED", f"An {frame_role}-frame direction is required."
+        )
     character = (
         "Image 3 is the authorized target character identity. Preserve that person's face and "
         "appearance. Do not use faces from composition image 2.\n"
-        if context.get("characterKey") else ""
+        if context.get("characterKey") else (
+            "When a person or face is visible in image 2, replace that identity with a "
+            "distinct fictional adult Vietnamese presenter, distinct from every person in image 2. "
+            "Do not infer the source person's ethnicity. Preserve the observed action, pose, "
+            "gaze, framing and camera while changing facial identity. Do not add a person or face "
+            "to product-only or hands-only shots; preserve hands-only framing.\n"
+            "This identity replacement takes precedence over source-person descriptions and "
+            "creative edits that ask to retain the source face.\n"
+            + ("Image 3 is the previously generated target presenter. Reuse that same fictional "
+               "adult's facial identity and appearance when a person is visible; use it only for "
+               "identity, never its product, pose, camera, background or composition.\n"
+               if presenter_anchor else "")
+        )
+    )
+    state = (
+        "Render its stateAfter and terminal pose at the source ending, after the action. "
+        "The earlier stateBefore is context, not the state to render."
+        if frame_role == "ending" else
+        "Render its stateBefore at the source opening, before movement or stateAfter takes place."
     )
     return (
-        "Create one photorealistic 9:16 opening frame for a product video. "
+        f"Create one photorealistic 9:16 {frame_role} frame for a product video. "
         "Image 1 is the seller's real product and the sole product identity reference. "
         "Preserve its exact shape, proportions, colors, material, markings and physical details. "
-        "Image 2 is the exact source scene opening frame: preserve its starting physical state, "
+        f"Image 2 is the exact source scene {frame_role} frame: preserve its physical state, "
         "composition, camera, pose and background; replace its product "
         "with the exact product from image 1, including its existing branding. Do not copy "
         "source-video captions, unrelated branding or faces from composition image 2. "
         "Render a full scene, without a collage, frame labels or added captions.\n"
         f"{character}"
+        f"PRESENTER IDENTITY POLICY: {PRESENTER_IDENTITY_POLICY_VERSION}\n"
         f"PRODUCT IDENTITY: {json.dumps(context.get('productLock', {}), sort_keys=True)}\n"
         f"EXPECTATIONS HASH: {context.get('expectationsHash', '')}\n"
         f"SOURCE OPENING BINDING: {json.dumps({key: scene.get(key) for key in (
             'renderUnitId', 'sourceSceneId', 'sourceRange', 'openingFrame'
         )}, sort_keys=True)}\n"
-        f"OPENING FRAME DIRECTIONS: {direction.strip()}"
+        f"CONDITIONING FRAME: {json.dumps(context.get('conditioningFrame', {}), sort_keys=True)}\n"
+        f"{frame_role.upper()} FRAME DIRECTIONS: {direction.strip()}"
         f"\nSCENE REQUIREMENTS: {json.dumps(scene.get('shotPlan', {}), sort_keys=True)}"
-        "\nThe shot plan describes future action as context. Render its stateBefore at the "
-        "source opening, before movement or stateAfter takes place."
+        f"\nThe shot plan describes the full action as context. {state}"
         + ("\nSELLER SCENE EDITS: " + scene["userEdits"]
            + "\nApply these creative directions while product identity, saved requirements and "
-           "the opening physical state remain fixed."
+           f"the {frame_role} physical state remain fixed."
            if scene.get("userEdits") else "")
         + saved_requirements_prompt(context)
     )
@@ -198,7 +229,10 @@ async def _cached_image(repair: Any, row: Any, request_hash: str) -> dict[str, A
         UUID(parts[3])
     except ValueError:
         raise _asset_invalid() from None
-    data = await repair.media.read(record["storageKey"])
+    try:
+        data = await repair.media.read(record["storageKey"])
+    except (OSError, KeyError):
+        raise _asset_invalid() from None
     if hashlib.sha256(data).hexdigest() != record.get("mediaHash"):
         raise _asset_invalid()
     try:
@@ -206,6 +240,84 @@ async def _cached_image(repair: Any, row: Any, request_hash: str) -> dict[str, A
     except ValueError:
         raise _asset_invalid() from None
     return copy.deepcopy(record)
+
+
+def _frame_subject_presence(
+    context: dict[str, Any], scene: dict[str, Any], frame: int,
+) -> str | None:
+    """Use observed shot metadata, never guess a face or ethnicity from free text."""
+    analysis = context.get("referenceAnalysis") or {}
+    source_start = (context.get("sourceSceneMap") or {}).get("sourceStartFrame", 0)
+    analysis_second = (frame - source_start) / 24
+    for shot in analysis.get("sourceShots") or []:
+        start, end = shot.get("startSecond"), shot.get("endSecond")
+        presence = shot.get("subjectPresence")
+        if (
+            isinstance(start, int | float) and isinstance(end, int | float)
+            and start <= analysis_second < end
+            and isinstance(presence, str) and presence in {"person", "none", "hands_only"}
+        ):
+            return presence
+    shots = (scene.get("shotPlan") or {}).get("shots") or []
+    if shots:
+        shot = shots[0] if frame == scene["sourceRange"]["startFrame"] else shots[-1]
+        presence = shot.get("subjectPresence")
+        if isinstance(presence, str) and presence in {"person", "none", "hands_only"}:
+            return presence
+    # A video-wide person flag cannot establish that this particular frame shows a face.
+    presence = analysis.get("subjectPresence")
+    return presence if isinstance(presence, str) and presence in {"none", "hands_only"} else None
+
+
+async def _presenter_anchor(
+    repair: Any, row: Any, identity: dict[str, Any], previous: dict[str, Any],
+) -> tuple[UploadedMedia, dict[str, Any]] | None:
+    scope = ("policyVersion", "sourceMediaHash", "productMediaHash")
+    prior = previous.get("presenterIdentity") or {}
+    if all(prior.get(key) == identity[key] for key in scope):
+        selected = prior.get("anchor")
+        if not selected:
+            return None  # A retained submission keeps its original identity inputs.
+        candidates = [selected["requestHash"]]
+    else:
+        candidates = sorted(
+            request_hash for request_hash, record in row.context_json.get("imageAssets", {}).items()
+            if isinstance(record, dict)
+            and (actor := record.get("presenterIdentity") or {}).get("eligibleAnchor") is True
+            and all(actor.get(key) == identity[key] for key in scope)
+        )
+        selected = None
+    if not candidates:
+        return None
+    cached = await _cached_image(repair, row, candidates[0])
+    if cached is None:
+        raise _asset_invalid()
+    actor = cached.get("presenterIdentity") or {}
+    if actor.get("eligibleAnchor") is not True or any(
+        actor.get(key) != identity[key] for key in scope
+    ):
+        raise _asset_invalid()
+    anchor = {key: cached[key] for key in ("requestHash", "mediaHash", "storageKey")}
+    if selected is not None and selected != anchor:
+        raise _asset_invalid()
+    try:
+        data = await repair.media.read(anchor["storageKey"])
+    except (OSError, KeyError):
+        raise _asset_invalid() from None
+    # Recheck the bytes we actually send, rather than trusting an earlier storage read.
+    if hashlib.sha256(data).hexdigest() != anchor["mediaHash"]:
+        raise _asset_invalid()
+    return UploadedMedia(bytes=data, mime_type="image/png", file_name="presenter-identity"), anchor
+
+
+def _image_request_hash(
+    binding: dict[str, Any], prompt: str, character: UploadedMedia | None,
+    identity: dict[str, Any],
+) -> str:
+    return hashlib.sha256(json.dumps({
+        **binding, "prompt": prompt, "presenterIdentity": identity,
+        **({"characterHash": hashlib.sha256(character.bytes).hexdigest()} if character else {}),
+    }, sort_keys=True).encode()).hexdigest()
 
 
 async def prepare_scene_image(
@@ -218,6 +330,7 @@ async def prepare_scene_image(
     image_client: Any,
     save: Callable[..., Awaitable[None]],
     ensure_active: Callable[[], None],
+    frame_role: ConditioningFrameRole = "opening",
 ) -> dict[str, Any]:
     ensure_active()
     # Re-read owned context so a cache committed by an earlier attempt is visible.
@@ -235,7 +348,7 @@ async def prepare_scene_image(
         or (model == IMAGE_MODEL and complexity is None)
     ):
         raise AppError("OPENAI_IMAGE_VALIDATION_FAILED", "The saved image settings are invalid.")
-    product, layout = await _references(repair, row, index)
+    product, layout = await _references(repair, row, index, frame_role=frame_role)
     current_expectations = require_generation_expectations(row.context_json)
     frozen = operation.result_json.get("generationExpectations")
     if not operation.result_json.get("expectationsHash"):
@@ -267,14 +380,58 @@ async def prepare_scene_image(
         expected_scene["sourceSceneId"] != unit["sourceSceneId"]
         or expected_scene["sourceRange"] != source_range
         or expected_scene["openingFrame"] != opening
-        or expected_scene["openingFrame"].get("layoutHash")
-        != hashlib.sha256(layout.bytes).hexdigest()
+        or (frame_role == "opening" and expected_scene["openingFrame"].get("layoutHash")
+            != hashlib.sha256(layout.bytes).hexdigest())
         or expectations["references"]["product"]["mediaHash"]
         != hashlib.sha256(product.bytes).hexdigest()
     ):
         raise _asset_invalid()
+    frame = source_range["startFrame"] if frame_role == "opening" else source_range["endFrame"] - 1
+    reference_frame = {
+        "sourceMediaHash": expectations["references"]["source"]["mediaHash"],
+        "frame": frame, "layoutHash": hashlib.sha256(layout.bytes).hexdigest(),
+        "extractorVersion": OPENING_FRAME_EXTRACTOR_VERSION,
+    }
+    prompt_context["conditioningFrame"] = {"frameRole": frame_role, **reference_frame}
+    images = operation.result_json.get("images", {})
+    image_key = str(index) if frame_role == "opening" else f"{index}:ending"
+    previous = images.get(image_key, {})
     character = await character_reference(repair, row)
-    prompt = _image_prompt(prompt_context, compiled_scene)
+    presence = _frame_subject_presence(row.context_json, compiled_scene, frame)
+    identity = {
+        "policyVersion": PRESENTER_IDENTITY_POLICY_VERSION,
+        "mode": "custom" if character else "synthetic",
+        "sourceMediaHash": reference_frame["sourceMediaHash"],
+        "productMediaHash": hashlib.sha256(product.bytes).hexdigest(),
+        "eligibleAnchor": character is None and presence == "person",
+    }
+    prompt = _image_prompt(prompt_context, compiled_scene, frame_role=frame_role)
+    # Expectations and extractor versions intentionally invalidate older layout caches.
+    settings = {"model": model, "size": IMAGE_SIZE, "quality": quality}
+    if complexity is not None:
+        settings["complexity"] = complexity
+    binding = {
+        **settings, "productHash": identity["productMediaHash"],
+        "layoutHash": reference_frame["layoutHash"],
+        "expectationsHash": operation.result_json.get("expectationsHash")
+        or row.context_json["expectationsHash"],
+        "openingFrame": expected_scene["openingFrame"],
+        "frameRole": frame_role, "referenceFrame": reference_frame,
+    }
+    request_hash = _image_request_hash(binding, prompt, character, identity)
+    cached = await _cached_image(repair, row, request_hash)
+    # Check the original unanchored cache first, so the first presenter frame never
+    # becomes a reference to itself after a crash or a different operation resumes.
+    if cached is None and character is None and presence not in {"none", "hands_only"}:
+        anchored = await _presenter_anchor(repair, row, identity, previous)
+        if anchored is not None:
+            character, anchor = anchored
+            identity = {**identity, "mode": "anchored", "eligibleAnchor": False, "anchor": anchor}
+            prompt = _image_prompt(
+                prompt_context, compiled_scene, frame_role=frame_role, presenter_anchor=True,
+            )
+            request_hash = _image_request_hash(binding, prompt, character, identity)
+            cached = await _cached_image(repair, row, request_hash)
     validate_generation_payload(
         prompt, row.context_json.get("referenceAnalysis", {}), expectations["productLock"]
     )
@@ -283,36 +440,11 @@ async def prepare_scene_image(
             "OPENAI_IMAGE_VALIDATION_FAILED",
             "Saved constraints exceed the image prompt budget. Use concise requirements.",
         )
-    # Expectations and extractor versions intentionally invalidate older layout caches.
-    settings = {"model": model, "size": IMAGE_SIZE, "quality": quality}
-    if complexity is not None:
-        settings["complexity"] = complexity
-    request_hash = hashlib.sha256(
-        json.dumps(
-            {
-                **settings,
-                "prompt": prompt,
-                "productHash": hashlib.sha256(product.bytes).hexdigest(),
-                "layoutHash": hashlib.sha256(layout.bytes).hexdigest(),
-                "expectationsHash": operation.result_json.get("expectationsHash")
-                or row.context_json["expectationsHash"],
-                "openingFrame": expected_scene["openingFrame"],
-                **(
-                    {"characterHash": hashlib.sha256(character.bytes).hexdigest()}
-                    if character else {}
-                ),
-            },
-            sort_keys=True,
-        ).encode()
-    ).hexdigest()
-    cached = await _cached_image(repair, row, request_hash)
-    images = operation.result_json.get("images", {})
-    previous = images.get(str(index), {})
     if cached is None and previous.get("status") in {"submitting", "completed"}:
         await _unresolved(operation, save)
     if cached is None:
         attempt, created = await reserve_generation_attempt(
-            repair, row, operation, slot=f"image:{index}", request_hash=request_hash,
+            repair, row, operation, slot=f"image:{image_key}", request_hash=request_hash,
             stage="image", provider="openai", model=model, profile=settings,
         )
         if not created:
@@ -322,16 +454,18 @@ async def prepare_scene_image(
             **({"attemptId": attempt_id} if attempt_id else {}),
             "status": "submitting",
             "requestHash": request_hash,
+            "frameRole": frame_role, "referenceFrame": reference_frame,
+            "presenterIdentity": identity,
             **settings,
         }
-        await save(operation, {**operation.result_json, "images": {**images, str(index): intent}})
+        await save(operation, {**operation.result_json, "images": {**images, image_key: intent}})
         ensure_active()
         try:
             await mark_generation_submitted(repair, row, attempt_id)
         except AppError as exc:
             await save(operation, {
                 **operation.result_json,
-                "images": {**images, str(index): {
+                "images": {**images, image_key: {
                     **intent, "status": "preflight_rejected", "errorCode": exc.code,
                 }},
             })
@@ -372,7 +506,7 @@ async def prepare_scene_image(
                 )
                 await save(operation, {
                     **operation.result_json,
-                    "images": {**operation.result_json.get("images", {}), str(index): {
+                    "images": {**operation.result_json.get("images", {}), image_key: {
                         **intent, "status": "rejected" if rejection else "failed",
                         "errorCode": getattr(exc, "code", ""), **rejection,
                     }},
@@ -416,6 +550,8 @@ async def prepare_scene_image(
                 "renderUnitId": expected_scene["renderUnitId"],
                 "sourceSceneId": expected_scene["sourceSceneId"],
                 "openingFrame": copy.deepcopy(expected_scene["openingFrame"]),
+                "frameRole": frame_role, "referenceFrame": reference_frame,
+                "presenterIdentity": identity,
                 **({"attemptId": attempt_id} if attempt_id else {}),
             }
             ensure_active()
@@ -433,7 +569,7 @@ async def prepare_scene_image(
             **operation.result_json,
             "images": {
                 **operation.result_json.get("images", {}),
-                str(index): {**cached, "status": "completed"},
+                image_key: {**cached, "status": "completed"},
             },
         },
     )

@@ -37,7 +37,7 @@ def test_runtime_uses_frozen_provider_groups_not_a_global_24_hour_grant(monkeypa
     assert large.hard_timeout_seconds > small.hard_timeout_seconds
 
 
-def test_runtime_counts_conditioning_per_unit_and_one_structured_repair_analysis():
+def test_runtime_counts_two_conditioned_bookends_and_one_structured_repair_analysis():
     plain = get_job_definition(JobType.SMART_REMAKE_KIE, input_json=_workload(images=False))
     with_image = get_job_definition(JobType.SMART_REMAKE_KIE, input_json=_workload())
     repair = get_job_definition(
@@ -48,6 +48,8 @@ def test_runtime_counts_conditioning_per_unit_and_one_structured_repair_analysis
     plan = {"groups": [{"renderUnitIds": ["a", "b", "c"]}], "imageModel": "sunburst"}
     units = kie_job_runtime_input({}, {}, {"kind": "render", "renderPlan": plan})
     assert units["kie_runtime"]["conditioningImageCount"] == 2
+    assert _workload()["kie_runtime"]["conditioningImageCount"] == 2
+    assert _workload(repair=True)["kie_runtime"]["conditioningImageCount"] == 2
 
 
 def test_dense_fixed_windows_count_only_conditioning_references_actually_generated():
@@ -58,7 +60,7 @@ def test_dense_fixed_windows_count_only_conditioning_references_actually_generat
     assert data["kie_runtime"]["conditioningImageCount"] == 4
     assert get_job_definition(JobType.SMART_REMAKE_KIE, input_json=data).hard_timeout_seconds < 7200
     character = kie_job_runtime_input({}, {"characterKey": "owned-character"}, result)
-    assert character["kie_runtime"]["conditioningImageCount"] == 2
+    assert character["kie_runtime"]["conditioningImageCount"] == 4
 
 
 def test_only_server_frozen_plan_controls_workload_not_browser_or_current_context():

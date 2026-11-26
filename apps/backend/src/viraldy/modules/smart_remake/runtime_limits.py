@@ -39,22 +39,18 @@ def kie_job_runtime_input(
     plan = result.get("renderPlan") or context.get("renderPlan") or {}
     groups = plan.get("groups") or []
     if kind == "repair":
-        calls, image_count = 1, 1
+        calls = 1
     elif groups:
         calls = len(groups)
-        references_per_group = 1 if context.get("characterKey") else 2
-        image_count = sum(
-            min(references_per_group, len(group["renderUnitIds"])) for group in groups
-        )
     else:
-        calls = image_count = len(state.get("scenes") or [])
+        calls = len(state.get("scenes") or [])
     if not calls:
         return {}
     return {
         "kie_runtime": {
             "schemaVersion": 1,
             "videoCallCount": calls,
-            "conditioningImageCount": image_count if plan.get("imageModel") else 0,
+            "conditioningImageCount": 2 * calls if plan.get("imageModel") else 0,
             "analysisCallCount": int(bool(result.get("request", {}).get("repairIntent"))),
             "pollTimeoutSeconds": kie_poll_timeout_seconds(),
         }

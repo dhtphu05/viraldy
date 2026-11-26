@@ -96,11 +96,10 @@ def is_known_video_rejection(attempt: Any) -> bool:
     return proof is not None and proof["operation"] == "kie.tasks.create"
 
 
-def is_authorized_unconfirmed_replacement(attempt: Any) -> bool:
-    """Recognize exact server-recorded consent, without changing the unknown outcome."""
+def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
+    """Validate one server consent against this unchanged unknown provider receipt."""
     metadata = getattr(attempt, "metadata_json", None)
     receipt = getattr(attempt, "receipt_json", None)
-    authorization = metadata.get("replacementAuthorization") if isinstance(metadata, dict) else None
     usage = getattr(attempt, "usage_json", None)
     if (
         not isinstance(metadata, dict)
@@ -150,6 +149,26 @@ def is_authorized_unconfirmed_replacement(attempt: Any) -> bool:
         proof is not None and proof["operation"] == "kie.tasks.create"
         and confirmed >= datetime.fromisoformat(proof["observedAt"])
     )
+
+
+def authorized_unconfirmed_replacement_keys(attempt: Any) -> frozenset[str]:
+    """Read valid additive admin consents without rewriting primary or historical records."""
+    metadata = getattr(attempt, "metadata_json", None)
+    if not isinstance(metadata, dict):
+        return frozenset()
+    additional = metadata.get("additionalReplacementAuthorizations")
+    records = [metadata.get("replacementAuthorization")]
+    if isinstance(additional, list):
+        records.extend(additional)
+    return frozenset(
+        record["replacementKey"] for record in records
+        if isinstance(record, dict) and _is_authorized_replacement_record(attempt, record)
+    )
+
+
+def is_authorized_unconfirmed_replacement(attempt: Any) -> bool:
+    """Recognize exact server-recorded consent, without changing the unknown outcome."""
+    return bool(authorized_unconfirmed_replacement_keys(attempt))
 
 
 def is_completed_analysis_response(attempt: Any) -> bool:

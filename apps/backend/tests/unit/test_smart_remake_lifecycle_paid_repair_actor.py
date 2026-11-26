@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import SecretStr
 from test_smart_remake_kie_workflow_unit import workflow  # noqa: F401
 
 from viraldy.modules.smart_remake import kie_workflow, service
@@ -57,7 +58,7 @@ async def test_queued_repair_binds_actor_to_manifest_and_idempotency(workflow, m
     for actor in (uuid4(), uuid4()):
         result = await kie_workflow.enqueue_kie_repair(
             object(),
-            SimpleNamespace(ai_mode="fixture"),
+            SimpleNamespace(ai_mode="live", openai_api_key=SecretStr("offline-test-key")),
             row.workspace_id,
             row.id,
             UUID(row.state_json["scenes"][0]["id"]),

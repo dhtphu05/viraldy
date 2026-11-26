@@ -364,7 +364,9 @@ async def test_saved_requirements_are_checked_even_when_scene_prompt_is_edited(c
 
 
 @pytest.mark.asyncio
-async def test_kie_workflow_checks_conditioning_before_any_upload(grouped, monkeypatch):
+async def test_kie_workflow_uploads_two_composed_frames_without_conditioning_gate(
+    grouped, monkeypatch
+):
     from viraldy.modules.smart_remake import conditioning_inspection
 
     value = grouped
@@ -379,7 +381,8 @@ async def test_kie_workflow_checks_conditioning_before_any_upload(grouped, monke
     await value.runner._freeze_plan(value.row, value.op)
     request, references = await value.runner._request(value.row, value.op, 0, value.groups[0])
     assert not captures and len(references) == 2
-    assert len(value.client.uploads) == 3 and value.client.submits == []
+    assert value.client.uploads == [b"image-0", b"image-1-ending"]
+    assert value.client.submits == []
     assert request["input"]["duration"] == 8
 
 
@@ -611,5 +614,5 @@ async def test_revocation_during_first_upload_blocks_remaining_references_and_ve
         await value.runner._task(
             value.row, value.op, 0, reconcile_only=False, group=value.groups[0]
         )
-    assert value.client.uploads == [b"product"]
+    assert value.client.uploads == [b"image-0"]
     assert value.client.submits == []

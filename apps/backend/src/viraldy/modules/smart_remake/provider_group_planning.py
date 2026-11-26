@@ -8,8 +8,8 @@ from typing import Any
 from viraldy.shared.errors.base import AppError
 
 from .engine.kie_adapter import build_kie_group_request, validate_kie_video_input
-from .generation_budget import saved_requirements_prompt
-from .generation_expectations import expectations_hash, validate_generation_expectations
+from .engine.video_directions import video_requirements
+from .generation_expectations import validate_generation_expectations
 
 
 def _fixed_windows(plan: dict[str, Any], total_frames: int) -> bool:
@@ -61,19 +61,13 @@ def freeze_provider_groups(context: dict[str, Any]) -> dict[str, Any]:
         **context,
         "p0": {**context.get("p0", {}), "requirements": snapshot["requirements"]},
     }
-    suffix = "\n\nGENERATION EXPECTATIONS HASH: " + expectations_hash(snapshot)
-    suffix += saved_requirements_prompt(prompt_context)
+    suffix = video_requirements(prompt_context)
     for group in plan["groups"]:
         identities = group["renderUnitIds"]
-        image_count = (
-            1
-            + int(character)
-            + ((1 if character or len(identities) == 1 else 2) if plan.get("imageModel") else 0)
-        )
         request = build_kie_group_request(
             scenes=[{**units[identity], **scenes[identity]} for identity in identities],
             segments=group["segments"],
-            reference_image_urls=[f"https://1.1.1.1/reference-{i}.png" for i in range(image_count)],
+            reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
             has_character_reference=character,
             product_lock=snapshot["productLock"],
             reference_analysis=snapshot["sourceContext"],

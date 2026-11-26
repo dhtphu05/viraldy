@@ -124,7 +124,9 @@ async def test_image_video_checker_share_sanitized_facts_edits_and_snapshot(monk
         )
         assert not [text for text in expected if text not in payload]
     assert snapshot_hash in captured["image"]
-    assert snapshot_hash in captured["video"]
+    assert snapshot_hash not in captured["video"]
+    assert "GENERATION EXPECTATIONS HASH" not in captured["video"]
+    assert operation.result_json["expectationsHash"] == snapshot_hash
     assert operation.result_json["generationExpectations"] == snapshot
     # The raw analysis is retained for traceability, outside generation payloads.
     assert context["referenceAnalysis"]["forbiddenReuse"] == ["Acme"]

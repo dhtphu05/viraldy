@@ -153,15 +153,18 @@ def grouped(monkeypatch):
         render_project_id=None,
     )
     client = Client(repo)
-    images, requests, retained = [], [], []
+    images, image_roles, requests, retained = [], [], [], []
 
     async def prepare_scene_image(**kwargs):
         index = kwargs["index"]
         images.append(index)
+        role = kwargs.get("frame_role", "opening")
+        image_roles.append(role)
         scene = kwargs["compiled_scene"]
+        storage_key = f"image-{index}" + ("-ending" if role == "ending" else "")
         return {
-            "storageKey": f"image-{index}",
-            "mediaHash": hashlib.sha256(f"image-{index}".encode()).hexdigest(),
+            "storageKey": storage_key,
+            "mediaHash": hashlib.sha256(storage_key.encode()).hexdigest(),
             "mimeType": "image/png",
             "model": "gpt-image-2.6-flare",
             "size": "720x1280",
@@ -171,6 +174,7 @@ def grouped(monkeypatch):
             "renderUnitId": scene["renderUnitId"],
             "sourceSceneId": scene["sourceSceneId"],
             "openingFrame": scene["openingFrame"],
+            "frameRole": role,
             "expectationsHash": kwargs["operation"].result_json["expectationsHash"],
         }
 
@@ -191,7 +195,7 @@ def grouped(monkeypatch):
             "model": "veo-3-1",
             "input": {
                 "model": "veo3_lite",
-                "generation_type": "REFERENCE_2_VIDEO",
+                "generation_type": "FIRST_AND_LAST_FRAMES_2_VIDEO",
                 "aspect_ratio": "9:16",
                 "duration": 8,
                 "resolution": "720p",
@@ -216,6 +220,7 @@ def grouped(monkeypatch):
         op=op,
         groups=groups,
         images=images,
+        image_roles=image_roles,
         requests=requests,
         retained=retained,
         helper=helper,
@@ -229,9 +234,10 @@ async def test_four_logical_scenes_generate_two_paid_groups_and_four_images(grou
     await value.runner.execute(value.row.id, value.op.id)
     assert len(value.client.submits) == 2
     assert value.images == [0, 1, 2, 3]
-    assert len(value.client.uploads) == 6
+    assert value.image_roles == ["opening", "ending", "opening", "ending"]
+    assert value.client.uploads == [b"image-0", b"image-1-ending", b"image-2", b"image-3-ending"]
     assert [len(request["scenes"]) for request in value.requests] == [2, 2]
-    assert all(len(request["reference_image_urls"]) == 3 for request in value.requests)
+    assert all(len(request["reference_image_urls"]) == 2 for request in value.requests)
     assert set(value.op.result_json["tasks"]) == {f"group:{group['id']}" for group in value.groups}
     assert value.op.status == "completed"
     assert all(len(scene["versions"]) == 1 for scene in value.row.state_json["scenes"])
@@ -248,7 +254,24 @@ async def test_four_logical_scenes_generate_two_paid_groups_and_four_images(grou
 
 
 @pytest.mark.asyncio
-async def test_singleton_group_generates_one_image_and_two_total_references(grouped):
+async def test_expectations_hash_stays_in_receipts_instead_of_video_prompt(grouped):
+    value = grouped
+    await value.runner.execute(value.row.id, value.op.id)
+    expected_hash = value.row.context_json["expectationsHash"]
+    assert all(
+        expected_hash not in request["input_data"]["prompt"]
+        and "GENERATION EXPECTATIONS HASH" not in request["input_data"]["prompt"]
+        for request in value.client.submits
+    )
+    assert all(
+        task["expectationsHash"] == expected_hash
+        and all(ref["expectationsHash"] == expected_hash for ref in task["imageReferences"])
+        for task in value.op.result_json["tasks"].values()
+    )
+
+
+@pytest.mark.asyncio
+async def test_singleton_group_generates_opening_and_ending_for_the_same_scene(grouped):
     value = grouped
     value.row.state_json["scenes"] = value.row.state_json["scenes"][:1]
     plan = value.row.context_json["renderPlan"]
@@ -263,9 +286,21 @@ async def test_singleton_group_generates_one_image_and_two_total_references(grou
     value.row.context_json["sceneMap"]["scenes"] = value.row.context_json["sceneMap"]["scenes"][:1]
     install_expectations(value.row.context_json)
     await value.runner.execute(value.row.id, value.op.id)
-    assert value.images == [0]
+    assert value.images == [0, 0]
+    assert value.image_roles == ["opening", "ending"]
+    assert value.client.uploads == [b"image-0", b"image-0-ending"]
     assert len(value.client.submits) == 1
     assert len(value.requests[0]["reference_image_urls"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_missing_conditioning_model_never_uploads_a_product_packshot_as_a_frame(grouped):
+    value = grouped
+    value.row.context_json["renderPlan"]["imageModel"] = None
+    install_expectations(value.row.context_json)
+    with pytest.raises(AppError, match="SMART_REMAKE_CONDITIONING_REQUIRED"):
+        await value.runner.execute(value.row.id, value.op.id)
+    assert value.images == value.client.uploads == value.client.submits == []
 
 
 @pytest.mark.asyncio
@@ -446,7 +481,7 @@ async def test_changed_frozen_plan_rejected_before_paid_work(grouped):
 
 
 @pytest.mark.asyncio
-async def test_repair_stays_one_logical_scene_and_generates_only_its_image(grouped, monkeypatch):
+async def test_repair_stays_one_scene_and_generates_its_opening_and_ending(grouped, monkeypatch):
     value = grouped
     scene = value.row.state_json["scenes"][1]
     scene.pop("targetDurationFrames")  # Persisted scenes keep timing in renderPlan/draftTimeline.
@@ -473,7 +508,8 @@ async def test_repair_stays_one_logical_scene_and_generates_only_its_image(group
 
     monkeypatch.setattr(timeline_media, "probe_timeline_media", lambda data: {"frameCount": 192})
     await value.runner.execute(value.row.id, value.op.id)
-    assert value.images == [1] and len(value.client.submits) == 1
+    assert value.images == [1, 1] and len(value.client.submits) == 1
+    assert value.image_roles == ["opening", "ending"]
     assert set(value.op.result_json["tasks"]) == {"1"}
     assert len(value.requests[0]["scenes"]) == 1
     assert value.requests[0]["segments"] == [

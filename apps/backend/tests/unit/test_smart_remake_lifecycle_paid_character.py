@@ -80,7 +80,7 @@ async def test_changed_character_bytes_block_before_image_submission(setup):
 
 
 @pytest.mark.asyncio
-async def test_character_group_uses_product_character_and_one_layout(grouped):
+async def test_character_group_sends_only_composed_opening_and_ending_to_kie(grouped):
     value = grouped
     value.row.context_json.update(
         characterKey="character",
@@ -90,9 +90,10 @@ async def test_character_group_uses_product_character_and_one_layout(grouped):
     install_expectations(value.row.context_json)
     await value.runner._freeze_plan(value.row, value.op)
     request, references = await value.runner._request(value.row, value.op, 0, value.groups[0])
-    assert value.images == [0]
-    assert value.client.uploads == [b"product", b"character", b"image-0"]
-    assert len(request["input"]["image_urls"]) == 3 and len(references) == 1
+    assert value.images == [0, 1]
+    assert value.image_roles == ["opening", "ending"]
+    assert value.client.uploads == [b"image-0", b"image-1-ending"]
+    assert len(request["input"]["image_urls"]) == len(references) == 2
     assert value.requests[0]["has_character_reference"] is True
 
 
@@ -100,11 +101,11 @@ def test_character_reference_role_is_explicit_in_kie_prompt():
     request = build_kie_group_request(
         scenes=[{"targetDurationFrames": 192, "videoPrompt": "Show cup"}],
         segments=[{"inFrame": 0, "outFrame": 192}],
-        reference_image_urls=[f"https://1.1.1.1/{i}.png" for i in range(3)],
+        reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
         has_character_reference=True,
     )
-    assert "SECOND reference image" in request["input"]["prompt"]
-    assert "character identity" in request["input"]["prompt"]
+    assert "SECOND image is the exact final frame" in request["input"]["prompt"]
+    assert "conditioned person's facial features" in request["input"]["prompt"]
 
 
 @pytest.mark.asyncio

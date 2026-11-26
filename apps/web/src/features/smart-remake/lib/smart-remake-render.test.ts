@@ -403,13 +403,29 @@ describe("saved KIE project polling", () => {
     });
 
     it("uses a safe fallback when no failure code is available", () => {
+        const message = getRemakeProjectError({
+            ...pending,
+            pendingOperation: undefined,
+            lastOperation: { id: "operation", status: "failed", errorCode: null },
+        });
+        expect(message).toContain("Chưa hoàn tất yêu cầu");
+        expect(message).not.toContain("KIE");
+    });
+
+    it("explains the saved KIE failure after a project reload using the retained provider reason", () => {
         expect(
             getRemakeProjectError({
                 ...pending,
                 pendingOperation: undefined,
-                lastOperation: { id: "operation", status: "failed", errorCode: null },
+                lastOperation: {
+                    id: "operation",
+                    status: "failed",
+                    errorCode: "KIE_TASK_FAILED",
+                    providerTaskId: "kie-saved-task",
+                    providerError: { providerCode: "500", providerMessage: "Internal Error" },
+                },
             }),
-        ).toContain("Chưa tạo được video");
+        ).toContain("Lỗi từ nhà cung cấp kie.ai");
     });
 });
 
@@ -601,8 +617,37 @@ describe("seller-facing KIE errors", () => {
             }),
         );
         expect(message).toContain(phrase);
+        if (code.startsWith("KIE_")) expect(message).toMatch(/kie/i);
         expect(message).not.toContain("PRIVATE_");
         expect(message).not.toContain("fake-token");
+    });
+
+    it.each([
+        ["The input content was flagged for containing a prominent public figure.", "bộ lọc"],
+        ["Internal Error, Please try again later.", "lỗi nội bộ"],
+        ["Server exception, please try again later or contact customer service", "lỗi nội bộ"],
+    ])(
+        "explains the retained KIE reason without inventing a cause: %s",
+        (providerMessage, phrase) => {
+            const failed = getRemakeErrorMessage(
+                new ApiError("KIE_TASK_FAILED", "PRIVATE_MESSAGE", 503, {
+                    providerError: { providerMessage },
+                }),
+            );
+            expect(failed).toContain("Lỗi từ nhà cung cấp kie.ai");
+            expect(failed).toContain(phrase);
+            expect(failed).not.toMatch(/hoàn tiền|không tính phí|prompt quá dài|PRIVATE_MESSAGE/);
+        },
+    );
+
+    it("does not turn a generic KIE 500 into a public-figure or prompt-length diagnosis", () => {
+        const message = getRemakeErrorMessage(
+            new ApiError("KIE_TASK_FAILED", "private", 503, {
+                providerError: { providerCode: 500 },
+            }),
+        );
+        expect(message).toContain("Lỗi từ nhà cung cấp kie.ai");
+        expect(message).not.toMatch(/nhân vật công chúng|prompt quá dài/);
     });
 
     it("preserves actionable local validation messages", () => {

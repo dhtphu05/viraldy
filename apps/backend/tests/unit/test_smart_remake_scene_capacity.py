@@ -158,11 +158,12 @@ def test_long_prompt_keeps_every_scene_in_one_eight_second_provider_request():
     request = build_kie_group_request(
         scenes=scenes,
         segments=[{"inFrame": index * 16, "outFrame": (index + 1) * 16} for index in range(12)],
-        reference_image_urls=["https://1.1.1.1/product.png"],
+        reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
     )
     assert request["input"]["duration"] == 8
-    assert len(request["input"]["prompt"]) > 20000
-    assert all(scene["videoPrompt"] in request["input"]["prompt"] for scene in scenes)
+    prompt = request["input"]["prompt"]
+    assert all(f"] SCENE {index + 1}\n" in prompt for index in range(len(scenes)))
+    assert all(scene["videoPrompt"] in prompt for scene in scenes)
 
 
 @pytest.mark.parametrize("damage", ["omitted", "duplicated", "reordered", "missing_manual_break"])
@@ -300,7 +301,8 @@ def test_kie_groups_preserve_six_logical_directions_in_one_provider_clip():
     scenes = [{"videoPrompt": f"Action {index}", "targetDurationFrames": 32} for index in range(6)]
     segments = [{"inFrame": index * 32, "outFrame": (index + 1) * 32} for index in range(6)]
     request = build_kie_group_request(
-        scenes=scenes, segments=segments, reference_image_urls=["https://1.1.1.1/product.png"]
+        scenes=scenes, segments=segments,
+        reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"]
     )
     assert request["input"]["duration"] == 8
     assert all(f"Action {index}" in request["input"]["prompt"] for index in range(6))
@@ -318,7 +320,7 @@ def test_adapted_single_and_group_prompts_use_output_timing_without_original_spe
     group = build_kie_group_request(
         scenes=[scene],
         segments=[{"inFrame": 0, "outFrame": 96}],
-        reference_image_urls=["https://1.1.1.1/product.png"],
+        reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
     )
     for request in (single, group):
         assert "original speed" not in request["input"]["prompt"]

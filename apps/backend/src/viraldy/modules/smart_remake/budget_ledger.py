@@ -18,6 +18,7 @@ from viraldy.shared.errors.base import AppError, ConflictError, NotFoundError
 
 from .budget_models import SmartRemakeAttemptModel as Attempt
 from .generation_recovery import (
+    authorized_unconfirmed_replacement_keys,
     is_authorized_unconfirmed_replacement,
     is_completed_analysis_response,
     is_known_image_rejection,
@@ -167,17 +168,17 @@ async def _authorized_replacement_collision(
     session: AsyncSession, workspace_id: UUID, project_id: UUID, previous: Attempt,
     *, actor_id: UUID | None, idempotency_key: str, metadata: dict[str, Any] | None,
 ) -> bool:
-    if not is_authorized_unconfirmed_replacement(previous) or actor_id != previous.actor_id:
+    replacement_keys = authorized_unconfirmed_replacement_keys(previous)
+    if not replacement_keys or actor_id != previous.actor_id:
         return False
     incoming = metadata or {}
-    authorization = previous.metadata_json["replacementAuthorization"]
     try:
         operation_id = UUID(incoming.get("operationId"))
     except (TypeError, ValueError, AttributeError):
         return False
     slot = incoming.get("slot")
     if (
-        str(operation_id) == authorization["operationId"]
+        str(operation_id) == previous.metadata_json["operationId"]
         or not isinstance(slot, str)
         or idempotency_key != f"{operation_id}:{slot}"
     ):
@@ -189,7 +190,7 @@ async def _authorized_replacement_collision(
         .where(
             operation.id == operation_id, operation.project_id == project_id,
             SmartRemakeProjectModel.workspace_id == workspace_id,
-            operation.idempotency_key == authorization["replacementKey"],
+            operation.idempotency_key.in_(sorted(replacement_keys)),
             operation.status == "running",
             operation.result_json["actorId"].as_string() == str(actor_id),
             operation.result_json["kind"].as_string().in_(("render", "repair")),
@@ -249,11 +250,11 @@ async def reserve_attempt(
         )
         existing_metadata = {
             key: value for key, value in existing.metadata_json.items()
-            if key != "replacementAuthorization"
+            if key not in {"replacementAuthorization", "additionalReplacementAuthorizations"}
         }
         incoming_metadata = {
             key: value for key, value in (metadata or {}).items()
-            if key != "replacementAuthorization"
+            if key not in {"replacementAuthorization", "additionalReplacementAuthorizations"}
         }
         if pricing_drift:
             existing_metadata = {

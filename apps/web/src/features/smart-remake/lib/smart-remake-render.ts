@@ -5,6 +5,7 @@ import {
     type SmartRemakeProject,
     type SmartRemakeRenderResult,
     type SmartRemakeGenerationRecovery,
+    type SmartRemakeProviderError,
 } from "@/shared/api/smart-remake";
 import { ApiError } from "@/shared/api/errors";
 import { isDemoVideoAvailable } from "@/shared/lib/optional-demo-media";
@@ -141,31 +142,41 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "KIE_NOT_CONFIGURED":
         case "KIE_AUTH_FAILED":
         case "KIE_DURABLE_JOB_REQUIRED":
-            return "Dịch vụ tạo video chưa sẵn sàng. Nhờ quản trị viên kiểm tra kết nối để tiếp tục.";
+            return "KIE: Dịch vụ tạo video chưa sẵn sàng. Nhờ quản trị viên kiểm tra kết nối để tiếp tục.";
         case "KIE_CREDITS_EXHAUSTED":
-            return "Dịch vụ tạo video đã hết lượt sử dụng. Nhờ quản trị viên bổ sung để tiếp tục.";
+            return "KIE: Dịch vụ tạo video đã hết lượt sử dụng. Nhờ quản trị viên bổ sung để tiếp tục.";
         case "KIE_RATE_LIMITED":
-            return "Dịch vụ tạo video đang bận. Đợi ít phút rồi kiểm tra lại yêu cầu đã gửi nhé.";
+            return "KIE: Dịch vụ tạo video đang bận. Đợi ít phút rồi kiểm tra lại yêu cầu đã gửi nhé.";
         case "KIE_SUBMISSION_UNCERTAIN":
         case "KIE_POLL_TIMEOUT":
-            return "Chưa xác định được kết quả. Kiểm tra lại yêu cầu trước khi tạo tiếp để tránh gửi trùng.";
-        case "KIE_TASK_FAILED":
-            return "Chưa tạo được video. Các cảnh hoàn tất vẫn được giữ; hãy mở dự án để kiểm tra.";
+        case "SMART_REMAKE_SUBMISSION_UNRESOLVED":
+            return "Chưa xác định được kết quả từ kie.ai. Kiểm tra lại yêu cầu trước khi tạo tiếp để tránh gửi trùng.";
+        case "KIE_TASK_FAILED": {
+            const message = String(
+                (cause.details?.providerError as SmartRemakeProviderError | undefined)
+                    ?.providerMessage ?? "",
+            ).toLowerCase();
+            if (message.includes("public figure"))
+                return "Lỗi từ nhà cung cấp kie.ai: bộ lọc từ chối tạo video vì cho rằng tư liệu liên quan đến nhân vật công chúng. Kiểm tra ảnh và nội dung trước khi thử lại.";
+            if (/internal error|server exception/.test(message))
+                return "Lỗi từ nhà cung cấp kie.ai: hệ thống tạo video báo lỗi nội bộ. Các clip đã hoàn tất vẫn được giữ; xem phản hồi và kiểm tra trạng thái.";
+            return "Lỗi từ nhà cung cấp kie.ai. Chưa tạo được video. Các cảnh hoàn tất vẫn được giữ; hãy mở dự án để kiểm tra.";
+        }
         case "KIE_UPLOAD_FAILED":
             return "Lỗi kết nối khi tải ảnh tham chiếu lên KIE. Ảnh đã tạo vẫn được giữ trong dự án; hãy thử lại khi kết nối ổn định.";
         case "KIE_UNSAFE_MEDIA_URL":
-            return "Chưa gửi được ảnh sản phẩm. Kiểm tra ảnh JPG, PNG hoặc WebP và thử lại nhé.";
+            return "Chưa gửi được ảnh sản phẩm tới KIE. Kiểm tra ảnh JPG, PNG hoặc WebP và thử lại nhé.";
         case "KIE_VALIDATION_FAILED":
-            return "Yêu cầu tạo video chưa hợp lệ. Kiểm tra ảnh sản phẩm và prompt từng cảnh nhé.";
+            return "KIE: Yêu cầu tạo video chưa hợp lệ. Kiểm tra ảnh sản phẩm và prompt từng cảnh nhé.";
         case "KIE_OUTPUT_DOWNLOAD_FAILED":
-            return "Video đã tạo chưa tải về được. Giữ dự án và kiểm tra lại, chưa cần tạo cảnh mới.";
+            return "Video từ KIE đã tạo nhưng chưa tải về được. Giữ dự án và kiểm tra lại, chưa cần tạo cảnh mới.";
         case "SMART_REMAKE_OPERATION_UNRESOLVED":
             return "Yêu cầu trước có thể vẫn đang xử lý. Bấm Kiểm tra lại để cập nhật trước khi tạo tiếp.";
         default:
             return cause.code.startsWith("OPENAI_IMAGE_")
                 ? "Chưa hoàn tất bước tạo ảnh. Các tư liệu đã lưu vẫn được giữ; kiểm tra lại dự án trước khi thử tiếp."
                 : cause.code.startsWith("KIE_")
-                  ? "Chưa hoàn tất yêu cầu tạo video. Các cảnh đã có vẫn được giữ; kiểm tra lại dự án trước khi tạo tiếp."
+                  ? "Chưa hoàn tất yêu cầu tạo video với KIE. Các cảnh đã có vẫn được giữ; kiểm tra lại dự án trước khi tạo tiếp."
                   : cause.code.startsWith("SMART_REMAKE_")
                     ? "Chưa hoàn tất yêu cầu Smart Remake. Kiểm tra lại dự án hoặc tư liệu rồi thử lại nhé."
                     : cause.message;
@@ -176,12 +187,15 @@ export function getRemakeProjectError(project: SmartRemakeProject | null): strin
     if (project?.pendingOperation || project?.lastOperation?.status !== "failed") return null;
     return getRemakeErrorMessage(
         new ApiError(
-            project.lastOperation.errorCode || "KIE_TASK_FAILED",
+            project.lastOperation.errorCode || "SMART_REMAKE_OPERATION_FAILED",
             "Chưa hoàn tất yêu cầu. Các cảnh đã có vẫn được giữ; kiểm tra lại dự án trước khi tạo tiếp.",
-            project.generationRecovery?.httpStatus ?? 503,
-            project.generationRecovery
-                ? { providerErrorCode: project.generationRecovery.providerErrorCode }
-                : undefined,
+            project.lastOperation.providerError?.httpStatus ??
+                project.generationRecovery?.httpStatus ??
+                503,
+            {
+                providerErrorCode: project.generationRecovery?.providerErrorCode,
+                providerError: project.lastOperation.providerError,
+            },
         ),
     );
 }

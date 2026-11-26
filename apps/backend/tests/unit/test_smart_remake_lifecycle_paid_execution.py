@@ -121,7 +121,7 @@ async def test_fake_kie_receipt_cannot_forge_live_execution(workflow, ledger):
 def kie_input():
     return {
         "model": "veo3_lite", "prompt": "Show product", "duration": 8, "aspect_ratio": "9:16",
-        "generation_type": "REFERENCE_2_VIDEO", "enable_translation": False,
+        "generation_type": "FIRST_AND_LAST_FRAMES_2_VIDEO", "enable_translation": False,
         "resolution": "720p", "image_urls": ["https://1.1.1.1/reference.png"],
     }
 
@@ -144,7 +144,7 @@ async def test_only_owned_kie_create_can_attest_generation_despite_owned_poll(
         def respond(request):
             data = {"taskId": "task-owned"}
             if request.method == "GET":
-                data.update(state="success", resultJson={"resultUrls": ["https://1.1.1.1/v.mp4"]})
+                data.update(successFlag=1, response={"resultUrls": ["https://1.1.1.1/v.mp4"]})
             return httpx.Response(200, json={"code": 200, "data": data})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:

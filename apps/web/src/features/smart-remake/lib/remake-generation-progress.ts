@@ -58,6 +58,8 @@ export function getRemakeGenerationProgress(project: SmartRemakeProject | null) 
                 }),
             videoUrl: state?.videoUrl,
             errorCode: state?.errorCode,
+            providerError: state?.providerError,
+            providerTaskId: state?.providerTaskId,
             inspectionReportId: state?.inspectionReportId,
         };
     });

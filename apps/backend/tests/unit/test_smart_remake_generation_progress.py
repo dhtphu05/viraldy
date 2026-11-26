@@ -72,14 +72,15 @@ def fixture(duration=16):
     return row, op
 
 
-def image(row, op, index=0):
+def image(row, op, index=0, frame_role=None):
     unit = op.result_json["renderPlan"]["units"][index]
     scene = next(
         s
         for s in op.result_json["generationExpectations"]["scenes"]
         if s["renderUnitId"] == unit["id"]
     )
-    digest = hashlib.sha256(str(index).encode()).hexdigest()
+    image_key = str(index) if frame_role != "ending" else f"{index}:ending"
+    digest = hashlib.sha256((image_key + str(frame_role)).encode()).hexdigest()
     asset = {
         "storageKey": f"workspaces/{row.workspace_id}/smart-remake/{row.id}/images/{uuid4().hex}",
         "requestHash": digest,
@@ -88,8 +89,15 @@ def image(row, op, index=0):
         "expectationsHash": op.result_json["expectationsHash"],
         **{k: copy.deepcopy(scene[k]) for k in ("renderUnitId", "sourceSceneId", "openingFrame")},
     }
+    if frame_role is not None:
+        asset["frameRole"] = frame_role
+        asset["referenceFrame"] = {
+            **scene["openingFrame"],
+            **({"frame": scene["sourceRange"]["endFrame"] - 1, "layoutHash": "d" * 64}
+               if frame_role == "ending" else {}),
+        }
     row.context_json["imageAssets"][digest] = asset
-    op.result_json["images"][str(index)] = {**copy.deepcopy(asset), "status": "completed"}
+    op.result_json["images"][image_key] = {**copy.deepcopy(asset), "status": "completed"}
     return asset
 
 
@@ -467,6 +475,98 @@ async def test_every_finished_conditioning_image_is_visible_before_remaining_wor
     }
     assert progress["groups"][0]["stage"] == "submitting_video"
     assert "conditioningImages" not in progress["groups"][1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("character", [False, True])
+async def test_new_frame_bookends_show_finished_images_and_wait_for_the_ending(character):
+    from viraldy.modules.smart_remake.generation_progress import present_generation_progress
+
+    row, op = fixture()
+    if character:
+        row.context_json["characterKey"] = "authorized-character"
+    op.result_json["referencePreparation"] = "direct"
+    opening = image(row, op, frame_role="opening")
+    op.result_json["images"]["1:ending"] = {"status": "submitting", "frameRole": "ending"}
+    media = SimpleNamespace(
+        url=AsyncMock(side_effect=lambda key: "https://owned.test/" + key[-32:])
+    )
+    waiting = await present_generation_progress(
+        row, op, workspace_id=row.workspace_id, attempts=[], media=media
+    )
+    assert waiting["groups"][0]["stage"] == "preparing_image"
+    assert len(waiting["groups"][0]["conditioningImages"]) == 1
+    ending = image(row, op, 1, frame_role="ending")
+    ready = await present_generation_progress(
+        row, op, workspace_id=row.workspace_id, attempts=[], media=media
+    )
+    assert ready["groups"][0]["stage"] == "submitting_video"
+    assert ready["groups"][0]["videoSubmitted"] is False
+    assert [item["url"] for item in ready["groups"][0]["conditioningImages"]] == [
+        "https://owned.test/" + asset["storageKey"][-32:] for asset in (opening, ending)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_scene_group_presents_both_frame_roles_without_collapsing_the_scene_id():
+    from viraldy.modules.smart_remake.generation_progress import present_generation_progress
+
+    row, op = fixture(8)
+    plan = row.context_json["renderPlan"]
+    unit = {**plan["units"][0], "targetDurationFrames": 192}
+    plan["units"] = [unit]
+    plan["groups"][0].update(
+        renderUnitIds=[unit["id"]],
+        segments=[{"renderUnitId": unit["id"], "inFrame": 0, "outFrame": 192}],
+    )
+    row.context_json["sceneMap"]["scenes"] = [
+        {**row.context_json["sceneMap"]["scenes"][0], "targetDurationFrames": 192}
+    ]
+    row.state_json["scenes"] = row.state_json["scenes"][:1]
+    row.state_json["renderPlan"] = copy.deepcopy(plan)
+    install_expectations(row.context_json)
+    op.result_json.update(
+        renderPlan=copy.deepcopy(plan),
+        renderPlanHash=hashlib.sha256(
+            json.dumps(plan, sort_keys=True, default=str).encode()
+        ).hexdigest(),
+        generationExpectations=copy.deepcopy(row.context_json["generationExpectations"]),
+        expectationsHash=row.context_json["expectationsHash"],
+        referencePreparation="direct",
+    )
+    image(row, op, frame_role="opening")
+    image(row, op, frame_role="ending")
+    media = SimpleNamespace(
+        url=AsyncMock(side_effect=lambda key: "https://owned.test/" + key[-32:])
+    )
+    progress = await present_generation_progress(
+        row, op, workspace_id=row.workspace_id, attempts=[], media=media
+    )
+    assert progress["groups"][0]["stage"] == "submitting_video"
+    assert [item["renderUnitId"] for item in progress["groups"][0]["conditioningImages"]] == [
+        unit["id"], unit["id"],
+    ]
+    assert media.url.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed", ["frame", "sourceMediaHash", "layoutHash", "extractorVersion"])
+async def test_ending_preview_requires_a_bound_final_source_frame(changed):
+    from viraldy.modules.smart_remake.generation_progress import present_generation_progress
+
+    row, op = fixture()
+    op.result_json["referencePreparation"] = "direct"
+    image(row, op, frame_role="opening")
+    ending = image(row, op, 1, frame_role="ending")
+    ending["referenceFrame"][changed] = -1 if changed == "frame" else "invalid"
+    op.result_json["images"]["1:ending"].update(copy.deepcopy(ending))
+    media = SimpleNamespace(url=AsyncMock(return_value="https://owned.test/opening"))
+    progress = await present_generation_progress(
+        row, op, workspace_id=row.workspace_id, attempts=[], media=media
+    )
+    assert len(progress["groups"][0]["conditioningImages"]) == 1
+    assert progress["groups"][0]["stage"] == "preparing_image"
+    assert media.url.await_count == 1
 
 
 @pytest.mark.asyncio

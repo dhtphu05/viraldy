@@ -16,6 +16,7 @@ import type {
     SmartRemakeAnalysisProgress,
     SmartRemakeGenerationRecovery,
     SmartRemakeGenerationProgress,
+    SmartRemakeProviderError,
     SmartRemakeSourceAudio,
 } from "./smart-remake-project-types";
 export type * from "./smart-remake-project-types";
@@ -268,6 +269,8 @@ export type SmartRemakeProject = {
         status: "running";
         needsReconciliation: boolean;
         errorCode?: string | null;
+        providerError?: SmartRemakeProviderError;
+        providerTaskId?: string;
         kind?: string;
         stage?: string;
         progress?: { stage: string; completed?: number; total?: number };
@@ -276,6 +279,8 @@ export type SmartRemakeProject = {
         id: string;
         status: "failed" | "completed";
         errorCode?: string | null;
+        providerError?: SmartRemakeProviderError;
+        providerTaskId?: string;
         kind?: string;
         needsReconciliation?: boolean;
     };

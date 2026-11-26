@@ -1,6 +1,7 @@
 # ruff: noqa: F811 -- pytest imports the shared offline fixtures by name.
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 import pytest
@@ -78,9 +79,11 @@ async def test_kie_prompt_cannot_lose_saved_constraints_after_scene_edit(grouped
     install_expectations(value.row.context_json)
     await value.runner._freeze_plan(value.row, value.op)
     request, _ = await value.runner._request(value.row, value.op, 0, value.groups[0])
-    assert '"forbid": ["medical cure claim"]' in request["input"]["prompt"]
-    assert '"claims": ["250 ml capacity only"]' in request["input"]["prompt"]
-    assert "SAVED REQUIREMENTS" in request["input"]["prompt"]
+    requirements = json.loads(request["input"]["prompt"].rsplit(
+        "SAVED REQUIREMENTS (all scenes; product identity and timing remain fixed): ", 1,
+    )[1])
+    assert requirements["forbid"] == ["medical cure claim"]
+    assert requirements["claims"] == ["250 ml capacity only"]
 
 
 @pytest.mark.asyncio

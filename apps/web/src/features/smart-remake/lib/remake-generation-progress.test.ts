@@ -129,4 +129,24 @@ describe("provider window generation progress", () => {
         project.renderPlan = { ...project.renderPlan!, groups: undefined };
         expect(getRemakeGenerationProgress(project)).toBeNull();
     });
+    it("binds retained KIE diagnostics to the failed group without leaking them into another clip", () => {
+        const project = generationProject();
+        const failure = {
+            groupId: "group-a",
+            stage: "blocked" as const,
+            videoSubmitted: true,
+            errorCode: "KIE_TASK_FAILED",
+            providerError: { providerCode: "500", providerMessage: "Internal Error" },
+            providerTaskId: "task-a",
+        };
+        project.generationProgress!.groups = [
+            { groupId: "group-b", stage: "queued", videoSubmitted: false },
+            failure,
+        ];
+        const groups = getRemakeGenerationProgress(project)!.groups;
+        expect(groups[0].providerError).toEqual(failure.providerError);
+        expect(groups[0].providerTaskId).toBe("task-a");
+        expect(groups[1].providerError).toBeUndefined();
+        expect(groups[1].providerTaskId).toBeUndefined();
+    });
 });

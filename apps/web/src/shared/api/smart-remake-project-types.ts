@@ -344,6 +344,12 @@ export type SmartRemakeGenerationStage =
     | "blocked"
     | "unknown";
 
+export type SmartRemakeProviderError = {
+    httpStatus?: number;
+    providerCode?: string | number;
+    providerMessage?: string;
+};
+
 export type SmartRemakeGenerationProgress = {
     operationId: string;
     status: "running" | "completed" | "failed";
@@ -357,6 +363,8 @@ export type SmartRemakeGenerationProgress = {
         conditioningImages?: Array<{ renderUnitId: string; url: string }>;
         videoUrl?: string;
         errorCode?: string;
+        providerError?: SmartRemakeProviderError;
+        providerTaskId?: string;
         inspectionReportId?: string;
     }>;
 };

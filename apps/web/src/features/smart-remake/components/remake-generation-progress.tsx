@@ -1,5 +1,6 @@
 import { Check, Clock3, Film, Image, Layers3, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import type { SmartRemakeProject } from "@/shared/api/smart-remake";
+import { ApiError } from "@/shared/api/errors";
 import { Button } from "@/shared/ui/button";
 import {
     Dialog,
@@ -12,6 +13,7 @@ import {
     generationStageLabels,
     getRemakeGenerationProgress,
 } from "../lib/remake-generation-progress";
+import { getRemakeErrorMessage } from "../lib/smart-remake-render";
 import "./remake-generation-progress.css";
 
 export interface RemakeGenerationProgressProps {
@@ -148,6 +150,16 @@ export function RemakeGenerationProgress({
             )}
             <div className="remake-generation-progress__groups">
                 {progress.groups.map((group) => {
+                    const kieError =
+                        ["blocked", "unknown"].includes(group.stage) &&
+                        (group.errorCode?.startsWith("KIE_") ||
+                            group.errorCode === "SMART_REMAKE_SUBMISSION_UNRESOLVED")
+                            ? getRemakeErrorMessage(
+                                  new ApiError(group.errorCode, "", 503, {
+                                      providerError: group.providerError,
+                                  }),
+                              )
+                            : null;
                     const active =
                         progress.active &&
                         [
@@ -270,6 +282,62 @@ export function RemakeGenerationProgress({
                                           ? "Chưa gửi lượt tạo clip tới KIE"
                                           : "Chưa xác nhận trạng thái gửi tới KIE"}
                                 </p>
+                                {kieError && (
+                                    <div
+                                        role="alert"
+                                        className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-950"
+                                    >
+                                        <p className="font-semibold">
+                                            {group.stage === "unknown"
+                                                ? "Chưa nhận được kết quả từ kie.ai"
+                                                : group.errorCode === "KIE_TASK_FAILED"
+                                                  ? "Lỗi từ nhà cung cấp kie.ai"
+                                                  : "Bước kết nối với kie.ai gặp lỗi"}
+                                        </p>
+                                        <p>{kieError}</p>
+                                        {group.providerError?.providerMessage && (
+                                            <div>
+                                                <p className="font-medium">KIE trả về</p>
+                                                <p className="whitespace-pre-wrap break-words">
+                                                    {group.providerError.providerMessage}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {(group.providerTaskId ||
+                                            group.providerError?.providerCode != null ||
+                                            group.providerError?.httpStatus != null) && (
+                                            <details>
+                                                <summary className="cursor-pointer">
+                                                    Chi tiết lỗi KIE
+                                                </summary>
+                                                <dl className="mt-2 space-y-1 break-words">
+                                                    {group.providerTaskId && (
+                                                        <div>
+                                                            <dt>Mã tác vụ KIE</dt>
+                                                            <dd>{group.providerTaskId}</dd>
+                                                        </div>
+                                                    )}
+                                                    {group.providerError?.providerCode != null && (
+                                                        <div>
+                                                            <dt>Mã lỗi KIE</dt>
+                                                            <dd>
+                                                                {group.providerError.providerCode}
+                                                            </dd>
+                                                        </div>
+                                                    )}
+                                                    {group.providerError?.httpStatus != null && (
+                                                        <div>
+                                                            <dt>HTTP</dt>
+                                                            <dd>
+                                                                {group.providerError.httpStatus}
+                                                            </dd>
+                                                        </div>
+                                                    )}
+                                                </dl>
+                                            </details>
+                                        )}
+                                    </div>
+                                )}
                                 {group.sourceSceneIndexes.length > 0 && (
                                     <p className="remake-generation-progress__scenes">
                                         Từ cảnh {group.sourceSceneIndexes.join(", ")}

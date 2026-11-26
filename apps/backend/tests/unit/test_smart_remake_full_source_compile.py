@@ -483,12 +483,13 @@ async def test_late_source_motion_beat_reaches_its_retimed_scene_and_kie_payload
     request = build_kie_group_request(
         scenes=[scene],
         segments=[{"inFrame": 0, "outFrame": 32}],
-        reference_image_urls=["https://1.1.1.1/product.png"],
+        reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
         product_lock=lock,
         reference_analysis=analysis,
     )
     prompt = request["input"]["prompt"]
-    assert '"motionBeats"' in prompt and '"pacingPlan"' in prompt
+    assert "[00:00.000–00:01.333] SCENE 1" in prompt
+    assert "0–1.333s:" in prompt
     assert "rotate the target product to show its base" in prompt
     assert "match cut to the final hero shot" in prompt
     assert analysis == original

@@ -218,8 +218,8 @@ def test_pending_attempt_still_requires_reconciliation_without_project_limits():
 @pytest.mark.parametrize(
     "character,images,expected",
     [
-        (False, True, (3, 2, 0, "3.50")),
-        (True, True, (2, 2, 0, "3.00")),
+        (False, True, (4, 2, 0, "4.00")),
+        (True, True, (4, 2, 0, "4.00")),
         (False, False, (0, 2, 0, "2.00")),
     ],
 )
@@ -235,9 +235,9 @@ def test_render_uses_actual_group_conditioning_not_scene_count(character, images
     assert result.budget.additionalReservationUsd == cost
 
 
-def test_legacy_ungrouped_plan_has_one_video_and_conditioning_per_scene():
+def test_ungrouped_plan_reserves_two_conditioned_bookends_per_scene_video():
     result = run(row=project(groups=[]))
-    assert (result.calls.image, result.calls.video, result.calls.inspection) == (3, 3, 0)
+    assert (result.calls.image, result.calls.video, result.calls.inspection) == (6, 3, 0)
 
 
 @pytest.mark.parametrize(
@@ -278,6 +278,8 @@ def test_fixed_provider_window_preflight_counts_exact_output_calls(seconds):
     result = run(row=row, budgetMode="unlimited")
     assert not result.blockers
     assert result.calls.video == seconds // 8
+    assert result.calls.image == result.scope.imageCount == 2 * (seconds // 8)
+    assert result.calls.inspection == 0
 
 
 def test_old_plan_pending_receipt_only_requires_reconciliation():
@@ -290,7 +292,7 @@ def test_old_plan_pending_receipt_only_requires_reconciliation():
     ]
 
 
-@pytest.mark.parametrize("images,expected", [(True, (1, 1, 0)), (False, (0, 1, 0))])
+@pytest.mark.parametrize("images,expected", [(True, (2, 1, 0)), (False, (0, 1, 0))])
 def test_repair_targets_exact_active_version_and_one_scene(images, expected):
     result = run("repair", row=project(images=images), sceneId="s1", baseVersionId="v1")
     assert (result.calls.image, result.calls.video, result.calls.inspection) == expected
@@ -308,12 +310,12 @@ def test_structured_repair_reserves_one_normalization_call_in_addition_to_genera
     )
     assert result.calls.model_dump() == {
         "analysis": 1,
-        "image": 1,
+        "image": 2,
         "video": 1,
         "inspection": 0,
-        "total": 3,
+        "total": 4,
     }
-    assert result.budget.additionalReservationUsd == "1.70"
+    assert result.budget.additionalReservationUsd == "2.20"
     assert "SMART_REMAKE_EXPECTATIONS_REQUIRED" in {b.code for b in result.blockers}
 
 
