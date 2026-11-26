@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useState } from "react";
 import {
     Archive,
     ArrowRight,
@@ -12,6 +12,10 @@ import {
     Sparkles,
 } from "lucide-react";
 
+import {
+    getCreativeMediaKind,
+    isIllustrativeCreative,
+} from "@/features/creative-library/lib/library-catalog";
 import { formatDuration } from "@/features/creative-library/lib/creative-visuals";
 import type { CreativeReference } from "@/features/creative-library/types/creative";
 import { cn } from "@/shared/lib/utils";
@@ -24,11 +28,18 @@ import {
     DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { SurfaceCard } from "@/shared/ui/surface-card";
-
 import { AnalysisStatusChip } from "./analysis-status-chip";
 
 export type CreativeCardAction =
-    "open" | "analyze" | "adapt" | "add-to-campaign" | "move-board" | "duplicate" | "archive";
+    | "open"
+    | "preview"
+    | "remake"
+    | "analyze"
+    | "adapt"
+    | "add-to-campaign"
+    | "move-board"
+    | "duplicate"
+    | "archive";
 
 export function CreativeCard({
     creative,
@@ -45,211 +56,236 @@ export function CreativeCard({
     onToggleSelect?: () => void;
     onAction: (a: CreativeCardAction) => void;
 }) {
-    const videoRef = useRef<HTMLVideoElement>(null);
+    const [metadata, setMetadata] = useState({ source: "", ratio: 0 });
+    const mediaKind = getCreativeMediaKind(creative);
+    const hasVideo = mediaKind === "video";
     const canAdapt = creative.analysisStatus === "analyzed";
-    const isProcessing = creative.analysisStatus === "processing";
-    const hasVideo = creative.mediaKind === "video" && !!creative.mediaUrl;
+    const processing = creative.analysisStatus === "processing";
+    const savedRatio = creative.mediaAspectRatio?.split(":").map(Number);
+    const ratio =
+        metadata.source === creative.mediaUrl && metadata.ratio > 0
+            ? metadata.ratio
+            : savedRatio
+              ? savedRatio[0] / savedRatio[1]
+              : 9 / 16;
     const imageUrl =
         creative.posterUrl ??
         creative.thumbnailUrl ??
-        (creative.mediaKind === "image" ? creative.mediaUrl : undefined);
-
-    function setPreview(active: boolean) {
-        const video = videoRef.current;
-        if (!video) return;
-        if (active) {
-            void video.play().catch(() => undefined);
-            return;
-        }
-        video.pause();
-    }
-
-    const contextualAction = canAdapt
-        ? { label: "Adapt pattern", action: "adapt" as const, icon: ArrowRight }
-        : isProcessing
-          ? { label: "View progress", action: "open" as const, icon: ArrowRight }
-          : { label: "Analyze DNA", action: "analyze" as const, icon: Sparkles };
-    const ContextualIcon = contextualAction.icon;
+        (mediaKind === "image" ? creative.mediaUrl : undefined);
+    const fileLabel = hasVideo
+        ? "Có file video"
+        : mediaKind === "image"
+          ? "Ảnh tham khảo"
+          : creative.mediaKind === "video" || creative.durationSec > 0
+            ? "Chưa có file video"
+            : "Liên kết tham khảo";
 
     return (
         <SurfaceCard
-            variant="interactive"
             padding="none"
-            data-selected={selected}
             role="article"
             aria-label={creative.title}
-            className="group relative flex min-w-0 flex-col overflow-hidden"
-            onMouseEnter={() => setPreview(true)}
-            onMouseLeave={() => setPreview(false)}
-            onFocusCapture={() => setPreview(true)}
-            onBlurCapture={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget)) setPreview(false);
-            }}
+            data-selected={selected}
+            className={cn(
+                "relative flex min-w-0 flex-col overflow-hidden border-0 bg-surface",
+                compact && "sm:flex-row",
+                selected && "ring-2 ring-primary/50",
+            )}
         >
             <button
                 type="button"
-                onClick={() => onAction("open")}
-                aria-label={`Open ${creative.title}`}
-                className="relative block w-full overflow-hidden bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                style={{ aspectRatio: compact ? "16 / 10" : "4 / 5" }}
+                onClick={() => onAction(hasVideo ? "preview" : "open")}
+                aria-label={`${hasVideo ? "Xem video" : "Mở chi tiết"} ${creative.title}`}
+                className={cn(
+                    "relative flex h-64 w-full items-center justify-center overflow-hidden bg-surface-soft p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    !hasVideo && !imageUrl && "h-32",
+                    compact && "h-44 sm:h-auto sm:min-h-44 sm:w-40 sm:shrink-0",
+                )}
             >
                 {hasVideo ? (
                     <video
-                        ref={videoRef}
                         src={creative.mediaUrl}
                         poster={creative.posterUrl ?? creative.thumbnailUrl}
                         muted
-                        loop
                         playsInline
                         preload="metadata"
-                        aria-hidden
-                        className={cn(
-                            "absolute inset-0 h-full w-full bg-black",
-                            creative.mediaAspectRatio === "9:16"
-                                ? "object-contain"
-                                : "object-cover",
-                        )}
+                        aria-hidden="true"
+                        className="block h-auto max-h-60 max-w-full rounded-lg bg-black object-contain"
+                        style={{ aspectRatio: ratio, width: `min(100%, ${240 * ratio}px)` }}
+                        onLoadedMetadata={(event) => {
+                            const media = event.currentTarget;
+                            if (media.videoWidth && media.videoHeight)
+                                setMetadata({
+                                    source: creative.mediaUrl!,
+                                    ratio: media.videoWidth / media.videoHeight,
+                                });
+                        }}
                     />
                 ) : imageUrl ? (
                     <img
                         src={imageUrl}
                         alt=""
                         loading="lazy"
-                        className={cn(
-                            "absolute inset-0 h-full w-full bg-surface-muted",
-                            creative.mediaAspectRatio === "9:16"
-                                ? "object-contain"
-                                : "object-cover",
-                        )}
+                        className="block h-auto max-h-60 max-w-full rounded-lg object-contain"
                     />
                 ) : (
-                    <span className="absolute inset-0 grid place-items-center bg-surface-muted text-text-tertiary">
-                        <span className="flex flex-col items-center gap-2">
-                            <span className="grid h-12 w-12 place-items-center rounded-full bg-surface">
-                                <Film className="h-5 w-5" aria-hidden />
-                            </span>
-                            <span className="text-xs font-medium">{creative.platform}</span>
-                        </span>
+                    <span className="flex flex-col items-center gap-2 text-text-tertiary">
+                        <Film className="size-8" aria-hidden="true" />
+                        <span className="text-xs">Chưa có bản xem trước</span>
                     </span>
                 )}
-
-                <span className="pointer-events-none absolute left-2.5 top-2.5 flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium uppercase text-white">
-                        {creative.platform}
-                    </span>
-                    <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium tabular text-white">
+                <span className="pointer-events-none absolute left-3 top-3 rounded-lg bg-surface/95 px-2 py-1 text-[11px] font-medium text-text-secondary">
+                    {creative.platform}
+                </span>
+                {creative.durationSec > 0 && (
+                    <span className="pointer-events-none absolute bottom-3 right-3 rounded-lg bg-black/65 px-2 py-1 text-xs tabular-nums text-white">
                         {formatDuration(creative.durationSec)}
                     </span>
-                </span>
-
+                )}
                 {hasVideo && (
-                    <span className="pointer-events-none absolute bottom-2.5 left-2.5 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-text-primary opacity-100 shadow-soft-card transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                        <Play className="h-4 w-4 fill-current" aria-hidden />
+                    <span className="pointer-events-none absolute bottom-3 left-3 flex min-h-9 items-center gap-1.5 rounded-full bg-surface/95 px-3 text-xs font-medium text-text-primary">
+                        <Play className="size-3.5" aria-hidden="true" /> Xem video
                     </span>
                 )}
             </button>
-
             {selectable && (
-                <label className="absolute right-2.5 top-2.5 z-10 cursor-pointer">
+                <label className="absolute right-1 top-1 z-10 flex size-11 cursor-pointer items-center justify-center">
                     <input
                         type="checkbox"
                         checked={!!selected}
                         onChange={onToggleSelect}
-                        aria-label={`${selected ? "Deselect" : "Select"} ${creative.title}`}
+                        aria-label={`${selected ? "Bỏ chọn" : "Chọn"} ${creative.title}`}
                         className="peer sr-only"
                     />
                     <span
                         className={cn(
-                            "grid h-7 w-7 place-items-center rounded-md border border-white/70 bg-white/90 text-transparent shadow-soft-card transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
-                            selected && "border-primary bg-primary text-primary-foreground",
+                            "grid size-7 place-items-center rounded-lg bg-surface text-transparent shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
+                            selected && "bg-primary text-white",
                         )}
-                        aria-hidden
+                        aria-hidden="true"
                     >
-                        <Check className="h-4 w-4" />
+                        <Check className="size-4" />
                     </span>
                 </label>
             )}
-
-            <div className="flex min-w-0 flex-1 flex-col p-3.5">
-                <AnalysisStatusChip status={creative.analysisStatus} />
-
+            <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+                <div className="flex flex-wrap gap-1.5 text-[11px] text-text-secondary">
+                    <span className="rounded-full bg-surface-soft px-2 py-1">{fileLabel}</span>
+                    {isIllustrativeCreative(creative) && (
+                        <span className="rounded-full bg-surface-soft px-2 py-1">Minh họa</span>
+                    )}
+                </div>
                 <button
                     type="button"
                     onClick={() => onAction("open")}
-                    className="mt-2 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Mở chi tiết ${creative.title}`}
+                    className="min-h-11 min-w-0 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     <span className="line-clamp-2 text-sm font-semibold leading-snug text-text-primary">
                         {creative.title}
                     </span>
-                    <span className="mt-1 block line-clamp-2 text-xs leading-5 text-text-secondary">
-                        “{creative.hookExcerpt}”
-                    </span>
+                    {creative.hookExcerpt && (
+                        <span className="mt-1.5 block line-clamp-2 text-xs leading-5 text-text-secondary">
+                            “{creative.hookExcerpt}”
+                        </span>
+                    )}
                 </button>
-
-                <p className="mt-3 min-w-0 truncate text-[11px] text-text-tertiary">
-                    <span className="text-text-secondary">{creative.brandOrCreator}</span>
-                    <span className="mx-1.5">·</span>
-                    <span>{creative.angle}</span>
+                <p className="truncate text-xs text-text-secondary">
+                    {creative.brandOrCreator}
+                    <span className="mx-1.5 text-text-tertiary">·</span>
+                    {creative.angle}
                 </p>
-
-                <div className="mt-auto flex items-center justify-between gap-2 border-t border-divider pt-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                    <AnalysisStatusChip status={creative.analysisStatus} />
+                </div>
+                <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                     <Button
-                        size="sm"
+                        type="button"
                         variant="ghost"
-                        className="h-8 min-w-0 px-2 text-[11px] text-primary-active"
-                        onClick={() => onAction(contextualAction.action)}
+                        className={cn(
+                            "min-h-11 min-w-0 flex-1 whitespace-normal px-3 text-left text-sm leading-5",
+                            hasVideo
+                                ? "bg-primary-soft text-primary hover:bg-primary-soft"
+                                : "bg-surface-soft text-text-primary hover:bg-surface-muted",
+                        )}
+                        onClick={() => onAction(hasVideo ? "remake" : "open")}
                     >
-                        <ContextualIcon className="h-3.5 w-3.5" />
-                        <span className="truncate">{contextualAction.label}</span>
+                        {hasVideo ? (
+                            <Sparkles className="size-4 shrink-0" aria-hidden="true" />
+                        ) : (
+                            <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+                        )}
+                        <span>{hasVideo ? "Tạo với Smart Remake" : "Mở chi tiết"}</span>
                     </Button>
-
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                aria-label={`More actions for ${creative.title}`}
-                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                aria-label={`Thao tác khác cho ${creative.title}`}
+                                className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-text-secondary hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
-                                <MoreHorizontal className="h-4 w-4" />
+                                <MoreHorizontal className="size-4" aria-hidden="true" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onSelect={() => onAction("open")}>
-                                Open analysis
-                            </DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-60">
+                            {hasVideo && (
+                                <DropdownMenuItem
+                                    className="min-h-11"
+                                    onSelect={() => onAction("preview")}
+                                >
+                                    <Play className="size-4" /> Xem video
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
-                                onSelect={() => onAction("analyze")}
-                                disabled={isProcessing}
+                                className="min-h-11"
+                                onSelect={() => onAction("open")}
                             >
-                                <Sparkles className="h-4 w-4" />
-                                {canAdapt ? "Re-analyze Creative DNA" : "Analyze Creative DNA"}
+                                Mở chi tiết và phân tích
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                                className="min-h-11"
+                                onSelect={() => onAction("analyze")}
+                                disabled={processing}
+                            >
+                                <Sparkles className="size-4" />
+                                {canAdapt
+                                    ? "Phân tích lại cách làm"
+                                    : processing
+                                      ? "Đang phân tích"
+                                      : "Phân tích cách làm"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="min-h-11"
                                 onSelect={() => onAction("adapt")}
                                 disabled={!canAdapt}
                             >
-                                <Package className="h-4 w-4" />
-                                Adapt to product
+                                <Package className="size-4" /> Áp dụng ý tưởng cho sản phẩm
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => onAction("add-to-campaign")}>
-                                Add to campaign
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => onAction("move-board")}>
-                                <FolderInput className="h-4 w-4" />
-                                Move to board
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => onAction("duplicate")}>
-                                <Copy className="h-4 w-4" />
-                                Duplicate reference
+                            <DropdownMenuItem
+                                className="min-h-11"
+                                onSelect={() => onAction("add-to-campaign")}
+                            >
+                                Thêm vào chiến dịch
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                                onSelect={() => onAction("archive")}
-                                className="text-destructive focus:text-destructive"
+                                className="min-h-11"
+                                onSelect={() => onAction("move-board")}
                             >
-                                <Archive className="h-4 w-4" />
-                                Archive
+                                <FolderInput className="size-4" /> Thêm vào bộ sưu tập
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="min-h-11"
+                                onSelect={() => onAction("duplicate")}
+                            >
+                                <Copy className="size-4" /> Nhân bản tham khảo
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                className="min-h-11 text-destructive focus:text-destructive"
+                                onSelect={() => onAction("archive")}
+                            >
+                                <Archive className="size-4" /> Lưu trữ mục này
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

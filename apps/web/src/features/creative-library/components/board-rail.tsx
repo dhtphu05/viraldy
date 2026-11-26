@@ -37,6 +37,12 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     folder: Folder,
 };
 
+const systemLabels: Record<string, string> = {
+    all: "Tất cả tư liệu",
+    recent: "Mới lưu",
+    unassigned: "Chưa phân loại",
+};
+
 export function BoardRail({
     activeBoardId,
     onSelect,
@@ -70,14 +76,14 @@ export function BoardRail({
     }, [boards, creatives]);
 
     return (
-        <nav aria-label="Boards" className={cn("flex flex-col gap-3", className)}>
+        <nav aria-label="Bộ sưu tập" className={cn("flex flex-col gap-2", className)}>
             <div className="flex items-center justify-between px-1">
-                <p className="text-[10px] font-semibold uppercase text-text-tertiary">Boards</p>
+                <p className="text-xs font-semibold text-text-secondary">Bộ sưu tập</p>
                 <button
                     type="button"
                     onClick={onNewBoard}
-                    aria-label="New board"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Tạo bộ sưu tập"
+                    className="inline-flex size-11 items-center justify-center rounded-xl text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     <Plus className="h-3.5 w-3.5" />
                 </button>
@@ -87,6 +93,7 @@ export function BoardRail({
                     const Icon = iconMap[b.icon ?? "folder"] ?? Folder;
                     const active = b.id === activeBoardId;
                     const count = counts[b.id] ?? 0;
+                    const label = b.system ? (systemLabels[b.filter ?? ""] ?? b.name) : b.name;
                     return (
                         <li key={b.id} className="group/board relative">
                             <button
@@ -94,8 +101,8 @@ export function BoardRail({
                                 onClick={() => onSelect(b.id)}
                                 aria-current={active ? "page" : undefined}
                                 className={cn(
-                                    "flex min-h-10 w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    !b.system && "pr-10",
+                                    "flex min-h-11 w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    !b.system && "pr-14",
                                     active
                                         ? "bg-primary-soft text-primary-active"
                                         : "text-text-secondary hover:bg-surface-soft hover:text-text-primary",
@@ -107,10 +114,12 @@ export function BoardRail({
                                         active ? "text-primary" : "text-text-tertiary",
                                     )}
                                 />
-                                <span className="min-w-0 flex-1 truncate">{b.name}</span>
+                                <span className="min-w-0 flex-1 truncate" title={label}>
+                                    {label}
+                                </span>
                                 <span
                                     className={cn(
-                                        "tabular text-[11px]",
+                                        "tabular-nums text-xs",
                                         active ? "text-primary-active/80" : "text-text-tertiary",
                                     )}
                                 >
@@ -122,40 +131,44 @@ export function BoardRail({
                                     <DropdownMenuTrigger asChild>
                                         <button
                                             type="button"
-                                            aria-label={`Options for ${b.name}`}
-                                            className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:opacity-0 sm:group-hover/board:opacity-100 sm:focus-visible:opacity-100"
+                                            aria-label={`Tùy chọn bộ sưu tập ${b.name}`}
+                                            className="absolute right-0 top-1/2 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-xl text-text-tertiary transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:opacity-0 sm:group-hover/board:opacity-100 sm:focus-visible:opacity-100"
                                         >
                                             <MoreHorizontal className="h-3.5 w-3.5" />
                                         </button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-44">
-                                        <DropdownMenuItem onSelect={() => onRenameBoard(b)}>
-                                            Rename
+                                    <DropdownMenuContent align="end" className="w-48 border-0">
+                                        <DropdownMenuItem
+                                            onSelect={() => onRenameBoard(b)}
+                                            className="min-h-11"
+                                        >
+                                            Đổi tên
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             onSelect={() => {
                                                 duplicateBoard(b.id);
-                                                toast("Board duplicated");
+                                                toast("Đã nhân bản bộ sưu tập");
                                             }}
+                                            className="min-h-11"
                                         >
-                                            Duplicate
+                                            Nhân bản
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
                                             onSelect={() => {
                                                 if (count > 0) {
-                                                    toast("Board isn't empty", {
+                                                    toast("Bộ sưu tập vẫn còn tư liệu", {
                                                         description:
-                                                            "Move or archive creatives first.",
+                                                            "Di chuyển hoặc lưu trữ tư liệu trước khi xóa nhé.",
                                                     });
                                                     return;
                                                 }
                                                 deleteBoard(b.id);
-                                                toast.success("Board deleted");
+                                                toast.success("Đã xóa bộ sưu tập");
                                             }}
-                                            className="text-destructive focus:text-destructive"
+                                            className="min-h-11 text-destructive focus:text-destructive"
                                         >
-                                            Delete
+                                            Xóa bộ sưu tập
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
