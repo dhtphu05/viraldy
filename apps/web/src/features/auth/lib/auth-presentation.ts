@@ -14,17 +14,17 @@ export function authPagePresentation(mode: AuthMode, intent: AuthIntent): AuthPa
     if (mode === "password") {
         return intent === "signup"
             ? {
-                  eyebrow: "Get started",
-                  title: "Create your Viraldy account",
-                  description: "Create your account to start working with your team.",
-                  ctaLabel: "Create account",
+                  eyebrow: "Bắt đầu",
+                  title: "Tạo tài khoản Viraldy",
+                  description: "Tạo tài khoản để bắt đầu làm việc cùng đội ngũ của bạn.",
+                  ctaLabel: "Tạo tài khoản",
                   showDevAccount: false,
               }
             : {
-                  eyebrow: "Welcome back",
-                  title: "Sign in to Viraldy",
-                  description: "Use your email and password to return to your workspace.",
-                  ctaLabel: "Sign in",
+                  eyebrow: "Chào mừng bạn trở lại",
+                  title: "Đăng nhập vào Viraldy",
+                  description: "Sử dụng email và mật khẩu để truy cập không gian làm việc của bạn.",
+                  ctaLabel: "Đăng nhập",
                   showDevAccount: false,
               };
     }
@@ -32,19 +32,17 @@ export function authPagePresentation(mode: AuthMode, intent: AuthIntent): AuthPa
     if (mode === "unavailable") {
         return intent === "signup"
             ? {
-                  eyebrow: "Access unavailable",
-                  title: "Account creation is temporarily unavailable",
-                  description:
-                      "The authentication service is not ready. Please try again in a moment.",
-                  ctaLabel: "Account creation unavailable",
+                  eyebrow: "Tạm thời không thể truy cập",
+                  title: "Tạm thời không thể tạo tài khoản",
+                  description: "Dịch vụ xác thực chưa sẵn sàng. Vui lòng thử lại sau ít phút.",
+                  ctaLabel: "Không thể tạo tài khoản",
                   showDevAccount: false,
               }
             : {
-                  eyebrow: "Access unavailable",
-                  title: "Sign in is temporarily unavailable",
-                  description:
-                      "The authentication service is not ready. Please try again in a moment.",
-                  ctaLabel: "Sign in unavailable",
+                  eyebrow: "Tạm thời không thể truy cập",
+                  title: "Tạm thời không thể đăng nhập",
+                  description: "Dịch vụ xác thực chưa sẵn sàng. Vui lòng thử lại sau ít phút.",
+                  ctaLabel: "Không thể đăng nhập",
                   showDevAccount: false,
               };
     }
@@ -52,37 +50,38 @@ export function authPagePresentation(mode: AuthMode, intent: AuthIntent): AuthPa
     if (mode === "local_test") {
         return intent === "signup"
             ? {
-                  eyebrow: "Development setup",
-                  title: "Create your dev account",
+                  eyebrow: "Thiết lập thử nghiệm",
+                  title: "Tạo tài khoản thử nghiệm",
                   description:
-                      "Start with a ready-to-use local profile containing your required email, name, and phone number.",
-                  ctaLabel: "Create dev account & continue",
+                      "Bắt đầu với hồ sơ thử nghiệm có sẵn email, họ tên và số điện thoại.",
+                  ctaLabel: "Tạo tài khoản thử nghiệm và tiếp tục",
                   showDevAccount: true,
               }
             : {
-                  eyebrow: "Development access",
-                  title: "Sign in to Viraldy",
+                  eyebrow: "Truy cập thử nghiệm",
+                  title: "Đăng nhập vào Viraldy",
                   description:
-                      "Use the local development account below to enter your workspace in one click.",
-                  ctaLabel: "Sign in with dev account",
+                      "Sử dụng tài khoản thử nghiệm bên dưới để truy cập không gian làm việc chỉ với một lần nhấn.",
+                  ctaLabel: "Đăng nhập bằng tài khoản thử nghiệm",
                   showDevAccount: true,
               };
     }
 
     return intent === "signup"
         ? {
-              eyebrow: "Get started",
-              title: "Create your Viraldy account",
-              description: "Create an account with your identity provider to enter your workspace.",
-              ctaLabel: "Create account securely",
+              eyebrow: "Bắt đầu",
+              title: "Tạo tài khoản Viraldy",
+              description:
+                  "Tạo tài khoản qua nhà cung cấp danh tính để truy cập không gian làm việc của bạn.",
+              ctaLabel: "Tạo tài khoản an toàn",
               showDevAccount: false,
           }
         : {
-              eyebrow: "Welcome back",
-              title: "Welcome back",
+              eyebrow: "Chào mừng bạn trở lại",
+              title: "Chào mừng bạn trở lại",
               description:
-                  "Continue with your verified identity. We'll return you to the page you requested.",
-              ctaLabel: "Continue to secure sign in",
+                  "Tiếp tục bằng danh tính đã xác minh. Bạn sẽ được chuyển về trang đã yêu cầu.",
+              ctaLabel: "Tiếp tục đăng nhập an toàn",
               showDevAccount: false,
           };
 }
@@ -90,19 +89,19 @@ export function authPagePresentation(mode: AuthMode, intent: AuthIntent): AuthPa
 export function passwordAuthErrorMessage(status: number): string {
     switch (status) {
         case 0:
-            return "We couldn't connect. Check your connection and try again.";
+            return "Không thể kết nối. Vui lòng kiểm tra kết nối mạng và thử lại.";
         case 400:
         case 422:
-            return "Please check your details and try again.";
+            return "Vui lòng kiểm tra thông tin và thử lại.";
         case 401:
-            return "The email or password is incorrect. Please try again.";
+            return "Email hoặc mật khẩu không chính xác. Vui lòng thử lại.";
         case 403:
-            return "This account can't sign in right now. Please contact your workspace administrator.";
+            return "Tài khoản này hiện không thể đăng nhập. Vui lòng liên hệ quản trị viên không gian làm việc.";
         case 409:
-            return "An account with this email already exists. Sign in instead.";
+            return "Tài khoản sử dụng email này đã tồn tại. Vui lòng đăng nhập.";
         case 429:
-            return "Too many attempts. Please wait a moment and try again.";
+            return "Bạn đã thử quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
         default:
-            return "We couldn't complete sign-in right now. Please try again in a moment.";
+            return "Hiện không thể hoàn tất đăng nhập. Vui lòng thử lại sau ít phút.";
     }
 }

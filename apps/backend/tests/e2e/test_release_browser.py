@@ -27,13 +27,13 @@ async def test_image_discovery_handoff_without_optional_local_assets() -> None:
         page.on("pageerror", lambda error: errors.append(str(error)))
         await page.goto(f"{base}/register?returnTo=%2Fcreative-library")
         password = secrets.token_urlsafe(24)
-        await page.get_by_label("Full name", exact=True).fill("Release Seller")
+        await page.get_by_label("Họ và tên", exact=True).fill("Release Seller")
         await page.get_by_label("Email", exact=True).fill(
             f"release-{secrets.token_hex(6)}@example.com"
         )
-        await page.get_by_label("Password", exact=True).fill(password)
-        await page.get_by_label("Confirm password", exact=True).fill(password)
-        await page.get_by_role("button", name="Create account", exact=True).click()
+        await page.get_by_label("Mật khẩu", exact=True).fill(password)
+        await page.get_by_label("Xác nhận mật khẩu", exact=True).fill(password)
+        await page.get_by_role("button", name="Tạo tài khoản", exact=True).click()
         await page.wait_for_url("**/creative-library", timeout=20000)
         await page.wait_for_load_state("networkidle")
         await page.get_by_label("Tải ảnh sản phẩm lên", exact=True).set_input_files(

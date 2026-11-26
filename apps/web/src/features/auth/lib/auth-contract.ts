@@ -38,13 +38,13 @@ function passwordSchema(minimum: number) {
                 code: z.ZodIssueCode.custom,
                 message:
                     minimum === 1
-                        ? "Enter your password."
-                        : "Use at least 12 characters for your password or passphrase.",
+                        ? "Vui lòng nhập mật khẩu."
+                        : "Mật khẩu hoặc cụm mật khẩu phải có ít nhất 12 ký tự.",
             });
         } else if (characters > MAX_PASSWORD_CHARACTERS) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Your password is too long. Please use a shorter password.",
+                message: "Mật khẩu quá dài. Vui lòng chọn mật khẩu ngắn hơn.",
             });
         }
     });
@@ -54,8 +54,8 @@ export const passwordCredentialsSchema = z.object({
     email: z
         .string()
         .trim()
-        .email("Enter a valid email address.")
-        .max(255, "Your email is too long."),
+        .email("Vui lòng nhập địa chỉ email hợp lệ.")
+        .max(255, "Địa chỉ email quá dài."),
     password: passwordSchema(1),
 });
 
@@ -65,13 +65,13 @@ export const passwordRegistrationSchema = passwordCredentialsSchema
         display_name: z
             .string()
             .trim()
-            .min(1, "Enter your name.")
-            .max(255, "Your name is too long."),
-        confirmPassword: z.string().min(1, "Confirm your password."),
+            .min(1, "Vui lòng nhập họ và tên.")
+            .max(255, "Họ và tên quá dài."),
+        confirmPassword: z.string().min(1, "Vui lòng xác nhận mật khẩu."),
     })
     .refine((credentials) => credentials.password === credentials.confirmPassword, {
         path: ["confirmPassword"],
-        message: "Your passwords don't match. Please try again.",
+        message: "Mật khẩu xác nhận không khớp. Vui lòng thử lại.",
     });
 
 export const passwordAuthResponseSchema = z.object({

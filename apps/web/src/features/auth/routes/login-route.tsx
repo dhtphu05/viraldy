@@ -15,7 +15,7 @@ export const Route = createFileRoute("/login")({
     beforeLoad: ({ context }) => {
         if (context.auth.authenticated) throw redirect({ to: "/dashboard" });
     },
-    head: () => ({ meta: [{ title: "Sign in — Viraldy" }] }),
+    head: () => ({ meta: [{ title: "Đăng nhập — Viraldy" }] }),
     component: LoginPage,
 });
 

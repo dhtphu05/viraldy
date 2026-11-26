@@ -615,11 +615,11 @@ async def test_smart_remake_missing_rights_and_exhausted_budget_fail_before_prov
 
 async def register(page, base_url):
     await page.goto(f"{base_url}/register?returnTo=%2Fsmart-remake")
-    await page.get_by_label("Full name", exact=True).fill("P0 Offline Seller")
+    await page.get_by_label("Họ và tên", exact=True).fill("P0 Offline Seller")
     await page.get_by_label("Email", exact=True).fill(f"p0-{secrets.token_hex(6)}@example.com")
     password = secrets.token_urlsafe(24)
-    await page.get_by_label("Password", exact=True).fill(password)
-    await page.get_by_label("Confirm password", exact=True).fill(password)
-    await page.get_by_role("button", name="Create account", exact=True).click()
+    await page.get_by_label("Mật khẩu", exact=True).fill(password)
+    await page.get_by_label("Xác nhận mật khẩu", exact=True).fill(password)
+    await page.get_by_role("button", name="Tạo tài khoản", exact=True).click()
     await page.wait_for_url("**/smart-remake", timeout=30000)
     await page.get_by_role("heading", name="Tạo video cho sản phẩm của bạn", exact=True).wait_for()
