@@ -19,7 +19,7 @@ def test_release_keeps_published_auth_history_and_one_head() -> None:
     auth = script.get_revision("0021_password_auth")
     assert auth is not None
     assert auth.down_revision == "0017_domain_ugc_review"
-    assert script.get_heads() == ["0022_merge_auth_market"]
+    assert script.get_heads() == ["0024_smart_remake_p0_budget"]
     merge = script.get_revision("0022_merge_auth_market")
     assert merge is not None
     assert set(merge.down_revision) == {"0020_creative_family_candidates", "0021_password_auth"}
@@ -60,11 +60,14 @@ def test_release_upgrades_clean_and_existing_auth_databases(
                 "creative_families",
                 "external_source_records",
                 "market_insight_snapshots",
+                "smart_remake_projects",
+                "smart_remake_operations",
+                "smart_remake_attempts",
             } <= set(inspector.get_table_names())
             with engine.connect() as connection:
                 assert connection.execute(
                     text("SELECT version_num FROM alembic_version")
-                ).scalars().all() == ["0022_merge_auth_market"]
+                ).scalars().all() == ["0024_smart_remake_p0_budget"]
                 if starting_revision != "base":
                     assert (
                         connection.execute(

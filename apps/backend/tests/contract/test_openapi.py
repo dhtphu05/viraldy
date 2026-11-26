@@ -7,6 +7,7 @@ from fastapi.routing import APIRoute
 from pydantic import TypeAdapter
 
 from viraldy.api.main import app
+from viraldy.modules.smart_remake.preflight_contracts import PreflightRequest
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 PUBLIC_PATHS = {
@@ -334,6 +335,22 @@ def test_json_request_examples_pass_their_pydantic_contracts() -> None:
         TypeAdapter(body_field.field_info.annotation).validate_python(example)
 
     assert checked >= 30
+
+
+def test_smart_remake_preflight_example_has_a_coherent_analysis_scope() -> None:
+    operation = app.openapi()["paths"]["/api/v1/workspaces/{workspace_id}/smart-remake/preflight"][
+        "post"
+    ]
+    example = operation["requestBody"]["content"]["application/json"]["examples"][
+        "frontendExample"
+    ]["value"]
+    request = PreflightRequest.model_validate(example)
+
+    assert request.action == "analyze"
+    assert request.targetDuration == 8
+    assert request.projectId is None
+    assert request.sceneId is None
+    assert request.subject is None
 
 
 def test_request_schema_fields_have_descriptions_and_examples() -> None:
