@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterator
 from typing import Any
 
@@ -305,6 +306,9 @@ def _example_from_schema(
 ) -> Any:
     if depth > max_depth:
         return {}
+    examples = schema.get("examples")
+    if isinstance(examples, list) and examples:
+        return copy.deepcopy(examples[0])
     if "const" in schema:
         return schema["const"]
     if schema.get("default") is not None:

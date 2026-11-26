@@ -1,15 +1,29 @@
 from typing import Any
 
-from .analyze_normalizer import has_analyze_source, normalize_analyze_input, normalize_analyze_output
+from ..generation_expectations import validate_product_lock
+from .analyze_normalizer import (
+    has_analyze_source,
+    normalize_analyze_input,
+    normalize_analyze_output,
+)
 from .asset_cleanup import cleanup_smart_remake_assets
 from .audio_assets import extract_reference_music
 from .compiler import compile_smart_remake_scene_map_with_diagnostics
 from .errors import SmartRemakeValidationError
 from .gemini_client import HttpGeminiClient, SmartRemakeGeminiClient
-from .guards import assert_allowed_endpoint, assert_allowed_request_type, assert_no_reference_video_in_render_payload
+from .guards import (
+    assert_allowed_endpoint,
+    assert_allowed_request_type,
+    assert_no_reference_video_in_render_payload,
+)
 from .media_validation import assert_product_image, assert_reference_video
 from .product_lock_generator import generate_product_lock
-from .reference_analyzer import analyze_reference_video
+from .prompt_sanitizer import sanitize_generation_scene
+from .reference_analyzer import (
+    analyze_reference_video,
+    resolve_source_cut_semantics,
+    validate_source_analysis,
+)
 from .schemas import CompileSmartRemakeRequest
 from .source_frames import attach_source_frame_assets
 from .source_shot_detector import enrich_reference_analysis_with_detected_cuts
@@ -43,7 +57,8 @@ def _without_extracted_reference_music(reference_analysis: dict[str, Any], reaso
 
 async def _extract_reference_music_if_needed(reference_analysis: dict[str, Any], input_data: CompileSmartRemakeRequest, warnings: list[str]) -> dict[str, Any]:
     audio_plan = reference_analysis.get("audioPlan") or {}
-    reference_music = audio_plan.get("referenceMusic") if isinstance(audio_plan.get("referenceMusic"), dict) else {}
+    raw_reference_music = audio_plan.get("referenceMusic")
+    reference_music = raw_reference_music if isinstance(raw_reference_music, dict) else {}
     if reference_music.get("mode") != "extract":
         return reference_analysis
     if not input_data.referenceVideo:
@@ -110,6 +125,17 @@ async def compile_smart_remake(
         reference_analysis,
         input_data.referenceVideo,
     )
+    reference_analysis = await resolve_source_cut_semantics(
+        analysis=reference_analysis, target_duration=input_data.targetDuration,
+        prompt=normalized.get("prompt"), description=normalized.get("description"),
+        reference_video=input_data.referenceVideo, gemini=gemini,
+    )
+    if input_data.referenceVideo is not None:
+        validate_source_analysis(reference_analysis)
+    if (reference_analysis.get("renderability") or {}).get("supported") is False:
+        raise SmartRemakeValidationError(
+            "The source structure is unsupported.", "SMART_REMAKE_SOURCE_UNSUPPORTED"
+        )
     reference_analysis = await _extract_reference_music_if_needed(reference_analysis, input_data, warnings)
     for warning in (reference_analysis.get("renderability") or {}).get("warnings", []):
         formatted = f"{warning.get('code')}: {warning.get('message')}"
@@ -126,6 +152,7 @@ async def compile_smart_remake(
         product_reference=normalized.get("productReference"),
         gemini=gemini,
     )
+    validate_product_lock(product_lock)
     compiled = compile_smart_remake_scene_map_with_diagnostics(
         {
             "mode": input_data.mode,
@@ -137,7 +164,13 @@ async def compile_smart_remake(
         }
     )
     scene_map = attach_source_frame_assets(
-        scene_map=compiled["sceneMap"],
+        scene_map={
+            **compiled["sceneMap"],
+            "scenes": [
+                sanitize_generation_scene(scene, reference_analysis, product_lock)
+                for scene in compiled["sceneMap"]["scenes"]
+            ],
+        },
         reference_analysis=reference_analysis,
         reference_video=input_data.referenceVideo,
     )
@@ -214,7 +247,7 @@ async def compile_smart_remake(
             }
             for scene in scene_map["scenes"]
         ],
-        "compilerVersion": "smart-remake-compiler-v2",
+        "compilerVersion": "smart-remake-compiler-v2.1",
         "compilerDiagnostics": {
             "creativeArchetype": diagnostics["creativeArchetype"],
             "visualStructure": diagnostics["visualStructure"],
@@ -226,7 +259,7 @@ async def compile_smart_remake(
         "versions": {
             "referenceAnalyzer": "smart-remake-reference-analyzer-v1",
             "productLock": "smart-remake-product-lock-v1",
-            "compiler": "smart-remake-compiler-v2",
+            "compiler": "smart-remake-compiler-v2.1",
             "sceneMap": "smart-remake-scene-map-v1",
         },
         "warnings": warnings,

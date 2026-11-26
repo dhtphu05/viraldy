@@ -23,13 +23,13 @@ web-install:
 	cd $(WEB_DIR) && pnpm install --frozen-lockfile
 
 api:
-	cd $(BACKEND_DIR) && uv run uvicorn viraldy.api.main:app --host $${API_HOST:-0.0.0.0} --port $${API_PORT:-8000} --reload
+	cd $(BACKEND_DIR) && uv run --env-file .env uvicorn viraldy.api.main:app --host $${API_HOST:-0.0.0.0} --port $${API_PORT:-8000} --reload
 
 worker:
-	cd $(BACKEND_DIR) && uv run celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default,maintenance
+	cd $(BACKEND_DIR) && uv run --env-file .env celery -A viraldy.worker.celery_app worker --loglevel=INFO --queues=default,maintenance
 
 beat:
-	cd $(BACKEND_DIR) && uv run celery -A viraldy.worker.celery_app beat --loglevel=INFO
+	cd $(BACKEND_DIR) && uv run --env-file .env celery -A viraldy.worker.celery_app beat --loglevel=INFO
 
 web-dev:
 	cd $(WEB_DIR) && pnpm dev --port 5173 --strictPort

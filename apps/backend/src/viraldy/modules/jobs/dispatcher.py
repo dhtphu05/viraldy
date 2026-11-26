@@ -12,16 +12,20 @@ class DispatchResult:
 
 
 class JobDispatcher(Protocol):
-    def dispatch_job(self, job_id: UUID, job_type: str) -> DispatchResult:
+    def dispatch_job(
+        self, job_id: UUID, job_type: str, *, input_json: dict[str, object] | None = None
+    ) -> DispatchResult:
         raise NotImplementedError
 
 
 class CeleryJobDispatcher:
-    def dispatch_job(self, job_id: UUID, job_type: str) -> DispatchResult:
+    def dispatch_job(
+        self, job_id: UUID, job_type: str, *, input_json: dict[str, object] | None = None
+    ) -> DispatchResult:
         from viraldy.modules.jobs.registry import get_job_definition
         from viraldy.worker.tasks.process_asset import run_processing_job
 
-        definition = get_job_definition(job_type)
+        definition = get_job_definition(job_type, input_json=input_json)
         result = run_processing_job.apply_async(
             args=[str(job_id)],
             queue=definition.queue,

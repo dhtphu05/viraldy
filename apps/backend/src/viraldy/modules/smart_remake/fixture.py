@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import math
+import re
+from itertools import cycle, islice
 from typing import Any
 
 
@@ -33,13 +37,22 @@ class FixtureGeminiClient:
                 "productReference": {"characterName": "Target Product"},
             }
 
-        duration = 16 if "16" in prompt else 8
-        beat_count = 4 if duration == 16 else 2
+        requested_duration = re.search(r"\b(\d+(?:\.\d+)?)(?:s|\s*seconds?)\b", prompt)
+        duration = float(requested_duration[1]) if requested_duration else 8
+        beat_count = max(1, math.ceil(duration / 4))
+        measured = re.search(
+            r"Required source analysis interval boundaries at 24 fps: (\[[\d,\s]+\])",
+            prompt,
+        )
+        frames = json.loads(measured[1]) if measured else None
+        if frames is not None:
+            beat_count = len(frames) - 1
+            duration = frames[-1] / 24
         beat_duration = duration / beat_count
         beats = [
             {
-                "startSecond": index * beat_duration,
-                "endSecond": (index + 1) * beat_duration,
+                "startSecond": frames[index] / 24 if frames else index * beat_duration,
+                "endSecond": frames[index + 1] / 24 if frames else (index + 1) * beat_duration,
                 "action": action,
                 "role": role,
                 "priority": "mandatory" if index < 2 else "supporting",
@@ -52,12 +65,12 @@ class FixtureGeminiClient:
                 },
             }
             for index, (action, role) in enumerate(
-                [
+                islice(cycle([
                     ("establish the problem and reveal the product", "hook"),
                     ("demonstrate the product action", "demonstration"),
                     ("show the visible result", "proof"),
                     ("finish on a clean product hero and call to action", "cta"),
-                ][:beat_count]
+                ]), beat_count)
             )
         ]
         return {

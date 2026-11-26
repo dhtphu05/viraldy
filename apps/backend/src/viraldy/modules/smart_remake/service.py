@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import UploadFile
 from pydantic import ValidationError
 
-from viraldy.modules.product_import.service import fetch_product_link_image
+from viraldy.modules.product_import.service import ProductLinkImage, fetch_product_link_image
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
 from .engine import compile_smart_remake, render_smart_remake
 from .engine.config import (
     get_flowkit_url,
+    get_kie_api_key,
     get_max_product_image_bytes,
     get_max_reference_video_bytes,
     get_unifically_api_key,
@@ -19,6 +21,8 @@ from .engine.config import (
 )
 from .engine.errors import SmartRemakeError
 from .engine.guards import assert_no_reference_video_in_render_payload
+from .engine.prompt_edits import scene_edit_directions
+from .engine.prompt_sanitizer import validate_sanitized_compiler_prompts
 from .engine.render_orchestrator import _assert_render_input
 from .engine.schemas import (
     CompileSmartRemakeRequest,
@@ -38,7 +42,11 @@ def health_payload(settings: Settings) -> dict[str, Any]:
     return {
         "enabled": feature_enabled(settings),
         "mode": "fixture" if fixture else "live",
-        "providers": ["fixture"] if fixture else ["unifically", "flowkit"],
+        "providers": ["fixture"] if fixture else ["kie", "unifically", "flowkit"],
+        "kieConfigured": bool(get_kie_api_key()),
+        "kieVideoModel": "veo3_lite",
+        "openaiImagesConfigured": bool(getattr(settings, "openai_api_key", None)),
+        "openaiImageModel": "gpt-image-2.6-sunburst",
         "flowkitUrlSet": bool(get_flowkit_url()),
         "unificallyConfigured": bool(get_unifically_api_key()),
         "limits": {
@@ -46,6 +54,26 @@ def health_payload(settings: Settings) -> dict[str, Any]:
             "productImageBytes": get_max_product_image_bytes(),
         },
     }
+
+
+def require_kie_renderer(settings: Settings) -> None:
+    if settings.ai_mode.strip().lower() in {"fixture", "mock"}:
+        raise AppError(
+            "SMART_REMAKE_FIXTURE_MODE", "Live rendering is disabled in fixture mode.", 409
+        )
+    if not get_kie_api_key():
+        raise AppError("KIE_NOT_CONFIGURED", "KIE video service is not configured.", 503)
+
+
+def require_openai_images(settings: Settings) -> None:
+    if settings.ai_mode.strip().lower() in {"fixture", "mock"}:
+        raise AppError(
+            "SMART_REMAKE_FIXTURE_MODE", "Live rendering is disabled in fixture mode.", 409
+        )
+    if not getattr(settings, "openai_api_key", None):
+        raise AppError(
+            "OPENAI_IMAGES_NOT_CONFIGURED", "OpenAI image service is not configured.", 503
+        )
 
 
 async def read_media(upload: UploadFile | None, default_mime: str) -> UploadedMedia | None:
@@ -146,7 +174,7 @@ async def compile_request(
         raise _error(exc) from exc
 
 
-async def _read_product_link_image(product_url: str):
+async def _read_product_link_image(product_url: str) -> ProductLinkImage:
     from starlette.concurrency import run_in_threadpool
 
     return await run_in_threadpool(
@@ -160,18 +188,32 @@ async def render_request(
     *,
     settings: Settings,
     compile_result: dict[str, Any],
-    product_image: UploadFile,
+    product_image: UploadFile | None,
     provider: str,
     project_name: str,
     audio_required: bool,
+    product_url: str | None = None,
+    prepare_render: Callable[[RenderSmartRemakeInput], Awaitable[Any]] | None = None,
+    submit_render: Callable[[RenderSmartRemakeInput], Awaitable[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     if not feature_enabled(settings):
         raise AppError("SMART_REMAKE_DISABLED", "Smart Remake is disabled.", 503)
-    if provider not in {"fixture", "flowkit", "unifically"}:
+    if provider not in {"fixture", "flowkit", "unifically", "kie"}:
         raise AppError(
-            "INVALID_SMART_REMAKE_PROVIDER", "Provider must be fixture, unifically, or flowkit."
+            "INVALID_SMART_REMAKE_PROVIDER",
+            "Provider must be fixture, kie, unifically, or flowkit.",
         )
+    if provider == "kie":
+        require_kie_renderer(settings)
+        if submit_render is None:
+            raise AppError(
+                "KIE_DURABLE_JOB_REQUIRED", "KIE rendering requires a background job.", 503
+            )
     product = await read_media(product_image, "image/png")
+    if product is None and product_url and product_url.strip():
+        linked = await _read_product_link_image(product_url.strip())
+        product = UploadedMedia(bytes=linked.bytes, mime_type=linked.mime_type,
+                                file_name=linked.file_name)
     if product is None:
         raise AppError("SMART_REMAKE_MEDIA_REQUIRED", "Product image is required for render.")
     try:
@@ -188,6 +230,21 @@ async def render_request(
             provider="unifically" if provider == "fixture" else provider,
         )
         _assert_render_input(input_data)
+        if provider == "kie":
+            _duration(str(input_data.sceneMap["targetDuration"]))
+            if input_data.sceneMap.get("aspectRatio", "9:16") != "9:16":
+                raise AppError(
+                    "INVALID_SMART_REMAKE_ASPECT_RATIO", "Smart Remake supports 9:16 only."
+                )
+        for scene in input_data.sceneMap["scenes"]:
+            if scene.get("promptEdited"):
+                if provider in {"unifically", "kie"}:
+                    scene_edit_directions(scene)
+                validate_sanitized_compiler_prompts(
+                    prompt=scene["prompt"], image_prompt=scene["imagePrompt"],
+                    video_prompt=scene["videoPrompt"], analysis=input_data.referenceAnalysis or {},
+                    product_lock=input_data.productLock, timeline=scene.get("shotPlan") or {},
+                )
         if provider == "fixture":
             return {
                 "success": True,
@@ -210,6 +267,11 @@ async def render_request(
                     "Fixture mode validated the render payload but did not call a video provider."
                 ],
             }
+        if provider == "kie" and submit_render:
+            return await submit_render(input_data)
+        if prepare_render:
+            handler = await prepare_render(input_data)
+            return await render_smart_remake(input_data, on_scene_output=handler)
         return await render_smart_remake(input_data)
     except (SmartRemakeError, KeyError, ValidationError) as exc:
         if isinstance(exc, SmartRemakeError):

@@ -1,5 +1,5 @@
 import os
-
+from typing import Literal, cast
 
 DEFAULT_MAX_REFERENCE_VIDEO_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024
@@ -86,6 +86,32 @@ def get_flowkit_url() -> str:
 
 def get_unifically_api_key() -> str:
     return os.getenv("UNIFICALLY_API_KEY", "").strip()
+
+
+def get_kie_api_key() -> str:
+    return os.getenv("KIE_API_KEY", "").strip()
+
+
+def get_openai_image_quality() -> Literal["low", "medium", "high", "xhigh", "max"]:
+    value = os.getenv("SMART_REMAKE_OPENAI_IMAGE_QUALITY", "max").strip().lower()
+    if value not in {"low", "medium", "high", "xhigh", "max"}:
+        from .errors import SmartRemakeValidationError
+
+        raise SmartRemakeValidationError(
+            "SMART_REMAKE_OPENAI_IMAGE_QUALITY must be low, medium, high, xhigh or max.",
+            "SMART_REMAKE_IMAGE_QUALITY_INVALID",
+        )
+    return cast(Literal["low", "medium", "high", "xhigh", "max"], value)
+
+
+def get_kie_poll_interval_seconds() -> float:
+    return _positive_float_env("KIE_POLL_INTERVAL_SECONDS", 5.0)
+
+
+def get_kie_poll_timeout_seconds() -> float:
+    from ..runtime_limits import kie_poll_timeout_seconds
+
+    return kie_poll_timeout_seconds()
 
 
 def get_unifically_api_base_url() -> str:
