@@ -211,6 +211,38 @@ describe("native password credentials", () => {
         if (!result.success) expect(result.error.issues[0].path).toEqual(["confirmPassword"]);
     });
 
+    it.each([
+        [{ email: "invalid" }, "Vui lòng nhập địa chỉ email hợp lệ."],
+        [{ password: "" }, "Vui lòng nhập mật khẩu."],
+        [{ password: "a".repeat(1025) }, "Mật khẩu quá dài. Vui lòng chọn mật khẩu ngắn hơn."],
+    ])("explains invalid login credentials in Vietnamese %#", (override, message) => {
+        const result = passwordCredentialsSchema.safeParse({ ...credentials, ...override });
+        expect(result.success).toBe(false);
+        if (!result.success) expect(result.error.issues[0].message).toBe(message);
+    });
+
+    it.each([
+        [{ display_name: "" }, "Vui lòng nhập họ và tên."],
+        [
+            { password: "short", confirmPassword: "short" },
+            "Mật khẩu hoặc cụm mật khẩu phải có ít nhất 12 ký tự.",
+        ],
+        [{ confirmPassword: "" }, "Vui lòng xác nhận mật khẩu."],
+        [
+            { confirmPassword: "another-passphrase" },
+            "Mật khẩu xác nhận không khớp. Vui lòng thử lại.",
+        ],
+    ])("explains invalid registration details in Vietnamese %#", (override, message) => {
+        const result = passwordRegistrationSchema.safeParse({
+            ...credentials,
+            display_name: "Seller One",
+            confirmPassword: credentials.password,
+            ...override,
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) expect(result.error.issues[0].message).toBe(message);
+    });
+
     it("accepts only a completed BFF session response", () => {
         expect(
             passwordAuthResponseSchema.parse({ authenticated: true, returnTo: "/account" }),

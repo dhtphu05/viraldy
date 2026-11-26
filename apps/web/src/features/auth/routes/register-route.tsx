@@ -13,7 +13,7 @@ export const Route = createFileRoute("/register")({
     beforeLoad: ({ context }) => {
         if (context.auth.authenticated) throw redirect({ to: "/dashboard" });
     },
-    head: () => ({ meta: [{ title: "Create account — Viraldy" }] }),
+    head: () => ({ meta: [{ title: "Đăng ký — Viraldy" }] }),
     component: RegisterPage,
 });
 

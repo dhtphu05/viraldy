@@ -26,10 +26,11 @@ type AuthPageProps = {
 };
 
 const errorMessages: Record<string, string> = {
-    auth_unavailable: "Sign-in is temporarily unavailable. Please try again in a moment.",
-    callback_failed: "We couldn't complete sign-in. Please restart the secure sign-in flow.",
-    invalid_credentials: "The email or password is incorrect. Please try again.",
-    signup_failed: "We couldn't create your account. Please check your details and try again.",
+    auth_unavailable: "Tạm thời không thể đăng nhập. Vui lòng thử lại sau ít phút.",
+    callback_failed:
+        "Không thể hoàn tất đăng nhập. Vui lòng bắt đầu lại quá trình đăng nhập an toàn.",
+    invalid_credentials: "Email hoặc mật khẩu không chính xác. Vui lòng thử lại.",
+    signup_failed: "Không thể tạo tài khoản. Vui lòng kiểm tra thông tin và thử lại.",
 };
 
 export function AuthPage({ auth, intent, returnTo, error, reason, loggedOut }: AuthPageProps) {
@@ -43,13 +44,13 @@ export function AuthPage({ auth, intent, returnTo, error, reason, loggedOut }: A
     const notice =
         (error &&
             (errorMessages[error] ??
-                "We couldn't complete this request. Please restart the sign-in flow.")) ||
+                "Không thể hoàn tất yêu cầu. Vui lòng bắt đầu lại quá trình đăng nhập.")) ||
         (reason === "session_expired"
-            ? "Your session expired. Sign in again to continue where you left off."
+            ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục."
             : reason === "auth_unavailable" || unavailable
               ? errorMessages.auth_unavailable
               : String(loggedOut) === "1"
-                ? "You're signed out."
+                ? "Bạn đã đăng xuất."
                 : null);
     const noticeIsAlert =
         Boolean(error) ||
@@ -58,45 +59,48 @@ export function AuthPage({ auth, intent, returnTo, error, reason, loggedOut }: A
         unavailable;
     const hero = isLocalTest
         ? {
-              eyebrow: "Local development workspace",
-              title: "Everything you need to explore Viraldy, already set up.",
+              eyebrow: "Không gian làm việc thử nghiệm",
+              title: "Mọi thứ đã sẵn sàng để bạn khám phá Viraldy.",
               description:
-                  "A reusable development identity and seeded workspace let you test the complete product without configuring an external provider.",
+                  "Tài khoản và không gian làm việc thử nghiệm được tạo sẵn giúp bạn trải nghiệm toàn bộ sản phẩm mà không cần cấu hình nhà cung cấp bên ngoài.",
               benefits: [
-                  "One-click sign in with no password to remember",
-                  "Profile includes email, full name, and phone number",
-                  "Seeded owner access to a ready-to-use workspace",
+                  "Đăng nhập chỉ với một lần nhấn, không cần nhớ mật khẩu",
+                  "Hồ sơ có sẵn email, họ tên và số điện thoại",
+                  "Có sẵn quyền chủ sở hữu trong không gian làm việc thử nghiệm",
               ],
-              footer: "Local-only access. Keep local_test disabled in production.",
+              footer: "Chỉ dùng trong môi trường phát triển. Tắt local_test khi triển khai chính thức.",
           }
         : isPassword
           ? {
-                eyebrow: "Creative intelligence, securely yours",
-                title: "Your next great creative starts here.",
+                eyebrow: "Sáng tạo thông minh, bảo mật cho bạn",
+                title: "Ý tưởng sáng tạo tiếp theo của bạn bắt đầu từ đây.",
                 description:
-                    "Sign in with your email and password to access your workspace and creative tools.",
+                    "Đăng nhập bằng email và mật khẩu để truy cập không gian làm việc cùng các công cụ sáng tạo.",
                 benefits: [
-                    "Your password is protected with secure hashing",
-                    "Workspace access protected by role and membership",
-                    "Private session stored in an HttpOnly cookie",
+                    "Mật khẩu được bảo vệ bằng hàm băm an toàn",
+                    "Quyền truy cập được quản lý theo vai trò và tư cách thành viên",
+                    "Phiên đăng nhập riêng tư được lưu trong cookie HttpOnly",
                 ],
-                footer: "Your account and workspace, protected by Viraldy.",
+                footer: "Viraldy bảo vệ tài khoản và không gian làm việc của bạn.",
             }
           : {
-                eyebrow: "Creative intelligence, securely yours",
-                title: "Make every creative decision from one trusted workspace.",
+                eyebrow: "Sáng tạo thông minh, bảo mật cho bạn",
+                title: "Đưa ra mọi quyết định sáng tạo từ một không gian làm việc đáng tin cậy.",
                 description:
-                    "Your identity provider verifies your email and shares your profile. Viraldy never stores your password.",
+                    "Nhà cung cấp danh tính xác minh email và chia sẻ hồ sơ của bạn. Viraldy không lưu mật khẩu của bạn.",
                 benefits: [
-                    "Secure Authorization Code + PKCE sign-in",
-                    "Workspace access protected by role and membership",
-                    "Private session stored in an HttpOnly cookie",
+                    "Đăng nhập an toàn bằng mã ủy quyền và PKCE",
+                    "Quyền truy cập được quản lý theo vai trò và tư cách thành viên",
+                    "Phiên đăng nhập riêng tư được lưu trong cookie HttpOnly",
                 ],
-                footer: "Protected by your organization's identity provider.",
+                footer: "Được bảo vệ bởi nhà cung cấp danh tính của tổ chức bạn.",
             };
 
     return (
-        <main className="grid min-h-screen bg-background lg:grid-cols-[minmax(0,1.05fr)_minmax(440px,0.95fr)]">
+        <main
+            lang="vi"
+            className="grid min-h-screen bg-background lg:grid-cols-[minmax(0,1.05fr)_minmax(440px,0.95fr)]"
+        >
             <section className="relative hidden overflow-hidden border-r border-divider bg-surface px-12 py-12 lg:flex lg:flex-col lg:justify-between">
                 <div className="pointer-events-none absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
                 <Brand />
@@ -160,13 +164,13 @@ export function AuthPage({ auth, intent, returnTo, error, reason, loggedOut }: A
                         {presentation.showDevAccount && (
                             <div className="mt-6 rounded-xl border border-hairline bg-surface-soft px-4 py-4">
                                 <p className="text-sm font-semibold text-text-primary">
-                                    Viraldy development account
+                                    Tài khoản thử nghiệm Viraldy
                                 </p>
                                 <dl className="mt-3 space-y-2 text-sm text-text-secondary">
                                     <div className="flex items-start justify-between gap-3">
-                                        <dt className="text-text-tertiary">Name</dt>
+                                        <dt className="text-text-tertiary">Họ và tên</dt>
                                         <dd className="text-right text-text-primary">
-                                            Local Viraldy User
+                                            Người dùng thử nghiệm Viraldy
                                         </dd>
                                     </div>
                                     <div className="flex items-start justify-between gap-3">
@@ -176,14 +180,15 @@ export function AuthPage({ auth, intent, returnTo, error, reason, loggedOut }: A
                                         </dd>
                                     </div>
                                     <div className="flex items-start justify-between gap-3">
-                                        <dt className="text-text-tertiary">Phone</dt>
+                                        <dt className="text-text-tertiary">Số điện thoại</dt>
                                         <dd className="text-right text-text-primary">
                                             +84901234567
                                         </dd>
                                     </div>
                                 </dl>
                                 <p className="mt-3 text-xs leading-5 text-text-tertiary">
-                                    One click only. No password. Local environment only.
+                                    Chỉ một lần nhấn, không cần mật khẩu. Chỉ dùng trong môi trường
+                                    phát triển.
                                 </p>
                             </div>
                         )}
@@ -216,26 +221,27 @@ export function AuthPage({ auth, intent, returnTo, error, reason, loggedOut }: A
                             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                             <span>
                                 {presentation.showDevAccount
-                                    ? "This account is available only in local development. Its access token stays in a secure HttpOnly session."
+                                    ? "Tài khoản này chỉ dùng trong môi trường phát triển. Mã truy cập được lưu trong phiên HttpOnly an toàn."
                                     : isPassword
-                                      ? "Your password is protected with secure hashing. Your session stays in a private HttpOnly cookie."
-                                      : "Viraldy receives only your verified profile and access token. Your password stays with the identity provider."}
+                                      ? "Mật khẩu được bảo vệ bằng hàm băm an toàn. Phiên đăng nhập được lưu trong cookie HttpOnly riêng tư."
+                                      : "Viraldy chỉ nhận hồ sơ đã xác minh và mã truy cập. Mật khẩu của bạn được lưu tại nhà cung cấp danh tính."}
                             </span>
                         </div>
 
                         <p className="mt-6 text-center text-sm text-text-secondary">
-                            {isSignup ? "Already have an account?" : "New to Viraldy?"}{" "}
+                            {isSignup ? "Bạn đã có tài khoản?" : "Bạn mới sử dụng Viraldy?"}{" "}
                             <Link
                                 to={isSignup ? "/login" : "/register"}
                                 search={{ returnTo: safeReturnTo }}
                                 className="font-semibold text-primary-active underline-offset-4 hover:underline"
                             >
-                                {isSignup ? "Sign in" : "Create account"}
+                                {isSignup ? "Đăng nhập" : "Tạo tài khoản"}
                             </Link>
                         </p>
                     </div>
                     <p className="mt-5 text-center text-xs text-text-tertiary">
-                        By continuing, you agree to follow your workspace's access policies.
+                        Khi tiếp tục, bạn đồng ý tuân thủ chính sách truy cập của không gian làm
+                        việc.
                     </p>
                 </div>
             </section>
@@ -330,7 +336,7 @@ function PasswordAuthForm({
             <fieldset disabled={disabled || pending} className="space-y-4">
                 {isSignup && (
                     <div className="space-y-2">
-                        <Label htmlFor={`${id}-name`}>Full name</Label>
+                        <Label htmlFor={`${id}-name`}>Họ và tên</Label>
                         <Input
                             id={`${id}-name`}
                             name="display_name"
@@ -360,7 +366,7 @@ function PasswordAuthForm({
                     />
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor={`${id}-password`}>Password</Label>
+                    <Label htmlFor={`${id}-password`}>Mật khẩu</Label>
                     <Input
                         id={`${id}-password`}
                         name="password"
@@ -382,13 +388,13 @@ function PasswordAuthForm({
                             id={`${id}-password-hint`}
                             className="text-xs leading-5 text-text-tertiary"
                         >
-                            Choose a long, unique password or passphrase.
+                            Chọn mật khẩu hoặc cụm mật khẩu riêng biệt có ít nhất 12 ký tự.
                         </p>
                     )}
                 </div>
                 {isSignup && (
                     <div className="space-y-2">
-                        <Label htmlFor={`${id}-confirm`}>Confirm password</Label>
+                        <Label htmlFor={`${id}-confirm`}>Xác nhận mật khẩu</Label>
                         <Input
                             id={`${id}-confirm`}
                             name="confirmPassword"
@@ -421,11 +427,11 @@ function PasswordAuthForm({
                     )}
                     {pending
                         ? isSignup
-                            ? "Creating your account…"
-                            : "Signing in…"
+                            ? "Đang tạo tài khoản…"
+                            : "Đang đăng nhập…"
                         : isSignup
-                          ? "Create account"
-                          : "Sign in"}
+                          ? "Tạo tài khoản"
+                          : "Đăng nhập"}
                 </Button>
             </fieldset>
         </form>
@@ -437,11 +443,11 @@ function Brand() {
         <Link
             to="/"
             className="relative inline-flex w-fit items-center gap-3"
-            aria-label="Viraldy home"
+            aria-label="Trang chủ Viraldy"
         >
             <BrandLogo className="h-11 w-[164px]" />
             <span>
-                <span className="block text-xs text-text-tertiary">Creative Intelligence</span>
+                <span className="block text-xs text-text-tertiary">Sáng tạo thông minh</span>
             </span>
         </Link>
     );
