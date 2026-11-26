@@ -14,3 +14,7 @@ export function consumeSmartRemakeHandoff(): SmartRemakeHandoff | null {
     pendingHandoff = null;
     return handoff;
 }
+
+export function clearSmartRemakeHandoff(handoff: SmartRemakeHandoff) {
+    if (pendingHandoff === handoff) pendingHandoff = null;
+}
