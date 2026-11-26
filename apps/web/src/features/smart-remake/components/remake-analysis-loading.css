@@ -1,0 +1,414 @@
+.remake-analysis-loading {
+    display: grid;
+    min-width: 0;
+    gap: 16px;
+    overflow-wrap: anywhere;
+}
+.remake-analysis-loading__eyebrow,
+.remake-analysis-loading__eyebrow > span,
+.remake-analysis-loading__eyebrow time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.remake-analysis-loading__eyebrow {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}
+.remake-analysis-loading__eyebrow time {
+    gap: 5px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: var(--color-surface-soft);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+    letter-spacing: 0;
+}
+.remake-analysis-loading__eyebrow time svg {
+    width: 12px;
+    height: 12px;
+}
+.remake-analysis-loading__signal {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #e00b41;
+    box-shadow: 0 0 0 4px #ff336612;
+    animation: remake-analysis-breathe 2s ease-in-out infinite;
+}
+.remake-analysis-loading__intro {
+    display: grid;
+    gap: 8px;
+}
+.remake-analysis-loading__intro > p {
+    font-size: 13px;
+    line-height: 1.6;
+}
+.remake-analysis-loading__references {
+    display: grid;
+    align-items: stretch;
+    gap: 12px;
+}
+.remake-analysis-loading__reference {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 16px;
+    background: var(--color-surface-soft);
+}
+.remake-analysis-loading__reference-media {
+    position: relative;
+    display: grid;
+    height: clamp(220px, 32vh, 300px);
+    min-width: 0;
+    min-height: 0;
+    flex-shrink: 0;
+    place-items: center;
+    overflow: hidden;
+    background: #1e2029;
+}
+.remake-analysis-loading__reference-media.is-product {
+    background: var(--color-surface-soft);
+}
+.remake-analysis-loading__reference-media video {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.remake-analysis-loading__reference-media > span {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    padding: 12px;
+    color: #dedfe6;
+    font-size: 12px;
+    text-align: center;
+}
+.remake-analysis-loading__reference-media.is-product > span {
+    color: var(--color-text-secondary);
+}
+.remake-analysis-loading__reference-media .remake-image-preview__trigger {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+.remake-analysis-loading__reference-media .remake-image-preview__trigger:focus-visible {
+    outline-offset: -3px;
+}
+.remake-analysis-loading__reference-media
+    .remake-image-preview__trigger
+    .remake-image-preview__surface {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    border-radius: 0;
+}
+.remake-analysis-loading__reference-media .remake-image-preview__surface > img {
+    padding: 10px;
+    object-fit: contain;
+    filter: none;
+}
+.remake-analysis-loading__reference > figcaption {
+    display: grid;
+    align-content: start;
+    min-height: 60px;
+    gap: 3px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.remake-analysis-loading__reference > figcaption > span {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 400;
+}
+.remake-analysis-loading__concepts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.remake-analysis-loading__concepts > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.remake-analysis-loading__concepts svg {
+    width: 13px;
+    height: 13px;
+    color: #d70c40;
+}
+.remake-analysis-loading__findings {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--color-control-border);
+    border-radius: 16px;
+}
+.remake-analysis-loading__section-heading,
+.remake-analysis-loading__scene-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+}
+.remake-analysis-loading__section-heading h3 {
+    font-size: 13px;
+    font-weight: 600;
+}
+.remake-analysis-loading__section-heading > span {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.remake-analysis-loading__quick {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #f0d7df;
+    border-radius: 16px;
+    background: #fff8fa;
+}
+.remake-analysis-loading__quick h3 {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.remake-analysis-loading__quick h3 svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: #d70c40;
+}
+.remake-analysis-loading__quick-body {
+    display: grid;
+    gap: 10px;
+    margin-top: 10px;
+    animation: remake-analysis-reveal 0.25s ease-out both;
+}
+.remake-analysis-loading__quick-body > p {
+    font-size: 13px;
+    line-height: 1.6;
+}
+.remake-analysis-loading__quick-body dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+.remake-analysis-loading__quick-body dt,
+.remake-analysis-loading__quick-body small {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+.remake-analysis-loading__quick-body dd {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.remake-analysis-loading__quick-pending {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-secondary);
+}
+.remake-analysis-loading__quick-pending svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    animation: remake-analysis-spin 1.3s linear infinite;
+}
+.remake-analysis-loading__scenes {
+    display: grid;
+    max-height: 210px;
+    gap: 10px;
+    margin-top: 12px;
+    padding-right: 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.remake-analysis-loading__scene {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 9px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--color-surface-soft);
+    animation: remake-analysis-reveal 0.25s ease-out both;
+}
+.remake-analysis-loading__scene-number {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border-radius: 8px;
+    background: #fff0f4;
+    color: #ce1744;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.remake-analysis-loading__scene-heading strong {
+    font-size: 12px;
+}
+.remake-analysis-loading__scene-heading > span,
+.remake-analysis-loading__scene small {
+    color: var(--color-text-secondary);
+    font-size: 10px;
+}
+.remake-analysis-loading__scene p {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.remake-analysis-loading__scene small {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: 4px;
+}
+.remake-analysis-loading__scene small svg {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+    align-self: center;
+}
+.remake-analysis-loading__empty {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    color: var(--color-text-secondary);
+}
+.remake-analysis-loading__empty img {
+    width: 80px;
+    height: 65px;
+    flex-shrink: 0;
+    object-fit: contain;
+    animation: remake-analysis-breathe 2s ease-in-out infinite;
+}
+.remake-analysis-loading__empty p {
+    font-size: 12px;
+    line-height: 1.5;
+}
+.remake-analysis-loading__empty span {
+    display: block;
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.remake-analysis-loading__product-facts {
+    display: grid;
+    gap: 6px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-control-border);
+    font-size: 12px;
+    animation: remake-analysis-reveal 0.25s ease-out both;
+}
+.remake-analysis-loading__product-facts > p {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.remake-analysis-loading__product-facts svg {
+    width: 13px;
+    height: 13px;
+    color: #20815d;
+}
+.remake-analysis-loading__product-facts ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.remake-analysis-loading__footer {
+    display: grid;
+    justify-items: start;
+    gap: 9px;
+    color: var(--color-text-secondary);
+}
+.remake-analysis-loading__footer > p {
+    font-size: 12px;
+    line-height: 1.5;
+}
+.remake-analysis-loading__footer small {
+    font-size: 10px;
+}
+@keyframes remake-analysis-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@keyframes remake-analysis-breathe {
+    0%,
+    100% {
+        opacity: 0.45;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+@keyframes remake-analysis-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (max-width: 480px) {
+    .remake-analysis-loading {
+        gap: 14px;
+    }
+    .remake-analysis-loading__scenes {
+        max-height: 190px;
+    }
+    .remake-analysis-loading__findings {
+        padding: 11px;
+    }
+    .remake-analysis-loading__quick {
+        padding: 11px;
+    }
+    .remake-analysis-loading__quick-body dl {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .remake-analysis-loading__empty img {
+        width: 58px;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .remake-analysis-loading *,
+    .remake-analysis-loading *::before,
+    .remake-analysis-loading *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}

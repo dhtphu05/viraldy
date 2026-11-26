@@ -1,0 +1,66 @@
+.remake-input-empty {
+    position: relative;
+    overflow: hidden;
+    background-image: radial-gradient(ellipse at 50% 35%, #ffedf1 0%, transparent 70%);
+}
+.remake-input-illustration {
+    transition: transform 240ms ease-out;
+}
+.remake-source-stage {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #30252c;
+    background: radial-gradient(ellipse at 50% 15%, #3b2c38, #18131b 75%);
+    box-shadow: inset 0 1px 0 #ffffff0d;
+}
+.remake-source-stage__video {
+    box-shadow: 0 14px 32px #0000004d;
+    transition: opacity 180ms ease-out;
+}
+.remake-source-stage__feedback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    color: #e7dfe5;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.remake-product-stage {
+    box-shadow: 0 4px 20px #32142105;
+}
+.remake-product-gallery > div > button[aria-pressed] {
+    height: 80px;
+    min-height: 80px;
+}
+.remake-product-gallery__selected {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: grid;
+    width: 19px;
+    height: 19px;
+    place-items: center;
+    border: 2px solid var(--color-surface, #fff);
+    border-radius: 50%;
+    background: var(--color-primary, #e00b41);
+    color: white;
+}
+.remake-input-card[data-interactive="true"]:is(:hover, :focus-within, [data-dragging="true"])
+    .remake-input-illustration {
+    transform: translateY(-4px) rotate(-2deg);
+}
+@media (prefers-reduced-motion: reduce) {
+    .remake-input-illustration {
+        transition: none;
+        transform: none !important;
+    }
+    .remake-source-stage__video {
+        transition: none;
+    }
+}
