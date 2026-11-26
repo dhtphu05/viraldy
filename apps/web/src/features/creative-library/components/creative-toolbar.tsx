@@ -14,15 +14,16 @@ import {
     LayoutGrid,
     Rows3,
     CheckSquare,
+    X,
 } from "lucide-react";
 import type { CreativeSort } from "@/features/creative-library/types/creative";
 import { cn } from "@/shared/lib/utils";
 
 const sortLabels: Record<CreativeSort, string> = {
-    "recent-saved": "Recently saved",
-    "recent-analyzed": "Recently analyzed",
-    "dna-desc": "Highest DNA score",
-    duration: "Duration",
+    "recent-saved": "Mới lưu gần đây",
+    "recent-analyzed": "Mới phân tích",
+    "dna-desc": "Điểm DNA cao nhất",
+    duration: "Thời lượng",
     az: "A–Z",
 };
 
@@ -54,39 +55,68 @@ export function CreativeToolbar({
     return (
         <div className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
             <div className="relative min-w-0 basis-full sm:max-w-md sm:flex-1 sm:basis-auto">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+                <Search
+                    aria-hidden="true"
+                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary"
+                />
                 <Input
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
-                    placeholder="Search hook, creator, angle, tag…"
-                    className="pl-9"
-                    aria-label="Search creatives"
+                    placeholder="Tên video, câu mở đầu, người đăng hoặc từ khóa"
+                    className="h-11 border-0 bg-surface-soft pl-9 pr-12 shadow-none"
+                    aria-label="Tìm trong kho"
                 />
+                {query && (
+                    <button
+                        type="button"
+                        onClick={() => onQuery("")}
+                        aria-label="Xóa từ khóa tìm kiếm"
+                        className="absolute right-0 top-0 grid size-11 place-items-center rounded-[10px] text-text-tertiary hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    >
+                        <X aria-hidden="true" className="size-4" />
+                    </button>
+                )}
             </div>
-            <Button variant="secondary" size="sm" onClick={onOpenFilters}>
-                <SlidersHorizontal className="h-4 w-4" />
-                Filters
+            <Button
+                variant="ghost"
+                className="min-h-11 bg-surface-soft hover:bg-surface-muted"
+                onClick={onOpenFilters}
+                aria-label={
+                    activeFilterCount > 0
+                        ? `Bộ lọc, đang áp dụng ${activeFilterCount} bộ lọc`
+                        : "Bộ lọc"
+                }
+            >
+                <SlidersHorizontal aria-hidden="true" className="h-4 w-4" />
+                Bộ lọc
                 {activeFilterCount > 0 && (
-                    <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                    <span
+                        aria-hidden="true"
+                        className="ml-1 rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground"
+                    >
                         {activeFilterCount}
                     </span>
                 )}
             </Button>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" size="sm">
-                        <ArrowDownWideNarrow className="h-4 w-4" />
+                    <Button
+                        variant="ghost"
+                        className="min-h-11 bg-surface-soft hover:bg-surface-muted"
+                        aria-label={`Sắp xếp: ${sortLabels[sort]}`}
+                    >
+                        <ArrowDownWideNarrow aria-hidden="true" className="h-4 w-4" />
                         <span className="hidden sm:inline">{sortLabels[sort]}</span>
-                        <span className="sm:hidden">Sort</span>
+                        <span className="sm:hidden">Sắp xếp</span>
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="end" className="w-52 border-0">
                     <DropdownMenuRadioGroup
                         value={sort}
                         onValueChange={(v) => onSort(v as CreativeSort)}
                     >
                         {(Object.keys(sortLabels) as CreativeSort[]).map((k) => (
-                            <DropdownMenuRadioItem key={k} value={k}>
+                            <DropdownMenuRadioItem key={k} value={k} className="min-h-11">
                                 {sortLabels[k]}
                             </DropdownMenuRadioItem>
                         ))}
@@ -95,45 +125,51 @@ export function CreativeToolbar({
             </DropdownMenu>
             <div
                 role="group"
-                aria-label="Creative layout"
-                className="inline-flex overflow-hidden rounded-[10px] border border-control-border bg-surface"
+                aria-label="Cách hiển thị tư liệu"
+                className="inline-flex overflow-hidden rounded-[10px] bg-surface-soft"
             >
                 <button
                     type="button"
-                    aria-label="Grid view"
+                    aria-label="Hiển thị dạng lưới"
                     aria-pressed={view === "grid"}
                     onClick={() => onView("grid")}
                     className={cn(
-                        "grid h-9 w-9 place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        "grid size-11 place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         view === "grid"
                             ? "bg-primary-soft text-primary-active"
                             : "text-text-tertiary hover:bg-surface-soft",
                     )}
                 >
-                    <LayoutGrid className="h-4 w-4" />
+                    <LayoutGrid aria-hidden="true" className="h-4 w-4" />
                 </button>
                 <button
                     type="button"
-                    aria-label="Compact view"
+                    aria-label="Hiển thị dạng danh sách gọn"
                     aria-pressed={view === "compact"}
                     onClick={() => onView("compact")}
                     className={cn(
-                        "grid h-9 w-9 place-items-center border-l border-control-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        "grid size-11 place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         view === "compact"
                             ? "bg-primary-soft text-primary-active"
                             : "text-text-tertiary hover:bg-surface-soft",
                     )}
                 >
-                    <Rows3 className="h-4 w-4" />
+                    <Rows3 aria-hidden="true" className="h-4 w-4" />
                 </button>
             </div>
             <Button
-                variant={selectMode ? "default" : "secondary"}
-                size="sm"
+                variant="ghost"
+                className={cn(
+                    "min-h-11",
+                    selectMode
+                        ? "bg-primary-soft text-primary-active hover:bg-primary-soft"
+                        : "bg-surface-soft hover:bg-surface-muted",
+                )}
+                aria-pressed={selectMode}
                 onClick={() => onSelectMode(!selectMode)}
             >
-                <CheckSquare className="h-4 w-4" />
-                {selectMode ? "Selecting" : "Select"}
+                <CheckSquare aria-hidden="true" className="h-4 w-4" />
+                {selectMode ? "Đang chọn" : "Chọn nhiều"}
             </Button>
         </div>
     );

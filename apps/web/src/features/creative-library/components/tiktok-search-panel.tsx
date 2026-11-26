@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
-import { Loader2, Search, ShieldCheck } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
+import { ChevronDown, Loader2, Search, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -48,6 +48,7 @@ function getDefaultTikTokDateRange() {
 
 export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undefined }) {
     const navigate = useNavigate();
+    const fieldId = useId();
     const defaultDateRange = getDefaultTikTokDateRange();
     const [source, setSource] = useState<"all" | "tiktok">("tiktok");
     const [term, setTerm] = useState("");
@@ -78,7 +79,7 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
     });
     const search = useMutation({
         mutationFn: (requestCursor?: string) => {
-            if (!workspaceId) throw new Error("Choose a workspace first.");
+            if (!workspaceId) throw new Error("Chọn workspace trước khi tiếp tục.");
             return searchTikTokAds(workspaceId, {
                 search_term: term.trim() || undefined,
                 search_type: searchType,
@@ -99,42 +100,52 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
             setCursor(data.page.next_cursor ?? undefined);
         },
         onError: (error) =>
-            toast.error(error instanceof Error ? error.message : "TikTok search failed"),
+            toast.error(
+                error instanceof Error ? error.message : "Chưa tìm được video. Bạn hãy thử lại.",
+            ),
     });
     const analyze = useMutation({
         mutationFn: async (item: TikTokAdResult) => {
-            if (!workspaceId) throw new Error("Choose a workspace first.");
+            if (!workspaceId) throw new Error("Chọn workspace trước khi tiếp tục.");
             if (item.media_state === "METADATA_ONLY") {
-                throw new Error(
-                    "Media analysis is unavailable while this result is metadata-only.",
-                );
+                throw new Error("Video này mới có thông tin, chưa có file để phân tích.");
             }
             if (item.media_state === "DIRECT_STREAM_AVAILABLE") {
-                throw new Error("Save this reference first to persist media before analysis.");
+                throw new Error("Lưu tham khảo trước để chuẩn bị file phân tích.");
             }
-            if (!boards.data?.[0]) throw new Error("Save a reference board first.");
+            if (!boards.data?.[0]) throw new Error("Tạo bộ sưu tập tham khảo trước khi tiếp tục.");
             const saved = await saveTikTokReference(workspaceId, item.source_id, {
                 board_id: boards.data[0].id,
             });
             return analyzeCreativeAsset(workspaceId, saved.asset_id);
         },
         onSuccess: () =>
-            toast.success("Analysis queued. The evidence state will update when ready."),
-        onError: (error) => toast.error(error instanceof Error ? error.message : "Analysis failed"),
+            toast.success("Đã gửi yêu cầu phân tích. Kết quả sẽ cập nhật khi sẵn sàng."),
+        onError: (error) =>
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Chưa phân tích được video. Bạn hãy thử lại.",
+            ),
     });
     const save = useMutation({
         mutationFn: ({ sourceId }: { sourceId: string }) => {
             if (!workspaceId || !boards.data?.[0])
-                throw new Error("No reference board is available.");
+                throw new Error("Chưa có bộ sưu tập để lưu tham khảo.");
             return saveTikTokReference(workspaceId, sourceId, { board_id: boards.data[0].id });
         },
-        onSuccess: () => toast.success("Reference saved; media import is processing."),
+        onSuccess: () =>
+            toast.success("Đã lưu tham khảo. Hệ thống đang chuẩn bị file trong workspace."),
         onError: (error) =>
-            toast.error(error instanceof Error ? error.message : "Reference save failed"),
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Chưa lưu được tham khảo. Bạn hãy thử lại.",
+            ),
     });
     const adapt = useMutation({
         mutationFn: async ({ assetId, productId }: { assetId: string; productId: string }) => {
-            if (!workspaceId) throw new Error("Choose a workspace first.");
+            if (!workspaceId) throw new Error("Chọn workspace trước khi tiếp tục.");
             const product = products.data?.find((item) => item.id === productId);
             await attachCreativeProduct(workspaceId, assetId, productId);
             return generateCreativeDirections(workspaceId, assetId, {
@@ -146,18 +157,23 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
         onSuccess: (result) => {
             const adaptationId = String(result.id ?? result.adaptation_id ?? "");
             if (!adaptationId) {
-                toast.error("Directions were created but the adaptation ID was missing.");
+                toast.error("Đã tạo gợi ý nhưng chưa mở được kết quả. Bạn hãy thử lại.");
                 return;
             }
-            toast.success("Three product-specific directions are ready.");
+            toast.success("Đã có 3 hướng video cho sản phẩm của bạn.");
             void navigate({ to: "/creative-directions/$adaptationId", params: { adaptationId } });
         },
         onError: (error) =>
-            toast.error(error instanceof Error ? error.message : "Adaptation failed"),
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Chưa tạo được gợi ý cho sản phẩm. Bạn hãy thử lại.",
+            ),
     });
     const batch = useMutation({
         mutationFn: async () => {
-            if (!workspaceId || !boards.data?.[0]) throw new Error("Save a reference board first.");
+            if (!workspaceId || !boards.data?.[0])
+                throw new Error("Tạo bộ sưu tập tham khảo trước khi tiếp tục.");
             const selected = results.filter((item) => selectedSourceIds.has(item.source_id));
             const saved = [] as Array<{ asset_id: string }>;
             for (const item of selected) {
@@ -176,7 +192,11 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
             void navigate({ to: "/batch-reviews/$batchId", params: { batchId: data.id } });
         },
         onError: (error) =>
-            toast.error(error instanceof Error ? error.message : "Batch creation failed"),
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Chưa chuẩn bị được nhóm video. Bạn hãy thử lại.",
+            ),
     });
 
     function runSearch() {
@@ -185,104 +205,200 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
     }
 
     return (
-        <SurfaceCard padding="lg" className="min-w-0 overflow-hidden bg-primary/[0.03] shadow-sm">
+        <SurfaceCard
+            padding="lg"
+            className="min-w-0 overflow-hidden rounded-3xl border-0 bg-surface shadow-sm [&_button]:min-h-11 [&_button]:whitespace-normal"
+        >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                         <ShieldCheck className="h-4 w-4 text-primary" />
-                        Public commercial signals
+                        Tìm video trên TikTok
                     </div>
                     <p className="mt-1 text-xs text-text-secondary">
-                        Official TikTok data. This is not seller sales performance, GMV, ROAS, or a
-                        winner prediction.
+                        Khám phá quảng cáo công khai để tham khảo cách làm video. Dữ liệu này không
+                        phản ánh doanh số, ROAS hay dự đoán video sẽ bán tốt.
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                        Video lưu từ TikTok được xử lý trong workspace, chưa đồng bộ vào bộ sưu tập
+                        trên trình duyệt này.
                     </p>
                 </div>
                 <div className="flex shrink-0 whitespace-nowrap rounded-lg bg-surface-soft p-1 text-xs">
                     <button
                         type="button"
-                        className="rounded-md px-2 py-1 text-text-tertiary"
+                        className={`min-h-11 rounded-lg px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${source === "all" ? "bg-primary-soft font-medium text-primary" : "text-text-secondary"}`}
+                        aria-pressed={source === "all"}
                         onClick={() => setSource("all")}
                     >
-                        All sources
+                        Tất cả nguồn
                     </button>
                     <button
                         type="button"
-                        className="rounded-md bg-surface-soft px-2 py-1 font-medium text-text-primary"
+                        className={`min-h-11 rounded-lg px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${source === "tiktok" ? "bg-primary-soft font-medium text-primary" : "text-text-secondary"}`}
+                        aria-pressed={source === "tiktok"}
                         onClick={() => setSource("tiktok")}
                     >
-                        TikTok Official
+                        TikTok chính thức
                     </button>
                 </div>
             </div>
             {source === "tiktok" && (
                 <>
-                    <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <input
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-3 text-sm"
-                            placeholder="Search ad title or phrase"
-                            value={term}
-                            onChange={(event) => setTerm(event.target.value)}
-                            maxLength={50}
-                        />
-                        <select
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-2 text-sm"
-                            value={searchType}
-                            onChange={(event) =>
-                                setSearchType(event.target.value as typeof searchType)
-                            }
-                        >
-                            <option value="fuzzy_phrase">Fuzzy</option>
-                            <option value="exact_phrase">Exact</option>
-                        </select>
-                        <input
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-3 text-sm uppercase"
-                            placeholder="Country (EU/EEA)"
-                            title="TikTok Commercial Content supports EU/EEA, GB, and CH country filters"
-                            value={country}
-                            onChange={(event) => setCountry(event.target.value)}
-                            maxLength={2}
-                        />
-                        <input
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-3 text-sm"
-                            type="date"
-                            value={minDate}
-                            onChange={(event) => setMinDate(event.target.value)}
-                        />
-                        <input
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-3 text-sm"
-                            type="date"
-                            value={maxDate}
-                            onChange={(event) => setMaxDate(event.target.value)}
-                        />
-                        <input
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-2 text-sm"
-                            placeholder="Min reach (e.g. 10K)"
-                            value={minReach}
-                            onChange={(event) => setMinReach(event.target.value.toUpperCase())}
-                        />
-                        <input
-                            className="h-9 min-w-0 w-full rounded-lg border border-control-border bg-surface px-2 text-sm"
-                            placeholder="Max reach"
-                            value={maxReach}
-                            onChange={(event) => setMaxReach(event.target.value.toUpperCase())}
-                        />
+                    <div className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="space-y-2">
+                            <label
+                                htmlFor={`${fieldId}-term`}
+                                className="text-sm font-medium text-text-primary"
+                            >
+                                Từ khóa
+                            </label>
+                            <input
+                                id={`${fieldId}-term`}
+                                className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface-soft px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                placeholder="Tên sản phẩm hoặc câu mở đầu"
+                                value={term}
+                                onChange={(event) => setTerm(event.target.value)}
+                                maxLength={50}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label
+                                htmlFor={`${fieldId}-market`}
+                                className="text-sm font-medium text-text-primary"
+                            >
+                                Thị trường · mã quốc gia
+                            </label>
+                            <input
+                                id={`${fieldId}-market`}
+                                className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface-soft px-3 text-base uppercase placeholder:normal-case focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                placeholder="Ví dụ: DE, FR, GB"
+                                title="Hỗ trợ EU/EEA, Anh (GB) và Thụy Sĩ (CH)"
+                                value={country}
+                                onChange={(event) => setCountry(event.target.value)}
+                                maxLength={2}
+                                aria-describedby={`${fieldId}-coverage`}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label
+                                htmlFor={`${fieldId}-from`}
+                                className="text-sm font-medium text-text-primary"
+                            >
+                                Từ ngày
+                            </label>
+                            <input
+                                id={`${fieldId}-from`}
+                                className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface-soft px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                type="date"
+                                value={minDate}
+                                onChange={(event) => setMinDate(event.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label
+                                htmlFor={`${fieldId}-to`}
+                                className="text-sm font-medium text-text-primary"
+                            >
+                                Đến ngày
+                            </label>
+                            <input
+                                id={`${fieldId}-to`}
+                                className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface-soft px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                type="date"
+                                value={maxDate}
+                                onChange={(event) => setMaxDate(event.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <p
+                        id={`${fieldId}-coverage`}
+                        className="mt-3 text-xs leading-relaxed text-text-secondary"
+                    >
+                        Nguồn này hỗ trợ EU/EEA, Anh (GB) và Thụy Sĩ (CH). Các thị trường khác chưa
+                        được hỗ trợ.
+                    </p>
+                    <details className="group mt-3 rounded-2xl bg-surface-soft px-4">
+                        <summary className="flex min-h-11 cursor-pointer items-center rounded-lg text-sm font-medium text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            Bộ lọc nâng cao
+                            <ChevronDown
+                                className="ml-auto size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                                aria-hidden="true"
+                            />
+                        </summary>
+                        <div className="grid gap-4 pb-4 sm:grid-cols-3">
+                            <div className="space-y-2">
+                                <label
+                                    htmlFor={`${fieldId}-match`}
+                                    className="text-sm text-text-primary"
+                                >
+                                    Cách khớp từ khóa
+                                </label>
+                                <select
+                                    id={`${fieldId}-match`}
+                                    className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                    value={searchType}
+                                    onChange={(event) =>
+                                        setSearchType(event.target.value as typeof searchType)
+                                    }
+                                >
+                                    <option value="fuzzy_phrase">Gần đúng</option>
+                                    <option value="exact_phrase">Đúng cụm từ</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label
+                                    htmlFor={`${fieldId}-min-reach`}
+                                    className="text-sm text-text-primary"
+                                >
+                                    Tiếp cận tối thiểu
+                                </label>
+                                <input
+                                    id={`${fieldId}-min-reach`}
+                                    className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                    placeholder="Ví dụ: 10K"
+                                    value={minReach}
+                                    onChange={(event) =>
+                                        setMinReach(event.target.value.toUpperCase())
+                                    }
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label
+                                    htmlFor={`${fieldId}-max-reach`}
+                                    className="text-sm text-text-primary"
+                                >
+                                    Tiếp cận tối đa
+                                </label>
+                                <input
+                                    id={`${fieldId}-max-reach`}
+                                    className="h-11 min-w-0 w-full rounded-xl border-0 bg-surface px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                                    placeholder="Không giới hạn"
+                                    value={maxReach}
+                                    onChange={(event) =>
+                                        setMaxReach(event.target.value.toUpperCase())
+                                    }
+                                />
+                            </div>
+                        </div>
+                    </details>
+                    <div className="mt-4 flex justify-end">
                         <Button
-                            size="sm"
-                            className="w-full"
+                            className="min-h-11 w-full sm:w-auto"
                             onClick={runSearch}
                             disabled={!workspaceId || !minDate || !maxDate || search.isPending}
                         >
-                            {search.isPending ? <Loader2 className="animate-spin" /> : <Search />}
-                            Search
+                            {search.isPending ? (
+                                <Loader2 className="animate-spin motion-reduce:animate-none" />
+                            ) : (
+                                <Search />
+                            )}
+                            {search.isPending ? "Đang tìm video…" : "Tìm video"}
                         </Button>
                     </div>
-                    <p className="mt-2 text-[11px] text-text-tertiary">
-                        Official country coverage: EU/EEA, GB, and CH. Unsupported markets are
-                        rejected before a provider request.
-                    </p>
                     {results.length === 0 && !search.isPending && (
                         <p className="mt-4 text-sm text-text-tertiary">
-                            Search official public commercial content to add market references.
+                            Nhập từ khóa và chọn khoảng ngày để tìm video tham khảo trên TikTok.
                         </p>
                     )}
                     <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -306,19 +422,19 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                             videoCount > 0 ? (
                                                 <video
                                                     src={media}
-                                                    muted
-                                                    autoPlay
-                                                    loop
                                                     playsInline
                                                     controls
-                                                    preload="auto"
-                                                    aria-label={`TikTok ad ${item.ad.id} video preview`}
+                                                    preload="metadata"
+                                                    aria-label={`Xem trước video TikTok ${item.ad.id}`}
                                                     className="h-full w-full bg-black object-contain"
                                                 />
                                             ) : (
                                                 <img
                                                     src={media}
-                                                    alt={item.ad.title ?? `TikTok ad ${item.ad.id}`}
+                                                    alt={
+                                                        item.ad.title ??
+                                                        `Quảng cáo TikTok ${item.ad.id}`
+                                                    }
                                                     loading="lazy"
                                                     className="h-full w-full bg-surface-soft object-contain"
                                                 />
@@ -327,14 +443,14 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                             <div className="flex h-full items-center justify-center bg-surface-soft px-4 text-center text-xs text-text-tertiary">
                                                 {videoCount + imageCount > 0
                                                     ? item.media_state === "METADATA_ONLY"
-                                                        ? "Media preview unavailable until this reference is saved."
-                                                        : "Media preview unavailable"
-                                                    : "TikTok did not return media for this ad."}
+                                                        ? "Lưu video tham khảo để hệ thống chuẩn bị bản xem trước."
+                                                        : "Chưa có bản xem trước"
+                                                    : "TikTok chưa cung cấp video hoặc ảnh cho quảng cáo này."}
                                             </div>
                                         )}
                                     </div>
                                     <div className="space-y-2 p-3">
-                                        <label className="flex items-center gap-2 text-xs text-text-secondary">
+                                        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-1 text-xs text-text-secondary focus-within:ring-2 focus-within:ring-ring">
                                             <input
                                                 type="checkbox"
                                                 checked={selectedSourceIds.has(item.source_id)}
@@ -348,57 +464,60 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                                     })
                                                 }
                                             />
-                                            Include in batch review
+                                            Chọn để xem xét cùng các video khác
                                         </label>
                                         <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold tracking-wide">
                                             <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
-                                                TIKTOK OFFICIAL
+                                                TikTok chính thức
                                             </span>
                                             <span className="rounded-full bg-surface-soft px-2 py-1 text-text-secondary">
-                                                MARKET SIGNAL
+                                                Tham khảo thị trường
                                             </span>
                                             <span className="rounded-full bg-surface-soft px-2 py-1 text-text-secondary">
-                                                PUBLIC COMMERCIAL DATA
+                                                Quảng cáo công khai
                                             </span>
                                         </div>
                                         <p className="line-clamp-2 text-sm font-medium text-text-primary">
-                                            {item.ad.title ?? `TikTok ad ${item.ad.id}`}
+                                            {item.ad.title ?? `Quảng cáo TikTok ${item.ad.id}`}
                                         </p>
                                         <p className="text-xs text-text-secondary">
                                             {item.advertiser?.business_name ??
-                                                "Advertiser unavailable"}{" "}
-                                            · {item.ad.reach ?? "Reach unavailable"}
+                                                "Chưa có tên nhà quảng cáo"}{" "}
+                                            · {item.ad.reach ?? "Chưa có số tiếp cận"}
                                         </p>
                                         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-text-tertiary">
-                                            <CompactMeta label="Status" value={item.ad.status} />
                                             <CompactMeta
-                                                label="Shown"
+                                                label="Trạng thái"
+                                                value={item.ad.status}
+                                            />
+                                            <CompactMeta
+                                                label="Thời gian xuất hiện"
                                                 value={formatDateRange(
                                                     item.ad.first_shown_date,
                                                     item.ad.last_shown_date,
                                                 )}
                                             />
                                             <CompactMeta
-                                                label="Media"
-                                                value={`${videoCount} video · ${imageCount} image`}
+                                                label="Nội dung"
+                                                value={`${videoCount} video · ${imageCount} ảnh`}
                                             />
                                             <CompactMeta
-                                                label="Analysis"
+                                                label="Phân tích"
                                                 value={item.intelligence_status}
                                             />
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap gap-2">
                                             <Button
                                                 size="sm"
-                                                variant="secondary"
+                                                variant="ghost"
                                                 onClick={() => setDetailItem(item)}
                                             >
-                                                View details
+                                                Xem chi tiết
                                             </Button>
                                             {item.asset_id && (
                                                 <Button
                                                     size="sm"
-                                                    variant="secondary"
+                                                    variant="ghost"
                                                     onClick={() => analyze.mutate(item)}
                                                     disabled={
                                                         analyze.isPending ||
@@ -408,17 +527,17 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                                     }
                                                 >
                                                     {item.media_state === "METADATA_ONLY"
-                                                        ? "Media unavailable"
+                                                        ? "Chưa có file"
                                                         : item.media_state ===
                                                             "DIRECT_STREAM_AVAILABLE"
-                                                          ? "Save to analyze"
-                                                          : "Analyze pattern"}
+                                                          ? "Lưu để phân tích"
+                                                          : "Phân tích cách làm"}
                                                 </Button>
                                             )}
                                             {item.asset_id && (
                                                 <Button
                                                     size="sm"
-                                                    variant="secondary"
+                                                    variant="ghost"
                                                     onClick={() => {
                                                         setAdaptAssetId(
                                                             adaptAssetId === item.asset_id
@@ -431,7 +550,7 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                                     }}
                                                     disabled={!products.data?.length}
                                                 >
-                                                    Adapt to my product
+                                                    Áp dụng cho sản phẩm
                                                 </Button>
                                             )}
                                             <Button
@@ -441,7 +560,7 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                                 }
                                                 disabled={save.isPending || !boards.data?.length}
                                             >
-                                                Save reference
+                                                Lưu tham khảo
                                             </Button>
                                         </div>
                                         {adaptAssetId === item.asset_id && (
@@ -450,11 +569,11 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                                     className="text-xs text-text-secondary"
                                                     htmlFor={`adapt-product-${item.asset_id}`}
                                                 >
-                                                    Product
+                                                    Sản phẩm
                                                 </label>
                                                 <select
                                                     id={`adapt-product-${item.asset_id}`}
-                                                    className="h-8 min-w-48 rounded-md border border-control-border bg-surface px-2 text-xs"
+                                                    className="h-11 min-w-0 max-w-full rounded-xl border-0 bg-surface px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                                     value={adaptProductId}
                                                     onChange={(event) =>
                                                         setAdaptProductId(event.target.value)
@@ -477,8 +596,8 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                                                     disabled={!adaptProductId || adapt.isPending}
                                                 >
                                                     {adapt.isPending
-                                                        ? "Generating…"
-                                                        : "Generate 3 directions"}
+                                                        ? "Đang tạo gợi ý…"
+                                                        : "Tạo 3 hướng video"}
                                                 </Button>
                                             </div>
                                         )}
@@ -488,57 +607,57 @@ export function TikTokSearchPanel({ workspaceId }: { workspaceId: string | undef
                         })}
                     </div>
                     {selectedSourceIds.size > 0 && (
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-primary-soft p-4">
                             <p className="text-sm text-text-secondary">
-                                {selectedSourceIds.size} public creatives selected. They will be
-                                saved as workspace references before review.
+                                Đã chọn {selectedSourceIds.size} video. Các video sẽ được lưu tham
+                                khảo trong workspace trước khi xem xét.
                             </p>
                             <Button
                                 size="sm"
                                 onClick={() => batch.mutate()}
                                 disabled={batch.isPending || selectedSourceIds.size > 25}
                             >
-                                {batch.isPending ? "Preparing batch…" : "Review selected batch"}
+                                {batch.isPending ? "Đang chuẩn bị…" : "Xem xét các video đã chọn"}
                             </Button>
                         </div>
                     )}
                     {cursor && (
                         <Button
                             className="mt-4"
-                            variant="secondary"
+                            variant="ghost"
                             size="sm"
                             onClick={() => search.mutate(cursor)}
                             disabled={search.isPending}
                         >
-                            Load more
+                            Xem thêm
                         </Button>
                     )}
                     <Dialog
                         open={Boolean(detailItem)}
                         onOpenChange={(open) => !open && setDetailItem(null)}
                     >
-                        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[min(960px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden border-0 p-0">
+                        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[min(960px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden border-0 p-0 motion-reduce:animate-none [&>button:last-child]:flex [&>button:last-child]:size-11 [&>button:last-child]:items-center [&>button:last-child]:justify-center [&>button:last-child]:rounded-xl">
                             {detailItem && (
                                 <>
-                                    <DialogHeader className="shrink-0 border-b border-control-border/60 bg-surface px-6 pb-4 pt-6 pr-12">
+                                    <DialogHeader className="shrink-0 bg-surface px-6 pb-4 pt-6 pr-20">
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div className="min-w-0">
                                                 <DialogTitle className="truncate text-xl">
                                                     {detailItem.ad.title ??
-                                                        `TikTok ad ${detailItem.ad.id}`}
+                                                        `Quảng cáo TikTok ${detailItem.ad.id}`}
                                                 </DialogTitle>
                                                 <DialogDescription className="mt-1">
                                                     {detailItem.advertiser?.business_name ??
-                                                        "Advertiser unavailable"}{" "}
-                                                    · Official TikTok market reference
+                                                        "Chưa có tên nhà quảng cáo"}{" "}
+                                                    · Video tham khảo từ TikTok chính thức
                                                 </DialogDescription>
                                             </div>
                                             <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold tracking-wide">
                                                 <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
-                                                    TIKTOK OFFICIAL
+                                                    TikTok chính thức
                                                 </span>
                                                 <span className="rounded-full bg-surface-soft px-2 py-1 text-text-secondary">
-                                                    MARKET SIGNAL
+                                                    Tham khảo thị trường
                                                 </span>
                                             </div>
                                         </div>
@@ -605,49 +724,46 @@ function TikTokDetails({
             }
         >
             {detail.isPending && (
-                <p className="text-text-tertiary">Loading official TikTok details…</p>
+                <p className="text-text-tertiary">Đang tải thông tin từ TikTok…</p>
             )}
             {detail.isError && (
                 <p className="rounded-md bg-amber-500/10 p-2 text-amber-700">
-                    Official detail is temporarily unavailable; showing the search response.
+                    Chưa tải được thông tin chi tiết. Bạn đang xem dữ liệu từ kết quả tìm kiếm.
                 </p>
             )}
-            <DetailSection title="Official TikTok metadata">
+            <DetailSection title="Thông tin từ TikTok">
                 <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
-                    <DetailRow label="Ad ID" value={data.ad.id} />
-                    <DetailRow label="Source record" value={data.source_id} />
-                    <DetailRow label="First shown" value={data.ad.first_shown_date} />
-                    <DetailRow label="Last shown" value={data.ad.last_shown_date} />
-                    <DetailRow label="Status" value={data.ad.status} />
-                    <DetailRow label="Status statement" value={data.ad.status_statement} />
-                    <DetailRow label="Reach" value={data.ad.reach} />
-                    <DetailRow label="Media state" value={data.media_state} />
+                    <DetailRow label="Mã quảng cáo" value={data.ad.id} />
+                    <DetailRow label="Mã nguồn tham khảo" value={data.source_id} />
+                    <DetailRow label="Xuất hiện lần đầu" value={data.ad.first_shown_date} />
+                    <DetailRow label="Xuất hiện lần cuối" value={data.ad.last_shown_date} />
+                    <DetailRow label="Trạng thái" value={data.ad.status} />
+                    <DetailRow label="Mô tả trạng thái" value={data.ad.status_statement} />
+                    <DetailRow label="Lượt tiếp cận" value={data.ad.reach} />
+                    <DetailRow label="Tình trạng file" value={data.media_state} />
                 </div>
             </DetailSection>
 
-            <DetailSection title="Advertiser">
+            <DetailSection title="Nhà quảng cáo">
                 <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
-                    <DetailRow label="Business name" value={data.advertiser?.business_name} />
-                    <DetailRow label="Business ID" value={data.advertiser?.business_id} />
-                    <DetailRow label="Country" value={data.advertiser?.country_code} />
-                    <DetailRow label="Paid for by" value={data.advertiser?.paid_for_by} />
-                    <DetailRow label="Follower count" value={data.advertiser?.follower_count} />
-                    <DetailRow label="Avatar URL" value={data.advertiser?.avatar_url} />
-                    <DetailRow label="Profile URL" value={data.advertiser?.profile_url} />
+                    <DetailRow label="Tên doanh nghiệp" value={data.advertiser?.business_name} />
+                    <DetailRow label="Mã doanh nghiệp" value={data.advertiser?.business_id} />
+                    <DetailRow label="Quốc gia" value={data.advertiser?.country_code} />
+                    <DetailRow label="Bên chi trả" value={data.advertiser?.paid_for_by} />
+                    <DetailRow label="Người theo dõi" value={data.advertiser?.follower_count} />
+                    <DetailRow label="Link ảnh đại diện" value={data.advertiser?.avatar_url} />
+                    <DetailRow label="Link trang cá nhân" value={data.advertiser?.profile_url} />
                 </div>
             </DetailSection>
 
-            <DetailSection title="Creative and media">
+            <DetailSection title="Nội dung quảng cáo">
                 <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
-                    <DetailRow label="Title" value={data.ad.title} />
-                    <DetailRow label="Call to action" value={data.ad.call_to_action} />
-                    <DetailRow
-                        label="Advertising objective"
-                        value={data.ad.advertising_objective}
-                    />
-                    <DetailRow label="Video count" value={videoCount} />
-                    <DetailRow label="Image count" value={imageCount} />
-                    <DetailLink label="External URL" value={data.ad.external_url} />
+                    <DetailRow label="Tiêu đề" value={data.ad.title} />
+                    <DetailRow label="Lời kêu gọi hành động" value={data.ad.call_to_action} />
+                    <DetailRow label="Mục tiêu quảng cáo" value={data.ad.advertising_objective} />
+                    <DetailRow label="Số video" value={videoCount} />
+                    <DetailRow label="Số ảnh" value={imageCount} />
+                    <DetailLink label="Link ngoài" value={data.ad.external_url} />
                 </div>
                 {mediaItems.length > 0 && mediaPreviewEnabled ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -666,18 +782,15 @@ function TikTokDetails({
                                         <video
                                             src={src}
                                             controls
-                                            muted
-                                            autoPlay
-                                            loop
                                             playsInline
-                                            preload="auto"
-                                            aria-label={`TikTok ad ${data.ad.id} video ${media.index + 1}`}
+                                            preload="metadata"
+                                            aria-label={`Video TikTok ${data.ad.id}, phần ${media.index + 1}`}
                                             className="h-full w-full object-contain"
                                         />
                                     ) : (
                                         <img
                                             src={src}
-                                            alt={`${data.ad.title ?? `TikTok ad ${data.ad.id}`} image ${media.index + 1}`}
+                                            alt={`${data.ad.title ?? `Quảng cáo TikTok ${data.ad.id}`} · ảnh ${media.index + 1}`}
                                             loading="lazy"
                                             className="h-full w-full bg-surface-soft object-contain"
                                         />
@@ -689,35 +802,33 @@ function TikTokDetails({
                 ) : (
                     <p className="mt-2 rounded-md bg-surface-soft p-2 text-text-tertiary">
                         {mediaCount > 0
-                            ? "Media is available after Save reference or when direct preview is enabled."
-                            : "No video or image media was returned by TikTok."}
+                            ? "Media is available after Lưu tham khảo or when direct preview is enabled."
+                            : "TikTok chưa cung cấp video hoặc ảnh."}
                     </p>
                 )}
             </DetailSection>
 
-            <DetailSection title="Targeting and moderation metadata">
-                <JsonValue label="Targeting" value={data.ad.targeting_info} />
-                <JsonValue label="Moderation" value={data.ad.moderation_metadata} />
+            <DetailSection title="Thông tin nhắm mục tiêu và kiểm duyệt">
+                <JsonValue label="Nhắm mục tiêu" value={data.ad.targeting_info} />
+                <JsonValue label="Kiểm duyệt" value={data.ad.moderation_metadata} />
             </DetailSection>
 
-            <DetailSection title="Viraldy intelligence">
+            <DetailSection title="Phân tích của Viraldy">
                 <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
-                    <DetailRow label="Intelligence state" value={data.intelligence_status} />
+                    <DetailRow label="Trạng thái phân tích" value={data.intelligence_status} />
                     <DetailRow
-                        label="Evidence count"
+                        label="Số bằng chứng"
                         value={intelligence.data?.analysis.evidence_count}
                     />
-                    <DetailRow
-                        label="Creative families"
-                        value={intelligence.data?.families.length}
-                    />
-                    <DetailRow label="Evidence scope" value="Public market observation" />
+                    <DetailRow label="Nhóm nội dung" value={intelligence.data?.families.length} />
+                    <DetailRow label="Phạm vi bằng chứng" value="Quan sát thị trường công khai" />
                 </div>
             </DetailSection>
 
             <p className="rounded-xl bg-primary/[0.05] p-3 text-[11px] text-text-tertiary">
-                Platform metadata is a public market signal, not seller sales performance, GMV,
-                ROAS, conversion, or a winner prediction. Missing TikTok values remain unavailable.
+                Dữ liệu này giúp tham khảo thị trường, không phản ánh doanh số, ROAS, tỷ lệ chuyển
+                đổi hay dự đoán video sẽ bán tốt. Thông tin TikTok chưa cung cấp được để là chưa có
+                dữ liệu.
             </p>
         </div>
     );
@@ -727,7 +838,7 @@ function CompactMeta({ label, value }: { label: string; value: string | null | u
     return (
         <span className="truncate">
             <span className="font-medium text-text-secondary">{label}:</span>{" "}
-            {value ?? "Unavailable"}
+            {value ?? "Chưa có dữ liệu"}
         </span>
     );
 }
@@ -762,12 +873,12 @@ function DetailLink({ label, value }: { label: string; value: string | null | un
                         href={value}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-primary underline-offset-2 hover:underline"
+                        className="inline-flex min-h-11 items-center rounded-lg px-1 text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                        Open external link
+                        Mở link ngoài
                     </a>
                 ) : (
-                    "Unavailable"
+                    "Chưa có dữ liệu"
                 )}
             </dd>
         </div>
@@ -785,19 +896,19 @@ function JsonValue({
         <div className="mb-2 last:mb-0">
             <p className="text-[10px] uppercase tracking-wide text-text-tertiary">{label}</p>
             <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface p-2 text-[11px] text-text-primary">
-                {value ? JSON.stringify(value, null, 2) : "Unavailable"}
+                {value ? JSON.stringify(value, null, 2) : "Chưa có dữ liệu"}
             </pre>
         </div>
     );
 }
 
 function formatDetailValue(value: unknown) {
-    if (value === null || value === undefined || value === "") return "Unavailable";
+    if (value === null || value === undefined || value === "") return "Chưa có dữ liệu";
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
 }
 
 function formatDateRange(first: string | null, last: string | null) {
-    if (!first && !last) return "Unavailable";
+    if (!first && !last) return "Chưa có dữ liệu";
     return `${first ?? "?"} – ${last ?? "?"}`;
 }

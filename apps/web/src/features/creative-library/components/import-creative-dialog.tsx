@@ -34,10 +34,10 @@ import { captureVideoPoster, posterForDemoUploadFilename } from "@/shared/lib/de
 const urlSchema = z.object({
     url: z
         .string()
-        .min(4, "Paste a URL")
-        .refine((v) => /^https?:\/\/.+/.test(v), "Enter a valid https:// URL"),
+        .min(4, "Thêm link tham khảo nhé")
+        .refine((v) => /^https?:\/\/.+/.test(v), "Thêm link bắt đầu bằng https:// nhé"),
     platform: z.enum(["TikTok", "Meta", "YouTube Shorts", "UGC", "Other"]),
-    board: z.string().min(1, "Choose a board"),
+    board: z.string().min(1, "Chọn bộ sưu tập nhé"),
     notes: z.string().optional(),
 });
 type UrlValues = z.infer<typeof urlSchema>;
@@ -62,8 +62,8 @@ const demoOptions: {
 }[] = [
     {
         id: "d1",
-        title: "Kitchen counter problem–solution",
-        hook: "This counter after 2 kids and a Costco run.",
+        title: "Giải pháp cho góc bếp bừa bộn",
+        hook: "Góc bếp sau một ngày chăm con và đi mua sắm.",
         seed: "coral",
         angle: "Problem–solution",
         category: "Home & Kitchen",
@@ -72,8 +72,8 @@ const demoOptions: {
     },
     {
         id: "d2",
-        title: "Dog Mom personalized gift reaction",
-        hook: "He finally got me the right gift.",
+        title: "Bất ngờ với món quà dành cho người yêu chó",
+        hook: "Cuối cùng anh ấy cũng chọn đúng món quà mình thích.",
         seed: "peach",
         angle: "Gift reaction",
         category: "POD Gifts",
@@ -82,8 +82,8 @@ const demoOptions: {
     },
     {
         id: "d3",
-        title: "Beauty mirror morning routine",
-        hook: "The mirror I take everywhere.",
+        title: "Chiếc gương trong thói quen làm đẹp buổi sáng",
+        hook: "Chiếc gương mình luôn mang theo.",
         seed: "blush",
         angle: "Day-in-the-life",
         category: "Beauty",
@@ -92,8 +92,8 @@ const demoOptions: {
     },
     {
         id: "d4",
-        title: "Pet hair roller before-and-after",
-        hook: "I'll never buy sticky rollers again.",
+        title: "Trước và sau khi dùng cây lăn lông thú",
+        hook: "Mình không cần mua thêm cuộn giấy dính nữa.",
         seed: "mint",
         angle: "Before-and-after",
         category: "Pet",
@@ -102,8 +102,8 @@ const demoOptions: {
     },
     {
         id: "d5",
-        title: "Home organizer creator testimonial",
-        hook: "Three months in, here's what stayed organized.",
+        title: "Chia sẻ sau ba tháng sắp xếp nhà cửa",
+        hook: "Sau ba tháng, đây là những góc vẫn giữ được ngăn nắp.",
         seed: "sage",
         angle: "Testimonial",
         category: "Home Organization",
@@ -112,8 +112,8 @@ const demoOptions: {
     },
     {
         id: "d6",
-        title: "Product comparison — 4 mirrors",
-        hook: "I bought all 4 viral mirrors so you don't have to.",
+        title: "So sánh bốn mẫu gương được yêu thích",
+        hook: "Mình đã thử cả bốn mẫu để bạn dễ chọn hơn.",
         seed: "lavender",
         angle: "Comparison",
         category: "Beauty",
@@ -151,7 +151,7 @@ export function ImportCreativeDialog({
     const boards = useAppStore((s) => s.boards);
     const addCreative = useAppStore((s) => s.addCreative);
     const navigate = useNavigate();
-    const [tab, setTab] = useState("url");
+    const [tab, setTab] = useState("file");
     const [file, setFile] = useState<File | null>(null);
     const [fileUrl, setFileUrl] = useState<string | null>(null);
     const transferredUrlRef = useRef<string | null>(null);
@@ -177,7 +177,7 @@ export function ImportCreativeDialog({
 
     useEffect(() => {
         if (open) {
-            setTab("url");
+            setTab("file");
             setFile(null);
             setFileErr(null);
             setFileMeta(null);
@@ -220,11 +220,11 @@ export function ImportCreativeDialog({
         const allowed = ["mp4", "mov", "webm", "jpg", "jpeg", "png", "webp"];
         const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
         if (!allowed.includes(ext)) {
-            setFileErr("Use mp4, mov, webm, jpg, png, or webp.");
+            setFileErr("Chọn file MP4, MOV, WebM, JPG, PNG hoặc WebP nhé.");
             return;
         }
         if (f.size > 50 * 1024 * 1024) {
-            setFileErr("File must be under 50MB.");
+            setFileErr("Kho tư liệu nhận file tối đa 50 MB. Hãy chọn file nhỏ hơn nhé.");
             return;
         }
         setFileErr(null);
@@ -271,35 +271,35 @@ export function ImportCreativeDialog({
         const now = new Date().toISOString();
         const cr: CreativeReference = {
             id: `cr-${Date.now()}`,
-            title: v.notes?.slice(0, 60) || `Imported ${v.platform} reference`,
-            hookExcerpt: v.notes || "Demo import — analyze to extract the hook.",
+            title: v.notes?.slice(0, 60) || `Link tham khảo từ ${v.platform}`,
+            hookExcerpt: v.notes || "Link đã lưu để tham khảo; chưa có file video.",
             platform: v.platform,
             durationSec: 24,
             brandOrCreator: new URL(v.url).hostname.replace("www.", ""),
             angle: "Problem–solution",
             category: "Home & Kitchen",
-            tags: ["demo-import"],
-            notes: v.notes,
+            tags: ["link-import"],
+            notes: [v.notes, `Nguồn: ${v.url}`].filter(Boolean).join("\n"),
             boardIds: v.board === "b-all" ? [] : [v.board],
             analysisStatus: "ready",
             savedAt: now,
             thumbSeed: seedFromPlatform(v.platform),
         };
         setSubmitting(false);
-        finish(cr, "Reference imported");
+        finish(cr, "Đã lưu link tham khảo");
         openImportedCreative(cr);
     }
 
     function submitFile() {
         if (!file) {
-            setFileErr("Choose a file first.");
+            setFileErr("Chọn file trước khi thêm vào kho nhé.");
             return;
         }
         const now = new Date().toISOString();
         const cr: CreativeReference = {
             id: `cr-${Date.now()}`,
             title: file.name.replace(/\.[^.]+$/, ""),
-            hookExcerpt: "Uploaded reference — analyze to extract the hook.",
+            hookExcerpt: "Tư liệu từ máy của bạn, sẵn sàng để xem và tham khảo.",
             platform: "UGC",
             durationSec: Math.round(fileMeta?.durationSec ?? 22),
             mediaKind: fileMeta?.kind ?? (file.type.startsWith("image/") ? "image" : "video"),
@@ -308,7 +308,7 @@ export function ImportCreativeDialog({
                 ? (posterUrl ?? posterForDemoUploadFilename(file.name))
                 : undefined,
             mediaAspectRatio: fileMeta?.aspectRatio,
-            brandOrCreator: "Local upload",
+            brandOrCreator: "Tải từ máy",
             angle: "Testimonial",
             category: "Home & Kitchen",
             tags: ["upload"],
@@ -318,12 +318,16 @@ export function ImportCreativeDialog({
             thumbSeed: "amber",
         };
         if (fileUrl) transferredUrlRef.current = fileUrl;
-        finish(cr, "File imported");
+        finish(cr, "Đã thêm file vào kho");
         openImportedCreative(cr);
     }
 
     const fileBlocker =
-        tab === "file" ? (!file ? "Choose an image or video file first." : fileErr) : null;
+        tab === "file"
+            ? !file
+                ? "Chọn ảnh hoặc video trước khi thêm vào kho nhé."
+                : fileErr
+            : null;
 
     function submitDemo() {
         const d = demoOptions.find((x) => x.id === demoId);
@@ -334,7 +338,7 @@ export function ImportCreativeDialog({
             hookExcerpt: d.hook,
             platform: d.platform,
             durationSec: d.dur,
-            brandOrCreator: "Demo reference",
+            brandOrCreator: "Tư liệu minh họa",
             angle: d.angle,
             category: d.category,
             tags: ["demo"],
@@ -343,26 +347,44 @@ export function ImportCreativeDialog({
             savedAt: new Date().toISOString(),
             thumbSeed: d.seed,
         };
-        finish(cr, "Demo creative added");
+        finish(cr, "Đã thêm tư liệu minh họa");
         openImportedCreative(cr);
     }
 
     return (
         <Dialog open={open} onOpenChange={submitting ? undefined : onOpenChange}>
-            <DialogContent className="flex max-h-[calc(100dvh-4rem)] flex-col overflow-hidden sm:max-w-[600px]">
-                <DialogHeader>
-                    <DialogTitle>Import creative</DialogTitle>
+            <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden border-0 p-4 sm:max-w-[640px] sm:p-6 [&>button]:grid [&>button]:size-11 [&>button]:place-items-center">
+                <DialogHeader className="pr-10 text-left">
+                    <DialogTitle>Thêm tư liệu vào kho</DialogTitle>
                     <DialogDescription>
-                        Paste a link, upload a file, or start from a demo reference. Frontend-only —
-                        nothing is uploaded to a server.
+                        Tư liệu lưu trên trình duyệt này. Thêm file để xem video hoặc lưu link để
+                        tham khảo.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="url">Paste URL</TabsTrigger>
-                        <TabsTrigger value="file">Upload file</TabsTrigger>
-                        <TabsTrigger value="demo">Demo creative</TabsTrigger>
+                    <TabsList
+                        aria-label="Cách thêm tư liệu"
+                        className="grid h-auto w-full grid-cols-3 gap-1 bg-surface-soft p-1"
+                    >
+                        <TabsTrigger
+                            value="file"
+                            className="min-h-11 whitespace-normal px-2 text-xs sm:text-sm"
+                        >
+                            Tải từ máy
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="url"
+                            className="min-h-11 whitespace-normal px-2 text-xs sm:text-sm"
+                        >
+                            Lưu link tham khảo
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="demo"
+                            className="min-h-11 whitespace-normal px-2 text-xs sm:text-sm"
+                        >
+                            Minh họa
+                        </TabsTrigger>
                     </TabsList>
 
                     <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -373,12 +395,12 @@ export function ImportCreativeDialog({
                                 className="flex flex-col gap-4"
                             >
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor="url">Creative URL</Label>
+                                    <Label htmlFor="url">Link nguồn tham khảo</Label>
                                     <div className="relative">
                                         <Link2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                                         <Input
                                             id="url"
-                                            className="pl-9"
+                                            className="h-11 border-0 bg-surface-soft pl-9 shadow-none"
                                             placeholder="https://tiktok.com/@creator/video/…"
                                             {...form.register("url")}
                                         />
@@ -388,48 +410,71 @@ export function ImportCreativeDialog({
                                             {form.formState.errors.url.message}
                                         </p>
                                     )}
-                                    <p className="text-[11px] text-text-tertiary">
-                                        Demo import — Viraldy does not fetch external videos in this
-                                        preview.
+                                    <p className="text-xs leading-relaxed text-text-secondary">
+                                        Chỉ lưu link và ghi chú, chưa tải file video. Để dùng Smart
+                                        Remake, bạn cần thêm file video từ máy.
                                     </p>
                                 </div>
 
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div className="grid gap-1.5">
-                                        <Label>Source platform</Label>
+                                        <Label>Nền tảng nguồn</Label>
                                         <Select
                                             value={form.watch("platform")}
                                             onValueChange={(v) =>
                                                 form.setValue("platform", v as CreativePlatform)
                                             }
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger
+                                                aria-label="Nền tảng nguồn"
+                                                className="h-11 border-0 bg-surface-soft"
+                                            >
                                                 <SelectValue />
                                             </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="TikTok">TikTok</SelectItem>
-                                                <SelectItem value="Meta">Meta</SelectItem>
-                                                <SelectItem value="YouTube Shorts">
+                                            <SelectContent className="border-0">
+                                                <SelectItem value="TikTok" className="min-h-11">
+                                                    TikTok
+                                                </SelectItem>
+                                                <SelectItem value="Meta" className="min-h-11">
+                                                    Meta
+                                                </SelectItem>
+                                                <SelectItem
+                                                    value="YouTube Shorts"
+                                                    className="min-h-11"
+                                                >
                                                     YouTube Shorts
                                                 </SelectItem>
-                                                <SelectItem value="UGC">UGC</SelectItem>
-                                                <SelectItem value="Other">Other</SelectItem>
+                                                <SelectItem value="UGC" className="min-h-11">
+                                                    UGC
+                                                </SelectItem>
+                                                <SelectItem value="Other" className="min-h-11">
+                                                    Khác
+                                                </SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="grid gap-1.5">
-                                        <Label>Board</Label>
+                                        <Label>Bộ sưu tập</Label>
                                         <Select
                                             value={form.watch("board")}
                                             onValueChange={(v) => form.setValue("board", v)}
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger
+                                                aria-label="Bộ sưu tập"
+                                                className="h-11 border-0 bg-surface-soft"
+                                            >
                                                 <SelectValue />
                                             </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectContent className="border-0">
                                                 {boardOptions.map((b) => (
-                                                    <SelectItem key={b.id} value={b.id}>
-                                                        {b.name}
+                                                    <SelectItem
+                                                        key={b.id}
+                                                        value={b.id}
+                                                        className="min-h-11"
+                                                    >
+                                                        {b.system && b.filter === "all"
+                                                            ? "Chưa phân loại"
+                                                            : b.name}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -438,11 +483,12 @@ export function ImportCreativeDialog({
                                 </div>
 
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor="notes">Notes (optional)</Label>
+                                    <Label htmlFor="notes">Ghi chú (không bắt buộc)</Label>
                                     <Textarea
                                         id="notes"
                                         rows={3}
-                                        placeholder="What caught your eye?"
+                                        placeholder="Bạn thích cách mở đầu, góc quay hay cách giới thiệu sản phẩm nào?"
+                                        className="border-0 bg-surface-soft shadow-none"
                                         {...form.register("notes")}
                                     />
                                 </div>
@@ -454,15 +500,15 @@ export function ImportCreativeDialog({
                                 <label
                                     htmlFor="file-input"
                                     className={cn(
-                                        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-hairline bg-surface-soft/60 px-6 py-10 text-center transition-colors hover:bg-surface-soft",
+                                        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-surface-soft px-6 py-8 text-center transition-colors hover:bg-surface-muted focus-within:ring-2 focus-within:ring-ring",
                                     )}
                                 >
                                     <Upload className="h-5 w-5 text-text-tertiary" />
                                     <p className="text-sm font-medium text-text-primary">
-                                        Click to choose a file
+                                        Chọn video hoặc ảnh từ máy
                                     </p>
                                     <p className="text-xs text-text-tertiary">
-                                        mp4, mov, webm, jpg, png, webp · up to 50MB
+                                        MP4, MOV, WebM, JPG, PNG, WebP · Tối đa 50 MB
                                     </p>
                                     <input
                                         id="file-input"
@@ -472,14 +518,18 @@ export function ImportCreativeDialog({
                                         onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
                                     />
                                 </label>
+                                <p className="text-xs leading-relaxed text-text-secondary">
+                                    Nếu muốn tạo video bằng Smart Remake, chọn video tối đa 30 MB.
+                                    File tải từ máy chỉ mở được khi còn trong phiên trình duyệt này.
+                                </p>
 
                                 {file && (
-                                    <div className="grid gap-3 rounded-md border border-hairline bg-surface p-3 sm:grid-cols-[168px_minmax(0,1fr)]">
+                                    <div className="grid gap-3 rounded-2xl bg-surface-soft p-3 sm:grid-cols-[168px_minmax(0,1fr)]">
                                         <div className="grid min-h-[150px] place-items-center overflow-hidden rounded-md bg-black">
                                             {fileUrl && file.type.startsWith("image/") ? (
                                                 <img
                                                     src={fileUrl}
-                                                    alt="Selected creative preview"
+                                                    alt="Xem trước ảnh đã chọn"
                                                     className="h-full w-full object-contain"
                                                     onLoad={(event) =>
                                                         updateMediaMeta(
@@ -522,16 +572,16 @@ export function ImportCreativeDialog({
                                             </p>
                                             <p className="text-xs text-text-tertiary">
                                                 {(file.size / (1024 * 1024)).toFixed(1)} MB ·{" "}
-                                                {file.type || "unknown"}
+                                                {file.type || "Chưa xác định định dạng"}
                                             </p>
                                             {fileMeta && (
                                                 <p className="mt-1 text-xs text-text-secondary">
-                                                    {fileMeta.kind} ·{" "}
+                                                    {fileMeta.kind === "video" ? "Video" : "Ảnh"} ·{" "}
                                                     {fileMeta.width && fileMeta.height
                                                         ? `${fileMeta.width}×${fileMeta.height}`
-                                                        : "reading dimensions"}
+                                                        : "Đang đọc kích thước"}
                                                     {fileMeta.durationSec
-                                                        ? ` · ${Math.round(fileMeta.durationSec)}s`
+                                                        ? ` · ${Math.round(fileMeta.durationSec)} giây`
                                                         : ""}
                                                     {fileMeta.aspectRatio
                                                         ? ` · ${fileMeta.aspectRatio}`
@@ -543,7 +593,8 @@ export function ImportCreativeDialog({
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            aria-label="Remove file"
+                                            aria-label="Bỏ file đã chọn"
+                                            className="size-11"
                                             onClick={() => handleFile(null)}
                                         >
                                             <X className="h-4 w-4" />
@@ -556,6 +607,10 @@ export function ImportCreativeDialog({
                         </TabsContent>
 
                         <TabsContent value="demo" className="mt-4">
+                            <p className="mb-3 text-xs leading-relaxed text-text-secondary">
+                                Các ý tưởng minh họa giúp bạn xem thử cách lưu tư liệu. Chưa kèm
+                                file video để tạo bằng Smart Remake.
+                            </p>
                             <div className="grid gap-2 sm:grid-cols-2">
                                 {demoOptions.map((d) => {
                                     const active = demoId === d.id;
@@ -566,10 +621,10 @@ export function ImportCreativeDialog({
                                             onClick={() => setDemoId(d.id)}
                                             aria-pressed={active}
                                             className={cn(
-                                                "flex items-start gap-3 rounded-md border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                                "flex min-h-11 items-start gap-3 rounded-xl p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                                 active
-                                                    ? "border-primary bg-primary-softer"
-                                                    : "border-hairline bg-surface hover:bg-surface-soft",
+                                                    ? "bg-primary-softer ring-2 ring-inset ring-primary/40"
+                                                    : "bg-surface-soft hover:bg-surface-muted",
                                             )}
                                         >
                                             <span
@@ -587,7 +642,7 @@ export function ImportCreativeDialog({
                                                     “{d.hook}”
                                                 </span>
                                                 <span className="mt-1 block text-[11px] text-text-tertiary">
-                                                    {d.platform} · {d.angle}
+                                                    {d.platform} · {d.dur} giây
                                                 </span>
                                             </span>
                                         </button>
@@ -599,17 +654,22 @@ export function ImportCreativeDialog({
                 </Tabs>
 
                 <DialogFooter className="mt-2 shrink-0">
-                    <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                        Cancel
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="min-h-11"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Hủy
                     </Button>
                     {tab === "url" && (
                         <Button
                             type="submit"
                             form="import-url-form"
                             disabled={submitting}
-                            className="min-w-[140px]"
+                            className="min-h-11 min-w-[140px]"
                         >
-                            Import creative
+                            Lưu link tham khảo
                         </Button>
                     )}
                     {tab === "file" && (
@@ -618,9 +678,9 @@ export function ImportCreativeDialog({
                                 type="button"
                                 onClick={submitFile}
                                 disabled={!!fileBlocker}
-                                className="min-w-[140px]"
+                                className="min-h-11 min-w-[140px]"
                             >
-                                Import creative
+                                Thêm file vào kho
                             </Button>
                         </DisabledActionHint>
                     )}
@@ -629,9 +689,9 @@ export function ImportCreativeDialog({
                             type="button"
                             onClick={submitDemo}
                             disabled={!demoId}
-                            className="min-w-[140px]"
+                            className="min-h-11 min-w-[140px]"
                         >
-                            Import creative
+                            Thêm minh họa
                         </Button>
                     )}
                 </DialogFooter>

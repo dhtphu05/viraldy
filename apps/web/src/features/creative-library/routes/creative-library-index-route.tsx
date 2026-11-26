@@ -31,6 +31,10 @@ import { ViraldyIcon } from "@/shared/ui/viraldy-icon";
 import { TikTokSearchPanel } from "@/features/creative-library/components/tiktok-search-panel";
 import { ViralVideoFinder } from "@/features/creative-library/components/viral-video-finder";
 import { useApiWorkspace } from "@/shared/hooks/use-workspace";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { getCreativeMediaKind, matchesCreativeQuery } from "../lib/library-catalog";
+import type { CreativeReference } from "../types/creative";
+import { CreativePreviewDialog } from "../components/creative-preview-dialog";
 
 export const Route = createFileRoute("/creative-library/")({
     validateSearch: (search: Record<string, unknown>) => ({
@@ -72,6 +76,11 @@ function CreativeLibraryPage() {
     const [filters, setFilters] = useState<CreativeFilterState>(emptyFilterState);
     const [sort, setSort] = useState<CreativeSort>("recent-saved");
     const [view, setView] = useState<"grid" | "compact">("grid");
+    const [section, setSection] = useState("saved");
+    const [sourceFilter, setSourceFilter] = useState<"all" | "video" | "image" | "reference">(
+        "video",
+    );
+    const [previewCreative, setPreviewCreative] = useState<CreativeReference | null>(null);
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -92,7 +101,6 @@ function CreativeLibraryPage() {
     }, [routeSearch.import]);
 
     const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
         let list = creatives.filter((c) => !c.archived);
         const board = boards.find((b) => b.id === activeBoard);
         if (board) {
@@ -105,22 +113,7 @@ function CreativeLibraryPage() {
             }
         }
 
-        if (q) {
-            list = list.filter((c) => {
-                const hay = [
-                    c.title,
-                    c.hookExcerpt,
-                    c.brandOrCreator,
-                    c.angle,
-                    c.category,
-                    c.notes ?? "",
-                    ...c.tags,
-                ]
-                    .join(" ")
-                    .toLowerCase();
-                return hay.includes(q);
-            });
-        }
+        list = list.filter((c) => matchesCreativeQuery(c, query));
         if (filters.platforms.length)
             list = list.filter((c) => filters.platforms.includes(c.platform));
         if (filters.status.length)
@@ -154,6 +147,20 @@ function CreativeLibraryPage() {
         }
         return list;
     }, [creatives, boards, activeBoard, query, filters, sort]);
+
+    const shown = filtered.filter(
+        (creative) => sourceFilter === "all" || getCreativeMediaKind(creative) === sourceFilter,
+    );
+    const videoCount = filtered.filter(
+        (creative) => getCreativeMediaKind(creative) === "video",
+    ).length;
+    const referenceCount = filtered.filter(
+        (creative) => getCreativeMediaKind(creative) === "reference",
+    ).length;
+    const imageCount = filtered.filter(
+        (creative) => getCreativeMediaKind(creative) === "image",
+    ).length;
+    const savedCount = creatives.filter((creative) => !creative.archived).length;
 
     const activeFilterCount =
         filters.platforms.length +
@@ -192,9 +199,9 @@ function CreativeLibraryPage() {
             ),
         });
         toast.success(
-            ids.length === 1 ? "Creative added to draft" : `${ids.length} creatives added`,
+            ids.length === 1 ? "Đã thêm tư liệu vào bản nháp" : `Đã thêm ${ids.length} tư liệu`,
             {
-                description: "Opening the campaign draft.",
+                description: "Đang mở bản nháp chiến dịch.",
             },
         );
         void navigate({ to: "/campaigns/new" });
@@ -204,6 +211,10 @@ function CreativeLibraryPage() {
         const c = creatives.find((x) => x.id === id);
         if (!c) return;
         switch (action) {
+            case "preview":
+            case "remake":
+                setPreviewCreative(c);
+                break;
             case "open":
                 navigate({ to: "/creative-library/$creativeId", params: { creativeId: id } });
                 break;
@@ -221,286 +232,389 @@ function CreativeLibraryPage() {
                 break;
             case "duplicate":
                 duplicate(id);
-                toast.success("Reference duplicated");
+                toast.success("Đã tạo bản sao tư liệu");
                 break;
             case "archive":
                 archive(id);
-                toast("Reference archived");
+                toast("Đã lưu trữ tư liệu");
                 break;
         }
     }
 
     const gridCols =
         view === "compact"
-            ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-            : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+            ? "grid-cols-1 2xl:grid-cols-2"
+            : "grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3";
 
-    const emptyBoard = filtered.length === 0 && !query && activeFilterCount === 0;
-    const emptyFilter = filtered.length === 0 && (query || activeFilterCount > 0);
+    const emptyBoard =
+        shown.length === 0 && !query.trim() && activeFilterCount === 0 && sourceFilter === "all";
+    const emptyFilter =
+        shown.length === 0 && (query.trim() || activeFilterCount > 0 || sourceFilter !== "all");
 
     return (
         <AppShell>
             <div className="flex flex-col gap-6">
                 <PageHeader
-                    title="Creative Library"
-                    description="Save, decode, and reuse creative patterns for your products and campaigns."
+                    title="Kho video"
+                    description="Lưu cách mở đầu, góc quay và ý tưởng bạn thích. Xem lại rồi dùng video làm mẫu cho Smart Remake."
                     actions={
-                        <Button size="sm" onClick={() => setImportOpen(true)}>
+                        <Button className="min-h-11" onClick={() => setImportOpen(true)}>
                             <ViraldyIcon name="importCreative" size="sm" />
-                            Import creative
+                            Thêm tư liệu
                         </Button>
                     }
                 />
 
-                <div className="flex gap-6">
-                    {/* Board rail — desktop only */}
-                    <aside aria-label="Boards" className="hidden w-[220px] shrink-0 lg:block">
-                        <div className="sticky top-4">
-                            <BoardRail
-                                activeBoardId={activeBoard}
-                                onSelect={setActiveBoard}
-                                onNewBoard={() => setNewBoardOpen(true)}
-                                onRenameBoard={(b) => setRenameBoard(b)}
-                            />
+                <Tabs value={section} onValueChange={setSection} className="min-w-0">
+                    <TabsList className="mb-5 grid h-auto min-h-12 w-full grid-cols-2 gap-1 rounded-2xl border-0 bg-surface-soft p-1 sm:w-fit">
+                        <TabsTrigger value="saved" className="min-h-11 rounded-xl px-5">
+                            Đã lưu <span className="ml-2 tabular-nums">{savedCount}</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="discover" className="min-h-11 rounded-xl px-5">
+                            Khám phá video
+                        </TabsTrigger>
+                    </TabsList>
+                    <TabsContent
+                        value="saved"
+                        forceMount
+                        className="m-0 data-[state=inactive]:hidden"
+                    >
+                        <div className="mb-5 rounded-2xl bg-surface px-4 py-3 text-sm text-text-secondary">
+                            Bộ sưu tập lưu trên trình duyệt này. Tư liệu minh họa được gắn nhãn
+                            riêng; mục chưa có file vẫn có thể lưu để tham khảo.
                         </div>
-                    </aside>
-
-                    {/* Main */}
-                    <div className="flex min-w-0 flex-1 flex-col gap-4">
-                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                className="lg:hidden"
-                                onClick={() => setBoardSheetOpen(true)}
+                        <div className="flex gap-5">
+                            {/* Board rail — desktop only */}
+                            <aside
+                                aria-label="Bộ sưu tập"
+                                className="hidden w-56 shrink-0 lg:block"
                             >
-                                <PanelLeft className="h-4 w-4" />
-                                Boards
-                            </Button>
-                            <CreativeToolbar
-                                query={query}
-                                onQuery={setQuery}
-                                onOpenFilters={() => setFiltersOpen(true)}
-                                activeFilterCount={activeFilterCount}
-                                sort={sort}
-                                onSort={setSort}
-                                view={view}
-                                onView={setView}
-                                selectMode={selectMode}
-                                onSelectMode={(v) => {
-                                    setSelectMode(v);
-                                    if (!v) setSelected(new Set());
-                                }}
-                                className="flex-1"
-                            />
-                        </div>
-
-                        <ViralVideoFinder />
-
-                        <TikTokSearchPanel workspaceId={workspaceId} />
-
-                        {/* Active filter chips */}
-                        {activeFilterCount > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                {filters.platforms.map((p) => (
-                                    <Chip
-                                        key={`p-${p}`}
-                                        onRemove={() =>
-                                            setFilters((f) => ({
-                                                ...f,
-                                                platforms: f.platforms.filter((x) => x !== p),
-                                            }))
-                                        }
-                                    >
-                                        Platform: {p}
-                                    </Chip>
-                                ))}
-                                {filters.status.map((s) => (
-                                    <Chip
-                                        key={`s-${s}`}
-                                        onRemove={() =>
-                                            setFilters((f) => ({
-                                                ...f,
-                                                status: f.status.filter((x) => x !== s),
-                                            }))
-                                        }
-                                    >
-                                        Status: {s}
-                                    </Chip>
-                                ))}
-                                {filters.categories.map((c) => (
-                                    <Chip
-                                        key={`c-${c}`}
-                                        onRemove={() =>
-                                            setFilters((f) => ({
-                                                ...f,
-                                                categories: f.categories.filter((x) => x !== c),
-                                            }))
-                                        }
-                                    >
-                                        {c}
-                                    </Chip>
-                                ))}
-                                {filters.angles.map((a) => (
-                                    <Chip
-                                        key={`a-${a}`}
-                                        onRemove={() =>
-                                            setFilters((f) => ({
-                                                ...f,
-                                                angles: f.angles.filter((x) => x !== a),
-                                            }))
-                                        }
-                                    >
-                                        {a}
-                                    </Chip>
-                                ))}
-                                {filters.linkage !== "any" && (
-                                    <Chip
-                                        onRemove={() =>
-                                            setFilters((f) => ({ ...f, linkage: "any" }))
-                                        }
-                                    >
-                                        {filters.linkage === "linked" ? "Linked" : "Unlinked"}
-                                    </Chip>
-                                )}
-                                {filters.usedInCampaign !== "any" && (
-                                    <Chip
-                                        onRemove={() =>
-                                            setFilters((f) => ({ ...f, usedInCampaign: "any" }))
-                                        }
-                                    >
-                                        {filters.usedInCampaign === "yes"
-                                            ? "In a campaign"
-                                            : "Not in a campaign"}
-                                    </Chip>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => setFilters(emptyFilterState)}
-                                    className="ml-1 text-xs text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
-                                >
-                                    Clear all
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Grid */}
-                        {emptyBoard && (
-                            <SurfaceCard padding="lg">
-                                <EmptyState
-                                    icon={Images}
-                                    title="Build your creative memory"
-                                    description="Import a reference or creator video, then analyze its Creative DNA."
-                                    action={
-                                        <Button size="sm" onClick={() => setImportOpen(true)}>
-                                            <ViraldyIcon name="importCreative" size="sm" />
-                                            Import creative
-                                        </Button>
-                                    }
-                                />
-                            </SurfaceCard>
-                        )}
-                        {emptyFilter && (
-                            <SurfaceCard padding="lg">
-                                <EmptyState
-                                    title="No creatives match these filters"
-                                    description="Try clearing filters or searching the whole library."
-                                    action={
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => {
-                                                    setFilters(emptyFilterState);
-                                                    setQuery("");
-                                                }}
-                                            >
-                                                Clear filters
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => {
-                                                    setActiveBoard("b-all");
-                                                    setFilters(emptyFilterState);
-                                                    setQuery("");
-                                                }}
-                                            >
-                                                Search all creatives
-                                            </Button>
-                                        </div>
-                                    }
-                                />
-                            </SurfaceCard>
-                        )}
-                        {!emptyBoard && !emptyFilter && (
-                            <div className={cn("grid gap-4", gridCols)}>
-                                {filtered.map((c) => (
-                                    <CreativeCard
-                                        key={c.id}
-                                        creative={c}
-                                        selected={selected.has(c.id)}
-                                        selectable={selectMode}
-                                        compact={view === "compact"}
-                                        onToggleSelect={() => toggleSelected(c.id)}
-                                        onAction={(a) => handleCardAction(c.id, a)}
+                                <div className="sticky top-4">
+                                    <BoardRail
+                                        activeBoardId={activeBoard}
+                                        onSelect={setActiveBoard}
+                                        onNewBoard={() => setNewBoardOpen(true)}
+                                        onRenameBoard={(b) => setRenameBoard(b)}
                                     />
-                                ))}
-                            </div>
-                        )}
+                                </div>
+                            </aside>
 
-                        {selectedArr.length > 0 && (
-                            <ActionTray
-                                context={
-                                    <span className="font-medium text-text-primary">
-                                        {selectedArr.length} creative
-                                        {selectedArr.length === 1 ? "" : "s"} selected
-                                    </span>
-                                }
-                                primaryAction={
+                            {/* Main */}
+                            <div className="flex min-w-0 flex-1 flex-col gap-4">
+                                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                                     <Button
+                                        variant="secondary"
                                         size="sm"
-                                        onClick={() => openAnalyze(selectedEligible)}
-                                        disabled={selectedEligible.length === 0}
+                                        className="lg:hidden"
+                                        onClick={() => setBoardSheetOpen(true)}
                                     >
-                                        <Sparkles className="h-4 w-4" />
-                                        Analyze Creative DNA
+                                        <PanelLeft className="h-4 w-4" />
+                                        Bộ sưu tập
                                     </Button>
-                                }
-                                secondaryAction={
-                                    <>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            onClick={() => addToCampaign(selectedArr)}
+                                    <CreativeToolbar
+                                        query={query}
+                                        onQuery={setQuery}
+                                        onOpenFilters={() => setFiltersOpen(true)}
+                                        activeFilterCount={activeFilterCount}
+                                        sort={sort}
+                                        onSort={setSort}
+                                        view={view}
+                                        onView={setView}
+                                        selectMode={selectMode}
+                                        onSelectMode={(v) => {
+                                            setSelectMode(v);
+                                            if (!v) setSelected(new Set());
+                                        }}
+                                        className="flex-1"
+                                    />
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <h2 className="text-base font-semibold text-text-primary">
+                                            Tư liệu đã lưu
+                                        </h2>
+                                        <p
+                                            role="status"
+                                            className="text-sm tabular-nums text-text-secondary"
                                         >
-                                            <Megaphone className="h-4 w-4" />
-                                            Add to campaign
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            onClick={() => setMoveForIds(selectedArr)}
+                                            {shown.length} kết quả
+                                        </p>
+                                    </div>
+                                    <div
+                                        role="group"
+                                        aria-label="Loại tư liệu"
+                                        className="flex flex-wrap gap-2"
+                                    >
+                                        {(
+                                            [
+                                                ["all", "Tất cả", filtered.length],
+                                                ["video", "Có nguồn video", videoCount],
+                                                ...(imageCount
+                                                    ? [["image", "Ảnh", imageCount] as const]
+                                                    : []),
+                                                ["reference", "Chưa có file", referenceCount],
+                                            ] as const
+                                        ).map(([value, label, count]) => (
+                                            <Button
+                                                key={value}
+                                                variant="ghost"
+                                                className={cn(
+                                                    "min-h-11 rounded-xl border-0 bg-surface-soft",
+                                                    sourceFilter === value &&
+                                                        "bg-primary-soft text-primary-active",
+                                                )}
+                                                aria-pressed={sourceFilter === value}
+                                                onClick={() => setSourceFilter(value)}
+                                            >
+                                                {label}{" "}
+                                                <span className="tabular-nums">{count}</span>
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Active filter chips */}
+                                {activeFilterCount > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {filters.platforms.map((p) => (
+                                            <Chip
+                                                key={`p-${p}`}
+                                                onRemove={() =>
+                                                    setFilters((f) => ({
+                                                        ...f,
+                                                        platforms: f.platforms.filter(
+                                                            (x) => x !== p,
+                                                        ),
+                                                    }))
+                                                }
+                                            >
+                                                Nền tảng: {p}
+                                            </Chip>
+                                        ))}
+                                        {filters.status.map((s) => (
+                                            <Chip
+                                                key={`s-${s}`}
+                                                onRemove={() =>
+                                                    setFilters((f) => ({
+                                                        ...f,
+                                                        status: f.status.filter((x) => x !== s),
+                                                    }))
+                                                }
+                                            >
+                                                Trạng thái: {s}
+                                            </Chip>
+                                        ))}
+                                        {filters.categories.map((c) => (
+                                            <Chip
+                                                key={`c-${c}`}
+                                                onRemove={() =>
+                                                    setFilters((f) => ({
+                                                        ...f,
+                                                        categories: f.categories.filter(
+                                                            (x) => x !== c,
+                                                        ),
+                                                    }))
+                                                }
+                                            >
+                                                {c}
+                                            </Chip>
+                                        ))}
+                                        {filters.angles.map((a) => (
+                                            <Chip
+                                                key={`a-${a}`}
+                                                onRemove={() =>
+                                                    setFilters((f) => ({
+                                                        ...f,
+                                                        angles: f.angles.filter((x) => x !== a),
+                                                    }))
+                                                }
+                                            >
+                                                {a}
+                                            </Chip>
+                                        ))}
+                                        {filters.linkage !== "any" && (
+                                            <Chip
+                                                onRemove={() =>
+                                                    setFilters((f) => ({ ...f, linkage: "any" }))
+                                                }
+                                            >
+                                                {filters.linkage === "linked"
+                                                    ? "Đã gắn sản phẩm"
+                                                    : "Chưa gắn sản phẩm"}
+                                            </Chip>
+                                        )}
+                                        {filters.usedInCampaign !== "any" && (
+                                            <Chip
+                                                onRemove={() =>
+                                                    setFilters((f) => ({
+                                                        ...f,
+                                                        usedInCampaign: "any",
+                                                    }))
+                                                }
+                                            >
+                                                {filters.usedInCampaign === "yes"
+                                                    ? "Đã dùng trong chiến dịch"
+                                                    : "Chưa dùng trong chiến dịch"}
+                                            </Chip>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setFilters(emptyFilterState)}
+                                            className="ml-1 text-xs text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
                                         >
-                                            <FolderInput className="h-4 w-4" />
-                                            Move to board
-                                        </Button>
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            aria-label="Clear selection"
-                                            onClick={() => setSelected(new Set())}
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </>
-                                }
-                            />
-                        )}
-                    </div>
-                </div>
+                                            Xóa bộ lọc
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Grid */}
+                                {emptyBoard && (
+                                    <SurfaceCard padding="lg">
+                                        <EmptyState
+                                            icon={Images}
+                                            title="Bộ sưu tập này chưa có tư liệu"
+                                            description="Thêm video từ máy hoặc lưu một ý tưởng để xem lại khi cần."
+                                            action={
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => setImportOpen(true)}
+                                                >
+                                                    <ViraldyIcon name="importCreative" size="sm" />
+                                                    Thêm tư liệu
+                                                </Button>
+                                            }
+                                        />
+                                    </SurfaceCard>
+                                )}
+                                {emptyFilter && (
+                                    <SurfaceCard padding="lg">
+                                        <EmptyState
+                                            title="Chưa tìm thấy tư liệu phù hợp"
+                                            description="Thử từ khóa khác, đổi loại tư liệu hoặc tìm trong toàn bộ kho nhé."
+                                            action={
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            setFilters(emptyFilterState);
+                                                            setQuery("");
+                                                            setSourceFilter("all");
+                                                        }}
+                                                    >
+                                                        Xóa bộ lọc
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            setActiveBoard("b-all");
+                                                            setFilters(emptyFilterState);
+                                                            setQuery("");
+                                                            setSourceFilter("all");
+                                                        }}
+                                                    >
+                                                        Xem toàn bộ kho
+                                                    </Button>
+                                                </div>
+                                            }
+                                        />
+                                    </SurfaceCard>
+                                )}
+                                {!emptyBoard && !emptyFilter && (
+                                    <div className={cn("grid gap-4", gridCols)}>
+                                        {shown.map((c) => (
+                                            <CreativeCard
+                                                key={c.id}
+                                                creative={c}
+                                                selected={selected.has(c.id)}
+                                                selectable={selectMode}
+                                                compact={view === "compact"}
+                                                onToggleSelect={() => toggleSelected(c.id)}
+                                                onAction={(a) => handleCardAction(c.id, a)}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {selectedArr.length > 0 && (
+                                    <ActionTray
+                                        context={
+                                            <span className="font-medium text-text-primary">
+                                                Đã chọn {selectedArr.length} tư liệu
+                                            </span>
+                                        }
+                                        primaryAction={
+                                            <Button
+                                                size="sm"
+                                                onClick={() => openAnalyze(selectedEligible)}
+                                                disabled={selectedEligible.length === 0}
+                                            >
+                                                <Sparkles className="h-4 w-4" />
+                                                Phân tích cách làm
+                                            </Button>
+                                        }
+                                        secondaryAction={
+                                            <>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() => addToCampaign(selectedArr)}
+                                                >
+                                                    <Megaphone className="h-4 w-4" />
+                                                    Thêm vào chiến dịch
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() => setMoveForIds(selectedArr)}
+                                                >
+                                                    <FolderInput className="h-4 w-4" />
+                                                    Chuyển bộ sưu tập
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    aria-label="Bỏ lựa chọn"
+                                                    onClick={() => setSelected(new Set())}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </>
+                                        }
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    </TabsContent>
+                    <TabsContent
+                        value="discover"
+                        forceMount
+                        className="m-0 space-y-5 data-[state=inactive]:hidden"
+                    >
+                        <div className="rounded-2xl bg-surface p-5">
+                            <h2 className="text-lg font-semibold text-text-primary">
+                                Tìm cách giới thiệu sản phẩm mới
+                            </h2>
+                            <p className="mt-2 text-sm text-text-secondary">
+                                Thử video gợi ý bằng ảnh sản phẩm hoặc tìm dữ liệu tham khảo trên
+                                TikTok. Nội dung minh họa và dữ liệu TikTok được ghi rõ ở từng công
+                                cụ.
+                            </p>
+                        </div>
+                        <ViralVideoFinder />
+                        <TikTokSearchPanel workspaceId={workspaceId} />
+                    </TabsContent>
+                </Tabs>
             </div>
 
             {/* Dialogs and sheets */}
+            <CreativePreviewDialog
+                creative={previewCreative}
+                onOpenChange={(open) => {
+                    if (!open) setPreviewCreative(null);
+                }}
+            />
             <FilterSheet
                 open={filtersOpen}
                 onOpenChange={setFiltersOpen}
@@ -559,7 +673,7 @@ function CreativeLibraryPage() {
             <Sheet open={boardSheetOpen} onOpenChange={setBoardSheetOpen}>
                 <SheetContent side="left" className="w-full sm:max-w-xs">
                     <SheetHeader className="mb-4">
-                        <SheetTitle>Boards</SheetTitle>
+                        <SheetTitle>Bộ sưu tập</SheetTitle>
                     </SheetHeader>
                     <BoardRail
                         activeBoardId={activeBoard}
@@ -584,13 +698,13 @@ function CreativeLibraryPage() {
 
 function Chip({ children, onRemove }: { children: React.ReactNode; onRemove: () => void }) {
     return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-surface-soft px-2 py-0.5 text-xs text-text-secondary">
+        <span className="inline-flex min-h-11 items-center gap-1 rounded-full bg-surface-soft pl-3 text-xs text-text-secondary">
             {children}
             <button
                 type="button"
                 onClick={onRemove}
-                aria-label="Remove filter"
-                className="grid h-4 w-4 place-items-center rounded-full text-text-tertiary hover:bg-surface-muted hover:text-text-primary"
+                aria-label="Bỏ bộ lọc"
+                className="grid size-11 place-items-center rounded-full text-text-tertiary hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
                 <X className="h-3 w-3" />
             </button>
