@@ -14,6 +14,7 @@ import { Route as TiktokScorerRouteImport } from './routes/tiktok-scorer'
 import { Route as SmartRemakeRouteImport } from './routes/smart-remake'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as PerformanceRouteImport } from './routes/performance'
@@ -32,6 +33,7 @@ import { Route as CampaignsIndexRouteImport } from './routes/campaigns.index'
 import { Route as UgcReviewAssetIdRouteImport } from './routes/ugc-review.$assetId'
 import { Route as TiktokScorerNewRouteImport } from './routes/tiktok-scorer.new'
 import { Route as TiktokScorerScoreIdRouteImport } from './routes/tiktok-scorer.$scoreId'
+import { Route as PoliciesMediaRightsRouteImport } from './routes/policies.media-rights'
 import { Route as PerformanceCampaignIdRouteImport } from './routes/performance.$campaignId'
 import { Route as InsightsSlugRouteImport } from './routes/insights.$slug'
 import { Route as CreativeLibraryCreativeIdRouteImport } from './routes/creative-library.$creativeId'
@@ -70,6 +72,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -162,6 +169,11 @@ const TiktokScorerScoreIdRoute = TiktokScorerScoreIdRouteImport.update({
   path: '/$scoreId',
   getParentRoute: () => TiktokScorerRoute,
 } as any)
+const PoliciesMediaRightsRoute = PoliciesMediaRightsRouteImport.update({
+  id: '/policies/media-rights',
+  path: '/policies/media-rights',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PerformanceCampaignIdRoute = PerformanceCampaignIdRouteImport.update({
   id: '/$campaignId',
   path: '/$campaignId',
@@ -247,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/performance': typeof PerformanceRouteWithChildren
   '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
+  '/projects': typeof ProjectsRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/smart-remake': typeof SmartRemakeRoute
@@ -259,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
   '/insights/$slug': typeof InsightsSlugRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
+  '/policies/media-rights': typeof PoliciesMediaRightsRoute
   '/tiktok-scorer/$scoreId': typeof TiktokScorerScoreIdRouteWithChildren
   '/tiktok-scorer/new': typeof TiktokScorerNewRoute
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
@@ -283,6 +297,7 @@ export interface FileRoutesByTo {
   '/mvp': typeof MvpRoute
   '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
+  '/projects': typeof ProjectsRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/smart-remake': typeof SmartRemakeRoute
@@ -293,6 +308,7 @@ export interface FileRoutesByTo {
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
   '/insights/$slug': typeof InsightsSlugRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
+  '/policies/media-rights': typeof PoliciesMediaRightsRoute
   '/tiktok-scorer/$scoreId': typeof TiktokScorerScoreIdRouteWithChildren
   '/tiktok-scorer/new': typeof TiktokScorerNewRoute
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
@@ -321,6 +337,7 @@ export interface FileRoutesById {
   '/performance': typeof PerformanceRouteWithChildren
   '/production': typeof ProductionRoute
   '/products': typeof ProductsRoute
+  '/projects': typeof ProjectsRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/smart-remake': typeof SmartRemakeRoute
@@ -333,6 +350,7 @@ export interface FileRoutesById {
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
   '/insights/$slug': typeof InsightsSlugRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
+  '/policies/media-rights': typeof PoliciesMediaRightsRoute
   '/tiktok-scorer/$scoreId': typeof TiktokScorerScoreIdRouteWithChildren
   '/tiktok-scorer/new': typeof TiktokScorerNewRoute
   '/ugc-review/$assetId': typeof UgcReviewAssetIdRoute
@@ -362,6 +380,7 @@ export interface FileRouteTypes {
     | '/performance'
     | '/production'
     | '/products'
+    | '/projects'
     | '/register'
     | '/settings'
     | '/smart-remake'
@@ -374,6 +393,7 @@ export interface FileRouteTypes {
     | '/creative-library/$creativeId'
     | '/insights/$slug'
     | '/performance/$campaignId'
+    | '/policies/media-rights'
     | '/tiktok-scorer/$scoreId'
     | '/tiktok-scorer/new'
     | '/ugc-review/$assetId'
@@ -398,6 +418,7 @@ export interface FileRouteTypes {
     | '/mvp'
     | '/production'
     | '/products'
+    | '/projects'
     | '/register'
     | '/settings'
     | '/smart-remake'
@@ -408,6 +429,7 @@ export interface FileRouteTypes {
     | '/creative-library/$creativeId'
     | '/insights/$slug'
     | '/performance/$campaignId'
+    | '/policies/media-rights'
     | '/tiktok-scorer/$scoreId'
     | '/tiktok-scorer/new'
     | '/ugc-review/$assetId'
@@ -435,6 +457,7 @@ export interface FileRouteTypes {
     | '/performance'
     | '/production'
     | '/products'
+    | '/projects'
     | '/register'
     | '/settings'
     | '/smart-remake'
@@ -447,6 +470,7 @@ export interface FileRouteTypes {
     | '/creative-library/$creativeId'
     | '/insights/$slug'
     | '/performance/$campaignId'
+    | '/policies/media-rights'
     | '/tiktok-scorer/$scoreId'
     | '/tiktok-scorer/new'
     | '/ugc-review/$assetId'
@@ -475,6 +499,7 @@ export interface RootRouteChildren {
   PerformanceRoute: typeof PerformanceRouteWithChildren
   ProductionRoute: typeof ProductionRoute
   ProductsRoute: typeof ProductsRoute
+  ProjectsRoute: typeof ProjectsRoute
   RegisterRoute: typeof RegisterRoute
   SettingsRoute: typeof SettingsRoute
   SmartRemakeRoute: typeof SmartRemakeRoute
@@ -483,6 +508,7 @@ export interface RootRouteChildren {
   BatchReviewsBatchIdRoute: typeof BatchReviewsBatchIdRoute
   CreativeDirectionsAdaptationIdRoute: typeof CreativeDirectionsAdaptationIdRoute
   InsightsSlugRoute: typeof InsightsSlugRoute
+  PoliciesMediaRightsRoute: typeof PoliciesMediaRightsRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
@@ -526,6 +552,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -653,6 +686,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/tiktok-scorer/$scoreId'
       preLoaderRoute: typeof TiktokScorerScoreIdRouteImport
       parentRoute: typeof TiktokScorerRoute
+    }
+    '/policies/media-rights': {
+      id: '/policies/media-rights'
+      path: '/policies/media-rights'
+      fullPath: '/policies/media-rights'
+      preLoaderRoute: typeof PoliciesMediaRightsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/performance/$campaignId': {
       id: '/performance/$campaignId'
@@ -852,6 +892,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerformanceRoute: PerformanceRouteWithChildren,
   ProductionRoute: ProductionRoute,
   ProductsRoute: ProductsRoute,
+  ProjectsRoute: ProjectsRoute,
   RegisterRoute: RegisterRoute,
   SettingsRoute: SettingsRoute,
   SmartRemakeRoute: SmartRemakeRoute,
@@ -860,6 +901,7 @@ const rootRouteChildren: RootRouteChildren = {
   BatchReviewsBatchIdRoute: BatchReviewsBatchIdRoute,
   CreativeDirectionsAdaptationIdRoute: CreativeDirectionsAdaptationIdRoute,
   InsightsSlugRoute: InsightsSlugRoute,
+  PoliciesMediaRightsRoute: PoliciesMediaRightsRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
