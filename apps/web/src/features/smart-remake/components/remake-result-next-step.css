@@ -1,0 +1,57 @@
+.remake-result-next-step {
+    min-width: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 20px;
+    background: var(--color-surface);
+    box-shadow: 0 6px 24px #23132005;
+}
+.remake-result-next-step__action {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+}
+.remake-generation-recovery {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+    padding: 22px 24px 12px;
+    border: 0;
+    border-radius: 20px;
+    background: var(--color-surface);
+}
+.remake-generation-recovery__heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.remake-generation-recovery__heading > svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+}
+.remake-generation-recovery__heading h2 {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+.remake-generation-recovery__content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+}
+.remake-generation-recovery__content > p {
+    flex: 1 1 400px;
+    color: var(--color-text-secondary);
+}
+.remake-generation-recovery__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
