@@ -23,26 +23,31 @@ from viraldy.modules.products.models import ProductModel
 from viraldy.modules.reference_boards.models import ReferenceBoardModel
 from viraldy.modules.references.models import ReferenceModel
 from viraldy.modules.workspaces.models import WorkspaceMemberModel, WorkspaceModel
+from viraldy.platform.auth.local_test import LOCAL_DEV_ACCOUNT
 from viraldy.platform.database.session import SyncSessionFactory
 
 
 def main() -> None:
     with SyncSessionFactory() as session:
         user = session.execute(
-            select(UserModel).where(UserModel.external_auth_id == "local-test-user")
+            select(UserModel).where(
+                UserModel.external_auth_id == LOCAL_DEV_ACCOUNT.external_auth_id
+            )
         ).scalar_one_or_none()
         if user is None:
             user = UserModel(
-                external_auth_id="local-test-user",
-                email="local@viraldy.example.com",
-                display_name="Local Viraldy User",
+                external_auth_id=LOCAL_DEV_ACCOUNT.external_auth_id,
+                email=LOCAL_DEV_ACCOUNT.email,
+                display_name=LOCAL_DEV_ACCOUNT.display_name,
+                phone_number=LOCAL_DEV_ACCOUNT.phone_number,
                 status="active",
             )
             session.add(user)
             session.flush()
         else:
-            user.email = "local@viraldy.example.com"
-            user.display_name = "Local Viraldy User"
+            user.email = LOCAL_DEV_ACCOUNT.email
+            user.display_name = LOCAL_DEV_ACCOUNT.display_name
+            user.phone_number = LOCAL_DEV_ACCOUNT.phone_number
             user.status = "active"
 
         workspace = session.execute(

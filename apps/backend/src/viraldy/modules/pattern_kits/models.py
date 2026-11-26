@@ -89,6 +89,9 @@ class PatternKitVersionModel(Base):
     change_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
     pattern_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evidence_state_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     overall_confidence: Mapped[str] = mapped_column(String(50), nullable=False)
     model_run_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("ai_model_runs.id"), nullable=True, index=True

@@ -11,7 +11,7 @@ class MeResponse(BaseModel):
     id: UUID
     email: EmailStr
     display_name: str
-    phone_number: str
+    phone_number: str | None
     status: str
 
 
@@ -24,6 +24,7 @@ class AuthConfigResponse(BaseModel):
     scopes: list[str]
     registration_url: AnyUrl | None
     end_session_url: AnyUrl | None
+    revocation_url: AnyUrl | None = None
 
 
 class MeEnvelope(Envelope):

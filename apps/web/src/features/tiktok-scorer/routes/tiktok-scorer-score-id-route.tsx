@@ -4,7 +4,6 @@ import {
     AlertTriangle,
     ArrowLeft,
     Clipboard,
-    Loader2,
     MessageSquareText,
     RefreshCw,
     Send,
@@ -13,6 +12,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AnalysisProgressPanel } from "../components/analysis-progress-panel";
 import { FixPlan } from "../components/fix-plan";
 import { RevisionPanel } from "../components/revision-panel";
 import {
@@ -27,11 +27,7 @@ import {
     type EvidenceSeekTarget,
 } from "../components/video-evidence-workspace";
 import { useScorerWorkspace } from "../hooks/use-scorer-workspace";
-import {
-    buildHandoffMessage,
-    buildProcessingSteps,
-    isTerminalScoreStatus,
-} from "../lib/tiktok-score-view-model";
+import { buildHandoffMessage, isTerminalScoreStatus } from "../lib/tiktok-score-view-model";
 import type {
     FixEventType,
     TikTokDimension,
@@ -51,7 +47,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { ProcessingStepper } from "@/shared/ui/processing-stepper";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { SurfaceCard } from "@/shared/ui/surface-card";
@@ -198,7 +193,9 @@ function TikTokScoreResultRoute() {
                         description="The uploaded asset version is unchanged. Start a new score when you are ready."
                         action={
                             <Button asChild>
-                                <Link to="/tiktok-scorer/new">Score another video</Link>
+                                <Link to="/tiktok-scorer/new" search={{ directionId: undefined }}>
+                                    Score another video
+                                </Link>
                             </Button>
                         }
                     />
@@ -213,6 +210,7 @@ function TikTokScoreResultRoute() {
                 <ProcessingRun
                     run={run}
                     stage={stage}
+                    progress={job.data?.progress ?? 0}
                     syncing={score.isFetching || job.isFetching}
                     mediaUrl={playback.data?.videoUrl ?? run.mediaUrl}
                     onRefresh={() => {
@@ -251,8 +249,8 @@ function TikTokScoreResultRoute() {
                         </AlertDescription>
                     </Alert>
                 )}
-                <ScoreVideoPreview run={run} mediaUrl={playback.data?.videoUrl ?? run.mediaUrl} />
                 <DecisionSummary run={run} />
+                <ScoreVideoPreview run={run} mediaUrl={playback.data?.videoUrl ?? run.mediaUrl} />
                 <StrengthsAndBlockers
                     run={run}
                     onFinding={(finding) => seekFinding(run, finding, setSeekTarget, workspaceId!)}
@@ -326,12 +324,14 @@ function TikTokScoreResultRoute() {
 function ProcessingRun({
     run,
     stage,
+    progress,
     syncing,
     mediaUrl,
     onRefresh,
 }: {
     run: TikTokScoreRun;
     stage: string;
+    progress: number;
     syncing: boolean;
     mediaUrl: string | null;
     onRefresh: () => void;
@@ -346,44 +346,21 @@ function ProcessingRun({
                     </Link>
                 </Button>
             </div>
-            <SurfaceCard padding="lg">
-                <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-                    <ScoreVideoPreview run={run} mediaUrl={mediaUrl} compact />
-                    <div>
-                        <div className="flex items-start gap-3">
-                            <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary">
-                                <Loader2 className="h-5 w-5 animate-spin" />
-                            </span>
-                            <div>
-                                <h1 className="text-xl font-semibold text-text-primary">
-                                    Analyzing this TikTok
-                                </h1>
-                                <p className="mt-1 text-sm text-text-secondary">
-                                    The scorer is reading the actual video evidence. If a stage
-                                    retries, keep this page open or check again in a moment.
-                                </p>
-                                <p className="mt-2 text-xs text-text-tertiary">{run.assetName}</p>
-                            </div>
-                        </div>
-                        <div className="mt-6">
-                            <ProcessingStepper steps={buildProcessingSteps(stage)} />
-                        </div>
-                        <div className="mt-5 flex justify-end">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={onRefresh}
-                                disabled={syncing}
-                            >
-                                <RefreshCw
-                                    className={syncing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
-                                />
-                                Check now
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            </SurfaceCard>
+            <AnalysisProgressPanel
+                run={run}
+                stage={stage}
+                progress={progress}
+                mediaUrl={mediaUrl}
+            />
+            <div className="flex items-center justify-between gap-3 px-1">
+                <p className="text-xs text-text-tertiary">
+                    Status updates automatically every few seconds.
+                </p>
+                <Button type="button" variant="secondary" onClick={onRefresh} disabled={syncing}>
+                    <RefreshCw className={syncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                    Check now
+                </Button>
+            </div>
         </div>
     );
 }
@@ -419,7 +396,12 @@ function FailedRun({
                                         Retry status
                                     </Button>
                                     <Button asChild>
-                                        <Link to="/tiktok-scorer/new">Start a new score</Link>
+                                        <Link
+                                            to="/tiktok-scorer/new"
+                                            search={{ directionId: undefined }}
+                                        >
+                                            Start a new score
+                                        </Link>
                                     </Button>
                                 </>
                             }

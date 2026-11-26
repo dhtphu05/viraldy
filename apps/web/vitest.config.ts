@@ -10,5 +10,11 @@ export default defineConfig({
     test: {
         environment: "node",
         include: ["src/**/*.test.ts"],
+        environmentOptions: { jsdom: { url: "http://localhost" } },
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "json-summary"],
+            reportsDirectory: "/tmp/viraldy-web-coverage",
+        },
     },
 });

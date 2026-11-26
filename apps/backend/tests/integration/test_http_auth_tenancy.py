@@ -36,7 +36,7 @@ from viraldy.modules.references.models import ReferenceModel
 from viraldy.modules.viral_kits.models import ViralKitModel
 from viraldy.platform.auth.token_verifier import VerifiedToken
 from viraldy.platform.clock.utc import utc_now
-from viraldy.platform.config.settings import get_settings
+from viraldy.platform.config.settings import Settings, get_settings
 from viraldy.platform.database.session import get_async_session
 from viraldy.platform.storage.ports import ObjectMetadata, PresignedUpload
 from viraldy.shared.errors.base import UnauthorizedError
@@ -519,6 +519,9 @@ async def test_http_auth_rbac_and_tenant_isolation(
 
     app.dependency_overrides[get_async_session] = test_session
     app.dependency_overrides[get_token_verifier] = lambda: verifier
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None, auth_mode="local_test", ai_mode="fixture"
+    )
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
 
     try:

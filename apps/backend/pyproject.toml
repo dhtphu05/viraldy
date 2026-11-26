@@ -13,12 +13,13 @@ dependencies = [
   "httpx==0.28.1",
   "jsonschema>=4.23,<5",
   "openai==2.51.0",
-  "opentelemetry-api==1.29.0",
-  "opentelemetry-sdk==1.29.0",
+  "opentelemetry-api==1.45.2",
+  "opentelemetry-sdk==1.45.2",
   "psycopg[binary]==3.2.3",
   "pydantic[email]==2.10.4",
   "pydantic-settings==2.7.1",
-  "pyjwt[crypto]==2.13.0",
+  "argon2-cffi==25.1.0",
+  "pyjwt[crypto]==2.15.0",
   "python-multipart==0.0.32",
   "redis==5.2.1",
   "sentry-sdk==2.19.2",
@@ -26,7 +27,7 @@ dependencies = [
   "structlog==24.4.0",
   "uvicorn[standard]==0.34.0",
   "pytest>=8.3.4",
-  "pillow==12.3.0",
+  "pillow==13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -96,3 +97,6 @@ addopts = "--cov=viraldy --cov-report=term-missing --cov-fail-under=70"
 markers = [
   "openai_live: opt-in tests that require a real OpenAI API key and explicit live-test flag",
 ]
+
+[tool.coverage.run]
+concurrency = ["greenlet", "thread"]

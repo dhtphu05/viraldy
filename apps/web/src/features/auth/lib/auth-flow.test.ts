@@ -22,9 +22,33 @@ describe("sanitizeReturnTo", () => {
         );
     });
 
+    it("normalizes an internal path without losing its query or fragment", () => {
+        expect(sanitizeReturnTo("/products/../creative-library?tab=saved#videos")).toBe(
+            "/creative-library?tab=saved#videos",
+        );
+    });
+
     it.each([
         "https://evil.example/steal",
         "//evil.example/steal",
+        "/\\evil.example/steal",
+        "/products\\..\\login",
+        "/\t/evil.example/steal",
+        "/products\r\nLocation: https://evil.example",
+        "/products\u0000",
+        "/products\u007f",
+        "/%5cevil.example/steal",
+        "/%2f%2fevil.example/steal",
+        "/%09/evil.example/steal",
+        "/%00products",
+        "/products/../login",
+        "/%2e/api/auth/login",
+        "/%6cogin?returnTo=/products",
+        "/%72egister",
+        "/%61pi%2fauth/callback",
+        "/products%2f..%2flogin",
+        "/LOGIN",
+        "/products/%invalid",
         "javascript:alert(1)",
         "/api/auth/login",
         "/login",

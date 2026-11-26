@@ -23,6 +23,11 @@ from viraldy.modules.domain_intelligence.models import (
 from viraldy.modules.feedback.models import FeedbackItemModel
 from viraldy.modules.generation.models import GenerationArtifactModel, GenerationRunModel
 from viraldy.modules.identity.models import UserModel
+from viraldy.modules.identity.password_models import (
+    PasswordCredentialModel,
+    PasswordRefreshTokenModel,
+    PasswordSessionModel,
+)
 from viraldy.modules.jobs.models import ProcessingJobEventModel, ProcessingJobModel
 from viraldy.modules.media_analysis.models import EvidenceItemModel, MediaArtifactModel
 from viraldy.modules.pattern_kits.models import (
@@ -41,6 +46,20 @@ from viraldy.modules.recommendations.models import (
 )
 from viraldy.modules.reference_boards.models import ReferenceBoardModel
 from viraldy.modules.references.models import ReferenceModel
+from viraldy.modules.tiktok_commercial_content.models import (
+    AnalyticsAttributionModel,
+    BatchReviewItemModel,
+    BatchReviewModel,
+    CreativeFamilyMemberModel,
+    CreativeFamilyModel,
+    CreativeDirectionModel,
+    CreativeSourceLinkModel,
+    DecisionLogModel,
+    ExternalSourceRecordModel,
+    MarketInsightSnapshotModel,
+    PatternEvidenceModel,
+    WorkspaceCommercialProfileModel,
+)
 from viraldy.modules.tiktok_scorer.models import (
     TikTokFixActionEventModel,
     TikTokFixActionModel,
@@ -87,6 +106,21 @@ __all__ = [
     "GenerationArtifactModel",
     "GenerationRunModel",
     "MediaArtifactModel",
+    "CreativeFamilyMemberModel",
+    "CreativeFamilyModel",
+    "CreativeSourceLinkModel",
+    "ExternalSourceRecordModel",
+    "PatternEvidenceModel",
+    "CreativeDirectionModel",
+    "BatchReviewModel",
+    "BatchReviewItemModel",
+    "DecisionLogModel",
+    "MarketInsightSnapshotModel",
+    "WorkspaceCommercialProfileModel",
+    "AnalyticsAttributionModel",
+    "PasswordCredentialModel",
+    "PasswordRefreshTokenModel",
+    "PasswordSessionModel",
     "PatternKitActionModel",
     "PatternKitEvidenceLinkModel",
     "PatternKitModel",

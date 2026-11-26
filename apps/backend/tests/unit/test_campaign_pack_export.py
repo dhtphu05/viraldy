@@ -7,6 +7,7 @@ from uuid import uuid4
 from viraldy.modules.campaign_packs.contracts import CampaignPackBriefV1
 from viraldy.modules.campaign_packs.exporter import build_campaign_pack_export
 from viraldy.modules.campaign_packs.schemas import CampaignPackVersionResponse
+from viraldy.modules.campaign_packs.video_prompt import build_video_generation_prompt
 from viraldy.modules.products.contracts import build_minimal_product_context
 
 
@@ -114,3 +115,31 @@ def test_text_export_contains_creator_instructions_and_traceability() -> None:
     assert "Show the shelf being placed on the counter." in result.content
     assert "guaranteed exact space saved" in result.content
     assert f"Campaign Pack version: {version.id}" in result.content
+
+
+def test_video_generation_prompt_is_grounded_and_copy_ready() -> None:
+    version = _version()
+
+    artifact = build_video_generation_prompt(version.brief_json)
+
+    assert artifact.schema_version == "video_generation_prompt_v1"
+    assert artifact.aspect_ratio == "9:16"
+    assert artifact.duration_seconds == 20
+    assert artifact.source_concept_id == "concept_1"
+    assert "Counter Shelf / Launch" in artifact.prompt_text
+    assert "busy renter" in artifact.prompt_text
+    assert "My counter finally has room again." in artifact.prompt_text
+    assert "Show the shelf being placed on the counter." in artifact.prompt_text
+    assert "Product tag" in artifact.prompt_text
+    assert "guaranteed exact space saved" in artifact.prompt_text
+    assert "Do not invent product features, prices, results, or claims" in artifact.prompt_text
+
+
+def test_campaign_pack_version_serializes_video_generation_prompt() -> None:
+    version = _version()
+
+    payload = version.model_dump(mode="json")
+
+    assert payload["video_generation_prompt"]["schema_version"] == ("video_generation_prompt_v1")
+    assert payload["video_generation_prompt"]["source_concept_id"] == "concept_1"
+    assert "Counter Shelf / Launch" in payload["video_generation_prompt"]["prompt_text"]

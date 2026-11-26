@@ -16,6 +16,7 @@ class JobType(StrEnum):
     CONCEPT_VIDEO_GENERATE = "concept_video_generate"
     UGC_REVIEW = "ugc_review_v1"
     RETENTION_CLEANUP = "retention_cleanup"
+    TIKTOK_MEDIA_IMPORT = "tiktok_media_import"
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +149,12 @@ JOB_DEFINITIONS.update(
             max_attempts=1,
             required_stages=("selecting_expired_records", "deleting_objects", "persisting_results"),
             result_subject_type="retention_run",
+        ),
+        JobType.TIKTOK_MEDIA_IMPORT.value: _workflow_definition(
+            JobType.TIKTOK_MEDIA_IMPORT,
+            timeout_seconds=420,
+            required_stages=("downloading_media", "validating_media", "persisting_results"),
+            result_subject_type="asset",
         ),
     }
 )

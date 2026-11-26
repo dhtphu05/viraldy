@@ -23,6 +23,22 @@ const toneClass: Record<MetricTone, string> = {
     destructive: "text-destructive",
 };
 
+const toneSurfaceClass: Record<MetricTone, string> = {
+    neutral: "border-l-4 border-l-control-border",
+    ok: "border-l-4 border-l-ok",
+    warn: "border-l-4 border-l-warn",
+    info: "border-l-4 border-l-info",
+    destructive: "border-l-4 border-l-destructive",
+};
+
+const scoreSurfaceClass: Record<MetricTone, string> = {
+    neutral: "bg-surface-soft",
+    ok: "bg-ok-soft",
+    warn: "bg-warn-soft",
+    info: "bg-info-soft",
+    destructive: "bg-destructive-soft",
+};
+
 type DecisionHeroProps = {
     actionLabel: string;
     reason: ReactNode;
@@ -60,7 +76,11 @@ export function DecisionHero({
     const hasMeta = confidence || blockerCount !== undefined || effort;
 
     return (
-        <SurfaceCard variant="raised" padding="lg" className={cn("overflow-hidden", className)}>
+        <SurfaceCard
+            variant="raised"
+            padding="lg"
+            className={cn("overflow-hidden", toneSurfaceClass[statusTone], className)}
+        >
             <div className={cn("grid gap-6", media && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
                 <div className="min-w-0">
                     <p
@@ -103,7 +123,12 @@ export function DecisionHero({
                     <div className="flex min-w-0 flex-col gap-3 lg:items-end">
                         {media}
                         {score !== undefined && (
-                            <div className="rounded-xl bg-surface-soft px-4 py-3 lg:text-right">
+                            <div
+                                className={cn(
+                                    "rounded-xl px-4 py-3 lg:text-right",
+                                    scoreSurfaceClass[statusTone],
+                                )}
+                            >
                                 <p className="text-[11px] font-medium uppercase text-text-tertiary">
                                     {scoreLabel}
                                 </p>

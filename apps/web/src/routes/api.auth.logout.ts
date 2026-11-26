@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { logoutDestination } from "@/features/auth/auth-session.server";
+import { authRequestUrl } from "@/features/auth/auth-request.server";
 import { hasValidMutationOrigin } from "@/features/auth/lib/auth-proxy";
 
 export const Route = createFileRoute("/api/auth/logout")({
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/api/auth/logout")({
             POST: async ({ request }) => {
                 if (
                     !hasValidMutationOrigin({
-                        requestUrl: request.url,
+                        requestUrl: authRequestUrl(request).toString(),
                         origin: request.headers.get("origin") ?? undefined,
                     })
                 ) {
@@ -17,7 +18,10 @@ export const Route = createFileRoute("/api/auth/logout")({
                 }
                 return new Response(null, {
                     status: 303,
-                    headers: { Location: await logoutDestination(request) },
+                    headers: {
+                        Location: await logoutDestination(request),
+                        "Cache-Control": "no-store",
+                    },
                 });
             },
         },

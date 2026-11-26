@@ -45,6 +45,61 @@ SCRAPE_MAX_CONCURRENCY = max(
 )
 _scrape_semaphore = threading.Semaphore(SCRAPE_MAX_CONCURRENCY)
 
+def extract_structured_product_data(html: str) -> dict[str, object] | None:
+    if not html:
+        return None
+    import json
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+            schemas = data if isinstance(data, list) else [data]
+            for schema in schemas:
+                if not isinstance(schema, dict):
+                    continue
+                if schema.get("@type") == "Product" or "Product" in str(schema.get("@type", "")):
+                    title = schema.get("name")
+                    desc = schema.get("description")
+                    brand = None
+                    brand_node = schema.get("brand")
+                    if isinstance(brand_node, dict):
+                        brand = brand_node.get("name")
+                    elif isinstance(brand_node, str):
+                        brand = brand_node
+
+                    price = None
+                    currency = None
+                    offers = schema.get("offers")
+                    if isinstance(offers, dict):
+                        price = offers.get("price")
+                        currency = offers.get("priceCurrency")
+                    elif isinstance(offers, list) and offers:
+                        price = offers[0].get("price")
+                        currency = offers[0].get("priceCurrency")
+
+                    images = []
+                    image_node = schema.get("image")
+                    if isinstance(image_node, list):
+                        images = [str(img) for img in image_node if img]
+                    elif isinstance(image_node, str):
+                        images = [image_node]
+                    elif isinstance(image_node, dict):
+                        images = [image_node.get("url")]
+
+                    return {
+                        "title": title,
+                        "description": desc,
+                        "brand": brand,
+                        "price": price,
+                        "currency": currency,
+                        "images": [img for img in images if img],
+                    }
+        except Exception:
+            continue
+    return None
+
+
 class CrawlRequest(BaseModel):
     url: str
 
@@ -73,12 +128,22 @@ def amazon_product_page_blocked(html: str) -> bool:
     # A real product detail page always carries the productTitle node.
     return 'id="producttitle"' not in lower
 
+def _normalize_amazon_url(url: str) -> str:
+    import re
+    if "amazon.com" in url.lower():
+        asin_match = re.search(r'(?:/dp/|/gp/product/|/d/)([A-Z0-9]{10})', url, re.I)
+        if asin_match:
+            return f"https://www.amazon.com/dp/{asin_match.group(1)}"
+    return url
+
+
 async def _scrape_url(req: CrawlRequest):
-    url = req.url
+    url = _normalize_amazon_url(req.url)
     print(f"[Crawl Started] Target URL: {url}")
 
     url_lower_early = url.lower()
     is_amazon_target = "amazon.com" in url_lower_early
+
 
     # Configure Browser Options.
     # For Amazon: stealth mode + a real desktop UA + US locale cookies. The
@@ -249,7 +314,7 @@ async def _scrape_url(req: CrawlRequest):
                 target_url = coupon_data.get("targetUrl")
                 if target_url and ("amazon.com" in target_url or "/dp/" in target_url or "/gp/product/" in target_url):
                     print(f"[Koupon Crawler] Found Amazon target URL: {target_url}. Transitioning to Amazon crawl...")
-                    url = target_url
+                    url = _normalize_amazon_url(target_url)
                     url_lower = url.lower()
                     is_amazon = True
                 else:
@@ -296,7 +361,7 @@ async def _scrape_url(req: CrawlRequest):
                 target_url = coupon_data.get("targetUrl")
                 if target_url and ("amazon.com" in target_url or "/dp/" in target_url or "/gp/product/" in target_url):
                     print(f"[Dealseek Crawler] Found Amazon target URL: {target_url}. Transitioning to Amazon crawl...")
-                    url = target_url
+                    url = _normalize_amazon_url(target_url)
                     url_lower = url.lower()
                     is_amazon = True
                 else:
@@ -343,7 +408,7 @@ async def _scrape_url(req: CrawlRequest):
                 target_url = coupon_data.get("targetUrl")
                 if target_url and ("amazon.com" in target_url or "/dp/" in target_url or "/gp/product/" in target_url):
                     print(f"[Affitfy Crawler] Found Amazon target URL: {target_url}. Transitioning to Amazon crawl...")
-                    url = target_url
+                    url = _normalize_amazon_url(target_url)
                     url_lower = url.lower()
                     is_amazon = True
                 else:
@@ -470,6 +535,8 @@ async def _scrape_url(req: CrawlRequest):
             customer_say = ""
             review_cards = []
             parsed_data = None
+            ld_price = None
+            ld_currency = None
 
             if is_amazon:
                 is_product = is_amazon_product
@@ -527,6 +594,26 @@ async def _scrape_url(req: CrawlRequest):
                 md_content = result.markdown
                 title = "Generic Web Page"
                 description = ""
+
+                # Try extracting structured product metadata (JSON-LD)
+                try:
+                    ld_data = extract_structured_product_data(result.html)
+                    if ld_data:
+                        print("[Structured Data] Successfully parsed product metadata from JSON-LD schema.")
+                        title = ld_data.get("title") or title
+                        description = ld_data.get("description") or description
+                        if ld_data.get("brand"):
+                            md_content = f"# {title}\n\n- **Brand**: {ld_data['brand']}\n\n" + (md_content or "")
+                        if ld_data.get("price"):
+                            ld_price = ld_data.get("price")
+                            ld_currency = ld_data.get("currency")
+                        if ld_data.get("images"):
+                            ld_images = ld_data.get("images")
+                            screenshots = ld_images + [s for s in screenshots if s not in ld_images]
+                            if screenshots:
+                                image = screenshots[0]
+                except Exception as ld_err:
+                    print(f"[Structured Data] JSON-LD parse error: {ld_err}")
 
                 # Extract media from crawl4ai's result.media
                 if result.media and isinstance(result.media, dict):
@@ -600,65 +687,15 @@ async def _scrape_url(req: CrawlRequest):
 
             resolved_videos = [resolve_hls(v) for v in videos]
 
-            # Buyer/influencer review videos are HLS-only on Amazon (their
-            # static .mp4 artifacts 404), and the renderer can only play
-            # direct MP4s — so download the top clips to local MP4s with
-            # ffmpeg (stream copy, fast) and serve them from RENDERS_DIR.
+            # Buyer/influencer review videos are parsed and returned as direct CDN/resolved URLs without downloading
             review_videos = []
             if isinstance(parsed_data, dict) and parsed_data.get('review_videos'):
-                import subprocess
-                import time as time_mod
-                import uuid as uuid_mod
-
-                # Clips are only needed between scrape and render (minutes),
-                # but nothing deleted them — a day of batch runs left 14GB of
-                # orphans and filled the disk. Prune expired clips on every
-                # scrape so the pool stays bounded without a separate cron.
-                ttl_seconds = max(
-                    1,
-                    int(os.environ.get("PRODUCT_CRAWL_REVIEW_CLIP_TTL_HOURS", "6")),
-                ) * 3600
-                cutoff = time_mod.time() - ttl_seconds
-                try:
-                    pruned = 0
-                    for stale in RENDERS_DIR.glob("review-clip-*.mp4"):
-                        if stale.stat().st_mtime < cutoff:
-                            stale.unlink(missing_ok=True)
-                            pruned += 1
-                    if pruned:
-                        print(f"[Review Video] Pruned {pruned} review clips older than {ttl_seconds // 3600}h")
-                except Exception as prune_err:
-                    print(f"[Review Video] Prune failed: {str(prune_err)[:80]}")
-
-                def _download_review_clip(src_url: str) -> str | None:
-                    out_name = f"review-clip-{uuid_mod.uuid4().hex[:12]}.mp4"
-                    out_path = RENDERS_DIR / out_name
-                    try:
-                        validate_public_http_url(src_url)
-                        result_dl = subprocess.run(
-                            [
-                                'ffmpeg', '-y', '-v', 'error',
-                                '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                                '-i', src_url,
-                                '-t', '60',
-                                '-c', 'copy', '-bsf:a', 'aac_adtstoasc',
-                                str(out_path),
-                            ],
-                            capture_output=True, timeout=90,
-                        )
-                        if result_dl.returncode == 0 and out_path.exists() and out_path.stat().st_size > 100_000:
-                            return f"{PUBLIC_BASE_URL}/outputs/renders/{out_name}"
-                    except Exception as dl_err:
-                        print(f"[Review Video] Download failed: {str(dl_err)[:80]}")
-                    out_path.unlink(missing_ok=True)
-                    return None
-
-                for raw_rv in parsed_data.get('review_videos', [])[:3]:
-                    downloaded = await asyncio.to_thread(_download_review_clip, raw_rv)
-                    if downloaded:
-                        review_videos.append(downloaded)
-                if review_videos:
-                    print(f"[Review Video] Downloaded {len(review_videos)} buyer/influencer clips to local MP4")
+                review_videos = [
+                    resolve_hls(v)
+                    for v in parsed_data.get('review_videos', [])[:5]
+                    if v
+                ]
+                print(f"[Review Video] Kept {len(review_videos)} online review preview links without downloading.")
 
             # Filter and verify videos — keep only real reachable downloadable URLs
             import concurrent.futures
@@ -711,12 +748,19 @@ async def _scrape_url(req: CrawlRequest):
                 print(f"[Video Filter] Kept {len(filtered_videos)} reachable videos out of {len(candidates)}")
 
 
+            is_etsy = "etsy.com" in url_lower
+            is_shopify = "shopify.com" in url_lower or ".myshopify.com" in url_lower or "cdn.shopify.com" in (result.html or "") or "Shopify.theme" in (result.html or "")
+
             # Compute source type and confidence
             source_type = "unknown"
             if is_amazon:
                 source_type = "amazon"
             elif is_app_store:
                 source_type = "app_store"
+            elif is_etsy:
+                source_type = "etsy"
+            elif is_shopify:
+                source_type = "shopify"
             else:
                 source_type = "website"
 
@@ -741,9 +785,23 @@ async def _scrape_url(req: CrawlRequest):
                 review_cards = parsed_data.get('review_cards', review_cards)
 
             coupon_context = extract_coupon_context(md_content, result.html)
+            if ld_price:
+                price_text = f"${ld_price}" if (ld_currency or "USD") == "USD" else f"{ld_price} {ld_currency}"
+                # Structured JSON-LD price always takes precedence over naive regex coupon_context
+                coupon_context["sale_price"] = price_text
+                coupon_context["original_price"] = price_text
+
             if isinstance(parsed_data, dict):
                 price_info = parsed_data.get('price') or {}
                 if isinstance(price_info, dict):
+                    # Prioritize accurate parsed prices over regex coupon_context
+                    parsed_original = price_info.get('original', '')
+                    parsed_discounted = price_info.get('discounted', '')
+                    if parsed_original and parsed_original != 'N/A':
+                        coupon_context['original_price'] = parsed_original
+                    if parsed_discounted and parsed_discounted != 'N/A':
+                        coupon_context['sale_price'] = parsed_discounted
+
                     if not coupon_context.get('original_price'):
                         coupon_context['original_price'] = price_info.get('original', '')
                     if not coupon_context.get('sale_price'):

@@ -178,6 +178,13 @@ class PlatformSignalEvidenceValueV1(EvidenceValueBaseV1):
     confidence: float = Field(ge=0, le=1)
 
 
+class PlatformMetadataEvidenceValueV1(EvidenceValueBaseV1):
+    evidence_type: Literal["platform_metadata"] = "platform_metadata"
+    field_path: str
+    raw_value: object | None = None
+    normalized_value: object | None = None
+
+
 EvidenceValueV1 = Annotated[
     TranscriptSegmentEvidenceValueV1
     | OnScreenTextEvidenceValueV1
@@ -192,7 +199,8 @@ EvidenceValueV1 = Annotated[
     | CreatorSignalEvidenceValueV1
     | EditingSignalEvidenceValueV1
     | ClaimSignalEvidenceValueV1
-    | PlatformSignalEvidenceValueV1,
+    | PlatformSignalEvidenceValueV1
+    | PlatformMetadataEvidenceValueV1,
     Field(discriminator="evidence_type"),
 ]
 

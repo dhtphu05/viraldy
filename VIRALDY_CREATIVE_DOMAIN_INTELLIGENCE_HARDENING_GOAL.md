@@ -2940,7 +2940,6 @@ Results:
 - Backend ruff: all checks passed.
 - Frontend lint: passed with existing react-refresh warnings.
 - Frontend build: passed with chunk-size warnings.
-- Audit written to VIRALDY_CREATIVE_DOMAIN_INTELLIGENCE_AUDIT.md.
 Known live-provider uncertainties:
 - Fixture/mock pass validates contracts and workflow, not live model extraction quality.
 - Real MP4 category corpus and live-provider sampling remain required before private-beta confidence.

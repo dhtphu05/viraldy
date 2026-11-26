@@ -28,6 +28,7 @@ class PatternKitRepository:
         pattern: PatternKitV1,
         source_rows: list[tuple[UUID, UUID]],
         evidence_links: list[tuple[UUID, str]],
+        evidence_state_json: dict[str, object] | None = None,
     ) -> tuple[PatternKitModel, PatternKitVersionModel]:
         kit = PatternKitModel(
             id=pattern.id,
@@ -51,6 +52,7 @@ class PatternKitRepository:
             pattern=pattern,
             parent_version=None,
             change_reason=None,
+            evidence_state_json=evidence_state_json,
         )
         await self._replace_version_sources(workspace_id, version.id, source_rows)
         await self._replace_version_evidence_links(workspace_id, version.id, evidence_links)
@@ -101,8 +103,7 @@ class PatternKitRepository:
                     PatternKitSourceModel.pattern_kit_version_id == PatternKitVersionModel.id,
                 )
                 .where(
-                    PatternKitSourceModel.creative_dna_version_id
-                    == source_creative_dna_version_id
+                    PatternKitSourceModel.creative_dna_version_id == source_creative_dna_version_id
                 )
                 .distinct()
             )
@@ -200,6 +201,7 @@ class PatternKitRepository:
         change_reason: str,
         source_rows: list[tuple[UUID, UUID]],
         evidence_links: list[tuple[UUID, str]],
+        evidence_state_json: dict[str, object] | None = None,
     ) -> PatternKitVersionModel:
         kit.latest_version = parent_version + 1
         kit.name = pattern.name
@@ -216,6 +218,7 @@ class PatternKitRepository:
             pattern=pattern,
             parent_version=parent_version,
             change_reason=change_reason,
+            evidence_state_json=evidence_state_json,
         )
         await self._replace_version_sources(kit.workspace_id, version.id, source_rows)
         await self._replace_version_evidence_links(kit.workspace_id, version.id, evidence_links)
@@ -268,6 +271,7 @@ class PatternKitRepository:
         pattern: PatternKitV1,
         parent_version: int | None,
         change_reason: str | None,
+        evidence_state_json: dict[str, object] | None = None,
     ) -> PatternKitVersionModel:
         version = PatternKitVersionModel(
             pattern_kit_id=kit.id,
@@ -277,6 +281,7 @@ class PatternKitRepository:
             change_reason=change_reason,
             schema_version=pattern.schema_version,
             pattern_json=pattern.model_dump(mode="json"),
+            evidence_state_json=evidence_state_json or {},
             overall_confidence=pattern.overall_confidence,
             model_run_id=pattern.provenance.model_run_id,
             created_by_user_id=user_id,

@@ -1,19 +1,9 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **viraldy** (18551 symbols, 31863 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **viraldy** (18706 symbols, 32197 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
-
-## Default Workflow
-
-- **Default to GitNexus for code understanding.** For non-trivial code questions, debugging, review, refactoring, or feature work, check GitNexus first before relying on text search alone.
-- **Use `query` before broad search.** When looking for a feature, route, flow, module, or concept, start with `query({search_query: "..."})`, then use file reads or `rg` to inspect exact implementation details.
-- **Use `context` before editing a known symbol.** When the target function, class, method, route handler, or shared constant is known, run `context({name: "..."})` to understand callers, callees, and execution flows.
-- **Use `impact` before modifying behavior.** Before changing a symbol's logic, signature, return shape, validation, persistence, or API contract, run `impact({target: "...", direction: "upstream"})` and report the risk.
-- **Use `trace` for cross-layer questions.** For frontend-to-backend, endpoint-to-service, job-to-worker, or provider flow questions, use `trace` when the start and end symbols are known.
-- **Use `detect_changes` after implementation.** Before finalizing meaningful code changes, run `detect_changes()` and compare the affected flows with the intended scope.
-- If the GitNexus MCP tools are unavailable in the current agent session, use the local CLI fallback: `node .gitnexus/run.cjs query`, `context`, `impact`, `trace`, and `detect_changes`.
 
 ## Always Do
 

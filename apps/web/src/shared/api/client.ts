@@ -1,11 +1,11 @@
-import { unwrapEnvelope } from "./errors";
+import { ApiError, unwrapEnvelope } from "./errors";
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export const hasConfiguredApiBaseUrl = Boolean(CONFIGURED_API_BASE_URL);
 
 const API_BASE_URL = "/api/backend";
-let refreshPromise: Promise<boolean> | null = null;
+let refreshPromise: Promise<number> | null = null;
 
 export type ApiRequestOptions = {
     headers?: Record<string, string>;
@@ -62,7 +62,14 @@ async function fetchWithSession(input: string, init?: RequestInit): Promise<Resp
     if (response.status !== 401 || typeof window === "undefined") return response;
 
     const refreshed = await refreshBrowserSession();
-    if (refreshed) return fetch(input, init);
+    if (refreshed === 200) return fetch(input, init);
+    if (refreshed !== 401) {
+        throw new ApiError(
+            "AUTH_UNAVAILABLE",
+            "Sign-in is temporarily unavailable. Please try again.",
+            503,
+        );
+    }
 
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const login = new URL("/login", window.location.origin);
@@ -72,11 +79,11 @@ async function fetchWithSession(input: string, init?: RequestInit): Promise<Resp
     return response;
 }
 
-async function refreshBrowserSession(): Promise<boolean> {
+async function refreshBrowserSession(): Promise<number> {
     if (!refreshPromise) {
         refreshPromise = fetch("/api/auth/refresh", { method: "POST" })
-            .then((response) => response.ok)
-            .catch(() => false)
+            .then((response) => response.status)
+            .catch(() => 503)
             .finally(() => {
                 refreshPromise = null;
             });

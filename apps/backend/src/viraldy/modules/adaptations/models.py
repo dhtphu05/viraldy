@@ -37,6 +37,7 @@ class AdaptationRunModel(Base):
     )
     constraints_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     result_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    provenance_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="completed")
     schema_version: Mapped[str] = mapped_column(
         String(100), nullable=False, default="adaptation_legacy_v1"

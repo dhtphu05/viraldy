@@ -29,10 +29,10 @@ export function PatternKitResult({
 
     return (
         <div className="flex flex-col gap-5">
-            <div className="rounded-md bg-primary-soft/45 p-4 sm:p-5">
+            <div className="rounded-2xl bg-gradient-to-br from-primary-soft/80 via-surface to-info-soft/50 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)] sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase text-primary">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                             Reusable mechanism
                         </p>
                         <h3 className="mt-1 text-lg font-semibold text-text-primary">
@@ -70,15 +70,20 @@ export function PatternKitResult({
                 >
                     Sequence timeline
                 </h4>
-                <ol className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    {pattern.sequence.map((beat) => (
+                <ol className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {pattern.sequence.map((beat, index) => (
                         <li
                             key={beat.beat_id}
-                            className="min-w-0 rounded-md border border-hairline bg-surface-soft p-3"
+                            className="min-w-0 rounded-2xl bg-surface/95 p-3 shadow-[0_7px_20px_rgba(15,23,42,0.07)]"
                         >
                             <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-semibold text-primary">
-                                    {beat.order}. {humanizeLabel(beat.beat_type)}
+                                <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-primary">
+                                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-active">
+                                        {index + 1}
+                                    </span>
+                                    <span className="truncate">
+                                        {humanizeLabel(beat.beat_type)}
+                                    </span>
                                 </span>
                                 <span className="text-[11px] text-text-tertiary">
                                     {formatBeatTiming(
@@ -122,24 +127,27 @@ export function PatternKitResult({
                     icon={Check}
                     items={grouped.keep ?? []}
                     empty="No required keep instruction."
+                    tone="ok"
                 />
                 <InstructionBlock
                     title="Change"
                     icon={RefreshCw}
                     items={grouped.change ?? []}
                     empty="No required change instruction."
+                    tone="info"
                 />
                 <InstructionBlock
                     title="Avoid"
                     icon={ShieldAlert}
                     items={grouped.avoid ?? []}
                     empty="No prohibited execution was identified."
+                    tone="warn"
                 />
             </div>
 
             {(pattern.uncertainties.length > 0 ||
                 pattern.performance_summary.caveats.length > 0) && (
-                <div className="rounded-md border border-hairline bg-surface-soft p-3">
+                <div className="rounded-2xl bg-warn-soft/55 p-3 shadow-[inset_0_1px_0_rgba(183,110,0,0.12)]">
                     <p className="text-xs font-semibold uppercase text-text-tertiary">
                         Evidence limits
                     </p>
@@ -181,7 +189,13 @@ function ApplicabilityBlock({
     warning?: boolean;
 }) {
     return (
-        <section className="rounded-md border border-hairline bg-surface-soft p-4">
+        <section
+            className={
+                warning
+                    ? "rounded-2xl bg-warn-soft/60 p-4 shadow-[inset_0_1px_0_rgba(183,110,0,0.14)]"
+                    : "rounded-2xl bg-info-soft/52 p-4 shadow-[inset_0_1px_0_rgba(37,102,235,0.12)]"
+            }
+        >
             <h4 className="text-sm font-semibold text-text-primary">{title}</h4>
             <div className="mt-3 flex flex-wrap gap-2">
                 {values.length ? (
@@ -203,16 +217,23 @@ function InstructionBlock({
     icon: Icon,
     items,
     empty,
+    tone,
 }: {
     title: string;
     icon: typeof Check;
     items: PatternInstruction[];
     empty: string;
+    tone: "ok" | "info" | "warn";
 }) {
+    const toneClass = {
+        ok: "bg-ok-soft/70 text-ok shadow-[inset_0_1px_0_rgba(12,138,74,0.12)]",
+        info: "bg-info-soft/52 text-info shadow-[inset_0_1px_0_rgba(37,102,235,0.12)]",
+        warn: "bg-warn-soft/60 text-warn shadow-[inset_0_1px_0_rgba(183,110,0,0.14)]",
+    }[tone];
     return (
-        <section className="rounded-md border border-hairline bg-surface p-4">
+        <section className={`rounded-2xl p-4 ${toneClass}`}>
             <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-primary" />
+                <Icon className="h-4 w-4" />
                 <h4 className="text-sm font-semibold text-text-primary">{title}</h4>
             </div>
             {items.length ? (

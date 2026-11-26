@@ -16,17 +16,38 @@ export type ParsedTokenResponse = {
 
 const DEFAULT_RETURN_TO = "/dashboard";
 const AUTH_LOOP_PATHS = ["/login", "/register", "/api/auth"];
+const UNSAFE_RETURN_TO_CHARACTERS = /[\\\p{Cc}]/u;
 
 export function sanitizeReturnTo(value: string | null | undefined): string {
-    if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    if (
+        !value ||
+        !value.startsWith("/") ||
+        value.startsWith("//") ||
+        UNSAFE_RETURN_TO_CHARACTERS.test(value)
+    ) {
         return DEFAULT_RETURN_TO;
     }
 
-    const path = value.split(/[?#]/, 1)[0];
-    if (AUTH_LOOP_PATHS.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+    try {
+        const base = "https://viraldy.invalid";
+        const url = new URL(value, base);
+        const decodedPath = decodeURIComponent(url.pathname);
+        if (UNSAFE_RETURN_TO_CHARACTERS.test(decodedPath) || decodedPath.startsWith("//")) {
+            return DEFAULT_RETURN_TO;
+        }
+        const normalized = new URL(decodedPath, base);
+        const path = normalized.pathname.toLowerCase();
+        if (
+            url.origin !== base ||
+            normalized.origin !== base ||
+            AUTH_LOOP_PATHS.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+        ) {
+            return DEFAULT_RETURN_TO;
+        }
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
         return DEFAULT_RETURN_TO;
     }
-    return value;
 }
 
 export async function pkceChallenge(verifier: string): Promise<string> {

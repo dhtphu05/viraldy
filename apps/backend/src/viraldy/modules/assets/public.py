@@ -8,12 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from viraldy.modules.assets.models import AssetModel, AssetVersionModel
-from viraldy.modules.assets.repository import AssetRepository
+from viraldy.modules.assets.repository import AssetRepository, SyncAssetRepository
 from viraldy.modules.assets.service import AssetService
 
 __all__ = [
     "AssetModel",
     "AssetRepository",
+    "SyncAssetRepository",
     "AssetService",
     "AssetVersionModel",
     "AssetVersionReference",
@@ -68,7 +69,7 @@ class AssetQueries:
         return AssetVersionReference(
             asset_id=asset.id,
             asset_version_id=version.id,
-            workspace_id=asset.workspace_id,
+            workspace_id=workspace_id,
             product_id=asset.product_id,
             original_filename=version.original_filename,
             checksum_sha256=version.checksum_sha256,

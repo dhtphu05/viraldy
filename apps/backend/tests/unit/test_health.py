@@ -34,7 +34,7 @@ async def test_dependency_health_reports_required_components_without_error_detai
 
     report = await health_module.dependency_health(
         cast(AsyncSession, object()),
-        Settings(),
+        Settings(_env_file=None, ai_mode="fixture"),
         cast(StoragePort, object()),
     )
 

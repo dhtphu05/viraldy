@@ -15,11 +15,13 @@ PUBLIC_PATHS = {
     "/api/v1/ready",
     "/api/v1/system/ai-readiness",
     "/api/v1/auth/config",
+    "/api/v1/auth/register",
+    "/api/v1/auth/login",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
 }
 
-API_SUMMARY = (
-    "REST API quản trị toàn bộ vòng đời creative intelligence và campaign production."
-)
+API_SUMMARY = "REST API quản trị toàn bộ vòng đời creative intelligence và campaign production."
 
 API_DESCRIPTION = """
 Viraldy API là contract chính thức giữa backend, frontend và các hệ thống tích hợp.
@@ -280,11 +282,41 @@ TAG_DEFINITIONS = [
             "Trả score, blockers, fixes và presentation cho seller/creator."
         ),
     },
+    {
+        "name": "smart-remake",
+        "display_name": "Smart Remake",
+        "description": (
+            "Analyze reference videos, compile scene-by-scene remake plans, and track "
+            "render jobs within the current workspace using the selected product context."
+        ),
+    },
+    {
+        "name": "creative-library",
+        "display_name": "Creative Library",
+        "description": (
+            "Tra cứu nguồn creative chính thức, lưu reference workspace-local, "
+            "phân tích media và tạo hướng sáng tạo với provenance rõ ràng."
+        ),
+    },
+    {
+        "name": "creative-library-workflow",
+        "display_name": "Creative Library Workflow",
+        "description": (
+            "Creative Family, market Pattern Evidence, Creative Directions, Batch Review, "
+            "seller decisions, attribution and privacy-safe market snapshots."
+        ),
+    },
+    {
+        "name": "public-insights",
+        "display_name": "Public Market Insights",
+        "description": (
+            "Published, privacy-validated market snapshots. Public signals never represent "
+            "seller-private performance, GMV, ROAS or workspace assets."
+        ),
+    },
 ]
 
-OPENAPI_TAGS = [
-    {"name": tag["name"], "description": tag["description"]} for tag in TAG_DEFINITIONS
-]
+OPENAPI_TAGS = [{"name": tag["name"], "description": tag["description"]} for tag in TAG_DEFINITIONS]
 TAG_DISPLAY_NAMES = {tag["name"]: tag["display_name"] for tag in TAG_DEFINITIONS}
 TAG_DESCRIPTIONS = {tag["name"]: tag["description"] for tag in TAG_DEFINITIONS}
 
@@ -469,6 +501,7 @@ FIELD_DESCRIPTIONS = {
 }
 
 FIELD_EXAMPLES: dict[str, Any] = {
+    "refresh_token": "example-refresh-token-replace-with-the-token-from-login",
     **PARAMETER_EXAMPLES,
     "name": "Summer Glow Launch",
     "slug": "summer-glow-launch",
@@ -511,6 +544,8 @@ FIELD_EXAMPLES: dict[str, Any] = {
     "applicability_override_reason": "Đã xác minh sản phẩm đáp ứng yêu cầu visual demo.",
     "buyer_persona_id": "persona-sensitive-skin",
     "target_buyer": {"persona": "busy professionals", "awareness_stage": "problem_aware"},
+    "country_code": "FR",
+    "creator_country_code": "FR",
     "constraints": {"max_duration_ms": 30000, "prohibited_claims": ["guaranteed cure"]},
 }
 

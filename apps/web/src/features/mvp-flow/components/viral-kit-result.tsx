@@ -42,10 +42,10 @@ export function ViralKitResult({
 
     return (
         <div className="flex flex-col gap-5">
-            <div className="rounded-md bg-primary-soft/45 p-4 sm:p-5">
+            <div className="rounded-2xl bg-gradient-to-br from-primary-soft/80 via-surface to-info-soft/50 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)] sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <p className="text-xs font-semibold uppercase text-primary">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                             {humanizeLabel(viralKit.objective)}
                         </p>
                         <h3 className="mt-1 text-lg font-semibold text-text-primary">
@@ -63,7 +63,7 @@ export function ViralKitResult({
             </div>
 
             <div
-                className="grid gap-3 xl:grid-cols-3"
+                className="grid gap-4 xl:grid-cols-3"
                 role="radiogroup"
                 aria-label="Product-specific concepts"
             >
@@ -80,7 +80,7 @@ export function ViralKitResult({
                 ))}
             </div>
 
-            <section className="rounded-md border border-hairline bg-surface-soft p-4">
+            <section className="rounded-2xl bg-info-soft/48 p-4 shadow-[inset_0_1px_0_rgba(37,102,235,0.12)] sm:p-5">
                 <div className="flex items-center gap-2">
                     <FlaskConical className="h-4 w-4 text-primary" />
                     <h4 className="text-sm font-semibold text-text-primary">Test matrix</h4>
@@ -127,7 +127,7 @@ export function ViralKitResult({
             </section>
 
             {(viralKit.risks.length > 0 || viralKit.uncertainties.length > 0) && (
-                <section className="rounded-md border border-hairline bg-warn-soft p-4">
+                <section className="rounded-2xl bg-warn-soft/65 p-4 shadow-[inset_0_1px_0_rgba(183,110,0,0.14)]">
                     <div className="flex items-center gap-2">
                         <ShieldAlert className="h-4 w-4 text-warn" />
                         <h4 className="text-sm font-semibold text-text-primary">Risk summary</h4>
@@ -175,10 +175,10 @@ function ConceptCard({
             onClick={onSelect}
             onKeyDown={onKeyDown}
             className={cn(
-                "min-w-0 rounded-md border bg-surface p-4 text-left transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "min-w-0 rounded-2xl bg-surface/96 p-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.07)] transition-[background-color,box-shadow,transform] hover:-translate-y-px hover:shadow-[0_14px_30px_rgba(15,23,42,0.11)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 selected
-                    ? "border-primary bg-primary-soft/35 shadow-sm"
-                    : "border-hairline hover:border-primary/50",
+                    ? "bg-primary-soft/55 ring-2 ring-inset ring-primary shadow-[0_14px_30px_rgba(224,11,65,0.15)]"
+                    : "hover:bg-primary-soft/25",
             )}
         >
             <div className="flex items-start justify-between gap-3">
@@ -212,7 +212,7 @@ function ConceptCard({
                 />
             </dl>
 
-            <div className="mt-4 flex items-start gap-2 border-t border-divider pt-3">
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-surface-soft/85 px-3 py-2.5">
                 <Target className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-xs leading-5 text-text-secondary">
                     {humanizeSystemText(concept.test_hypothesis)}

@@ -58,6 +58,18 @@ class ReferenceRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_asset(self, workspace_id: UUID, asset_id: UUID) -> ReferenceModel | None:
+        result = await self._session.execute(
+            select(ReferenceModel)
+            .where(
+                ReferenceModel.workspace_id == workspace_id,
+                ReferenceModel.asset_id == asset_id,
+                ReferenceModel.deleted_at.is_(None),
+            )
+            .order_by(ReferenceModel.created_at.desc())
+        )
+        return result.scalars().first()
+
     async def set_status(self, reference: ReferenceModel, status: str) -> None:
         reference.status = status
         await self._session.flush()
@@ -75,3 +87,7 @@ class SyncReferenceRepository:
                 ReferenceModel.deleted_at.is_(None),
             )
         ).scalar_one_or_none()
+
+    def set_status(self, reference: ReferenceModel, status: str) -> None:
+        reference.status = status
+        self._session.flush()

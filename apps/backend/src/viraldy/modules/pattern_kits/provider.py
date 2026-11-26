@@ -60,6 +60,9 @@ class PatternEvidenceInput:
     end_ms: int | None
     value_json: dict[str, object]
     confidence: float | None
+    source_provider: str | None = None
+    source_entity_id: str | None = None
+    observed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,9 +291,7 @@ def _native_output_validator(
         if pattern.status != "candidate":
             _reject_pattern_output("New PatternKits must start as candidate.")
         if pattern.performance_summary.evidence_status != "none":
-            _reject_pattern_output(
-                "PatternKit cannot create unsupplied performance evidence."
-            )
+            _reject_pattern_output("PatternKit cannot create unsupplied performance evidence.")
         _validate_native_pattern_evidence(pattern, source_payloads)
         _validate_native_anti_copy(pattern, source_payloads)
 
@@ -375,9 +376,7 @@ def _validate_native_pattern_evidence(
     for ref in refs:
         source = sources.get(str(ref.creative_dna_version_id))
         if source is None:
-            _reject_pattern_output(
-                "PatternKit references an unknown Creative DNA source."
-            )
+            _reject_pattern_output("PatternKit references an unknown Creative DNA source.")
         if str(source.get("asset_version_id")) != str(ref.asset_version_id):
             _reject_pattern_output("PatternKit evidence asset version changed.")
         evidence_ids = {

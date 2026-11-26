@@ -21,12 +21,18 @@ class AppEnv(StrEnum):
 
 
 class AuthMode(StrEnum):
+    PASSWORD = "password"  # noqa: S105 - authentication mode, not a credential
     OIDC = "oidc"
     LOCAL_TEST = "local_test"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
 
     app_name: str = "Viraldy"
     app_env: AppEnv = AppEnv.LOCAL
@@ -48,13 +54,46 @@ class Settings(BaseSettings):
     product_crawl_output_dir: str | None = None
     product_crawl_review_clip_ttl_hours: int = Field(default=6, ge=1, le=168)
 
+    tiktok_commercial_client_key: SecretStr | None = None
+    tiktok_commercial_client_secret: SecretStr | None = None
+    tiktok_commercial_api_enabled: bool = False
+    tiktok_commercial_media_persistence_allowed: bool = False
+    tiktok_commercial_direct_stream_allowed: bool = False
+    tiktok_commercial_request_timeout_seconds: float = Field(default=20, gt=0)
+    tiktok_commercial_max_retries: int = Field(default=2, ge=0, le=5)
+    tiktok_commercial_cache_ttl_seconds: int = Field(default=300, ge=30, le=3600)
+
+    # Rollout/cost controls only. These flags do not represent paid entitlements.
+    tiktok_market_intelligence: bool = False
+    creative_family: bool = False
+    market_pattern_evidence: bool = False
+    batch_creative_review: bool = False
+    share_market_snapshot: bool = False
+    tiktok_market_search_limit: int = Field(default=100, ge=1, le=1000)
+    tiktok_market_analysis_limit: int = Field(default=20, ge=1, le=200)
+    tiktok_market_score_limit: int = Field(default=20, ge=1, le=200)
+    tiktok_market_adaptation_limit: int = Field(default=10, ge=1, le=100)
+    tiktok_market_batch_size_limit: int = Field(default=25, ge=1, le=100)
+    free_market_searches_per_period: int = Field(default=10, ge=1, le=1000)
+    free_creative_analyses: int = Field(default=3, ge=1, le=200)
+    free_single_score_reviews: int = Field(default=3, ge=1, le=200)
+    free_product_adaptations: int = Field(default=3, ge=1, le=200)
+    free_batch_size: int = Field(default=3, ge=1, le=100)
+
     auth_mode: AuthMode = AuthMode.LOCAL_TEST
     auth_disabled: bool = False
+    auth_jwt_secret: SecretStr | None = None
+    auth_proxy_secret: SecretStr | None = None
+    auth_jwt_issuer: str = "viraldy"
+    auth_jwt_audience: str = "viraldy-api"
+    auth_access_token_seconds: int = Field(default=900, ge=60, le=3600)
+    auth_refresh_token_days: int = Field(default=30, ge=1, le=90)
     oidc_issuer_url: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: AnyUrl | None = None
     oidc_allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
-    oidc_jwks_cache_seconds: int = 300
+    oidc_jwks_cache_seconds: int = Field(default=300, ge=1, le=86400)
+    oidc_require_verified_phone: bool = False
     oidc_authorization_url: AnyUrl | None = None
     oidc_token_url: AnyUrl | None = None
     oidc_client_id: str | None = None
@@ -63,6 +102,7 @@ class Settings(BaseSettings):
     )
     oidc_registration_url: AnyUrl | None = None
     oidc_end_session_url: AnyUrl | None = None
+    oidc_revocation_url: AnyUrl | None = None
 
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
@@ -180,6 +220,8 @@ class Settings(BaseSettings):
         "oidc_token_url",
         "oidc_registration_url",
         "oidc_end_session_url",
+        "oidc_revocation_url",
+        "oidc_jwks_url",
     )
     @classmethod
     def validate_public_oidc_url(cls, value: AnyUrl | None) -> AnyUrl | None:
@@ -188,8 +230,46 @@ class Settings(BaseSettings):
         parsed = urlsplit(str(value))
         if parsed.scheme not in {"http", "https"}:
             raise ValueError("Public OIDC URLs must use HTTP(S).")
-        if parsed.username or parsed.password:
+        if parsed.username or parsed.password or parsed.fragment:
             raise ValueError("Public OIDC URLs must not contain credentials.")
+        return value
+
+    @field_validator("oidc_allowed_algorithms")
+    @classmethod
+    def validate_oidc_algorithms(cls, value: list[str]) -> list[str]:
+        allowed = {
+            "RS256",
+            "RS384",
+            "RS512",
+            "ES256",
+            "ES384",
+            "ES512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "EdDSA",
+        }
+        if not value or not set(value).issubset(allowed):
+            raise ValueError("OIDC_ALLOWED_ALGORITHMS must use asymmetric signing algorithms.")
+        return value
+
+    @field_validator("oidc_issuer_url")
+    @classmethod
+    def validate_oidc_issuer(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip():
+            return None
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("OIDC_ISSUER_URL must be an absolute HTTP(S) issuer URL.")
         return value
 
     @field_validator("openai_base_url")
@@ -246,6 +326,17 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_safety(self) -> Settings:
         is_prod_like = self.app_env in {AppEnv.STAGING, AppEnv.PRODUCTION}
+        if self.auth_mode is AuthMode.PASSWORD:
+            secret = self.auth_jwt_secret.get_secret_value() if self.auth_jwt_secret else ""
+            if len(secret.encode("utf-8")) < 32 or len(set(secret)) < 12:
+                raise ValueError("AUTH_JWT_SECRET must be a random secret of at least 32 bytes.")
+            if not self.auth_jwt_issuer.strip() or not self.auth_jwt_audience.strip():
+                raise ValueError("AUTH_JWT_ISSUER and AUTH_JWT_AUDIENCE must not be empty.")
+            if is_prod_like and (
+                self.auth_proxy_secret is None
+                or len(self.auth_proxy_secret.get_secret_value().encode()) < 32
+            ):
+                raise ValueError("AUTH_PROXY_SECRET must contain at least 32 random bytes.")
         if is_prod_like and self.auth_disabled:
             raise ValueError("AUTH_DISABLED is not allowed outside local/test.")
         if is_prod_like and self.auth_mode is AuthMode.LOCAL_TEST:
@@ -280,6 +371,8 @@ class Settings(BaseSettings):
             missing_browser_settings = [
                 name
                 for name, value in {
+                    "OIDC_ISSUER_URL": self.oidc_issuer_url,
+                    "OIDC_JWKS_URL": self.oidc_jwks_url,
                     "OIDC_AUTHORIZATION_URL": self.oidc_authorization_url,
                     "OIDC_TOKEN_URL": self.oidc_token_url,
                     "OIDC_CLIENT_ID": self.oidc_client_id,
@@ -293,10 +386,13 @@ class Settings(BaseSettings):
             insecure_browser_settings = [
                 name
                 for name, value in {
+                    "OIDC_ISSUER_URL": self.oidc_issuer_url,
+                    "OIDC_JWKS_URL": self.oidc_jwks_url,
                     "OIDC_AUTHORIZATION_URL": self.oidc_authorization_url,
                     "OIDC_TOKEN_URL": self.oidc_token_url,
                     "OIDC_REGISTRATION_URL": self.oidc_registration_url,
                     "OIDC_END_SESSION_URL": self.oidc_end_session_url,
+                    "OIDC_REVOCATION_URL": self.oidc_revocation_url,
                 }.items()
                 if value is not None and urlsplit(str(value)).scheme != "https"
             ]
@@ -305,7 +401,9 @@ class Settings(BaseSettings):
                     "OIDC browser-flow settings must use HTTPS outside local/test: "
                     f"{', '.join(insecure_browser_settings)}"
                 )
-            required_scopes = {"openid", "profile", "email", "phone", "offline_access"}
+            required_scopes = {"openid", "profile", "email", "offline_access"}
+            if self.oidc_require_verified_phone:
+                required_scopes.add("phone")
             missing_scopes = sorted(required_scopes.difference(self.oidc_scopes))
             if missing_scopes:
                 raise ValueError(f"OIDC_SCOPES must include: {', '.join(missing_scopes)}")

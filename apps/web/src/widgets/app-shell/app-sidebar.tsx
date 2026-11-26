@@ -63,24 +63,47 @@ export function AppSidebar() {
             <aside
                 aria-label="Primary"
                 className={cn(
-                    "hidden shrink-0 flex-col border-r border-hairline bg-surface transition-[width] duration-200 md:flex",
+                    "relative hidden h-full shrink-0 flex-col border-r border-hairline bg-surface transition-[width] duration-200 md:flex",
                     collapsed ? "w-[72px]" : "w-[240px]",
                 )}
                 style={{ transitionTimingFunction: "cubic-bezier(0.2, 0.8, 0.2, 1)" }}
             >
                 <div
                     className={cn(
-                        "flex h-16 items-center px-4",
-                        collapsed && "justify-center px-0",
+                        "relative flex h-16 items-center px-4",
+                        collapsed ? "justify-center px-0" : "justify-between",
                     )}
                 >
                     <BrandLogo
                         markOnly={collapsed}
                         className={collapsed ? "h-9 w-9" : "h-10 w-[150px]"}
                     />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={toggle}
+                                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                                aria-expanded={!collapsed}
+                                className={cn(
+                                    "absolute top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-control-border bg-surface text-text-tertiary shadow-sm transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    collapsed ? "-right-3" : "right-3",
+                                )}
+                            >
+                                {collapsed ? (
+                                    <PanelLeft className="h-3.5 w-3.5" />
+                                ) : (
+                                    <PanelLeftClose className="h-3.5 w-3.5" />
+                                )}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                            {collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        </TooltipContent>
+                    </Tooltip>
                 </div>
 
-                <nav className={cn("flex-1 overflow-y-auto px-2 pb-4", collapsed && "px-2")}>
+                <nav className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-4">
                     {navigationGroups.map((group, index) => (
                         <div
                             key={group.label}
@@ -102,26 +125,6 @@ export function AppSidebar() {
                         </div>
                     ))}
                 </nav>
-
-                <div
-                    className={cn(
-                        "border-t border-hairline p-2",
-                        collapsed && "flex justify-center",
-                    )}
-                >
-                    <button
-                        type="button"
-                        onClick={toggle}
-                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-surface-soft hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                        {collapsed ? (
-                            <PanelLeft className="h-4 w-4" />
-                        ) : (
-                            <PanelLeftClose className="h-4 w-4" />
-                        )}
-                    </button>
-                </div>
             </aside>
         </TooltipProvider>
     );

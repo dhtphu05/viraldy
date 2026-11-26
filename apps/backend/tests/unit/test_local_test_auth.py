@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from viraldy.modules.identity.schemas import MeResponse
-from viraldy.platform.auth.local_test import LocalTestTokenVerifier
+from viraldy.platform.auth.local_test import LOCAL_DEV_ACCOUNT, LocalTestTokenVerifier
 from viraldy.shared.errors.base import UnauthorizedError
 
 
@@ -27,13 +27,19 @@ async def test_local_test_token_produces_valid_identity_email() -> None:
     assert identity.phone_number == "+84901234567"
 
 
+def test_local_dev_account_has_a_complete_reusable_profile() -> None:
+    assert LOCAL_DEV_ACCOUNT.external_auth_id == "local-test-user"
+    assert LOCAL_DEV_ACCOUNT.email == "local@viraldy.example.com"
+    assert LOCAL_DEV_ACCOUNT.display_name == "Local Viraldy User"
+    assert LOCAL_DEV_ACCOUNT.phone_number == "+84901234567"
+
+
 def test_me_response_requires_phone_number() -> None:
     with pytest.raises(ValidationError):
         MeResponse(
             id=uuid4(),
             email="seller@example.com",
             display_name="Seller",
-            phone_number=None,
             status="active",
         )
 
