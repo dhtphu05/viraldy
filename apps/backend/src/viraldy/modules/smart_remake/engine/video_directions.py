@@ -8,6 +8,7 @@ import re
 from collections import Counter
 from typing import Any, cast
 
+from .performer_continuity import performer_continuity_directions
 from .prompt_edits import scene_edit_directions
 
 # Provenance stays in GenerationExpectations and operation records, never in Veo prose.
@@ -138,6 +139,9 @@ def video_brief(
         "proportions, "
         "components, colors, materials and visible branding throughout. Product constraints "
         "take precedence; never invent parts or mechanisms.",
+        performer_continuity_directions(),
+        "At rapid cuts, enter the next action already underway; cut cleanly instead of blending "
+        "the previous actor or hand contacts into the next shot.",
         f"PRODUCT: {_json(identity)}" if _clean(identity) else "",
         f"CONTEXT: {_json(source)}" if _clean(source) else "",
         f"Scene/shot defaults (individual values override): {_json(defaults)}" if defaults else "",

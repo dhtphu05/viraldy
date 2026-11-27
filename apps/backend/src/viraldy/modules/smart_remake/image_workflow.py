@@ -25,6 +25,7 @@ from .engine.openai_images import (
     SUPPORTED_IMAGE_MODELS,
     validate_generated_png,
 )
+from .engine.performer_continuity import performer_continuity_directions
 from .engine.prompt_sanitizer import validate_generation_payload
 from .engine.schemas import UploadedMedia
 from .generation_budget import (
@@ -43,7 +44,7 @@ from .generation_expectations import (
 )
 
 OPENING_FRAME_EXTRACTOR_VERSION = "source-opening-frame-v1"
-PRESENTER_IDENTITY_POLICY_VERSION = "fictional-vietnamese-presenter-v1"
+PRESENTER_IDENTITY_POLICY_VERSION = "fictional-vietnamese-presenter-v2"
 ConditioningFrameRole = Literal["opening", "ending"]
 
 
@@ -167,10 +168,14 @@ def _image_prompt(
             "gaze, framing and camera while changing facial identity. Do not add a person or face "
             "to product-only or hands-only shots; preserve hands-only framing.\n"
             "This identity replacement takes precedence over source-person descriptions and "
-            "creative edits that ask to retain the source face.\n"
+            "creative edits that ask to retain the source face. Use a plain unbranded top as "
+            "supporting wardrobe only; do not carry over the source person's clothing or graphic "
+            "T-shirt unless it is the exact target garment required by the seller.\n"
             + ("Image 3 is the previously generated target presenter. Reuse that same fictional "
-               "adult's facial identity and appearance when a person is visible; use it only for "
-               "identity, never its product, pose, camera, background or composition.\n"
+               "adult's same face, hairstyle and wardrobe when a person is visible. Read only the "
+               "person region, even if image 3 is a montage; never copy the anchor's layout, "
+               "product, pose, camera, background or composition. It is identity-only evidence; "
+               "its presence does not require a person in this frame.\n"
                if presenter_anchor else "")
         )
     )
@@ -184,12 +189,22 @@ def _image_prompt(
         f"Create one photorealistic 9:16 {frame_role} frame for a product video. "
         "Image 1 is the seller's real product and the sole product identity reference. "
         "Preserve its exact shape, proportions, colors, material, markings and physical details. "
+        "If image 1 is a cutaway or section diagram, use it as a construction reference and render "
+        "the intact finished outer body for normal product use, unless the saved scene explicitly "
+        "requests a section illustration. Do not invent components or mechanisms. "
         f"Image 2 is the exact source scene {frame_role} frame: preserve its physical state, "
         "composition, camera, pose and background; replace its product "
         "with the exact product from image 1, including its existing branding. Do not copy "
         "source-video captions, unrelated branding or faces from composition image 2. "
-        "Render a full scene, without a collage, frame labels or added captions.\n"
+        "Preserve the exact panel count and layout from image 2: retain a source split-screen "
+        "when present, and use a single full frame otherwise. Do not add panels, frame labels "
+        "or captions.\n"
         f"{character}"
+        "When the product is clothing or a saved requirement specifies an outfit, the target "
+        "garment's design, graphics, colors and branding take precedence over supporting wardrobe "
+        "and the identity anchor's outfit. Preserve that exact target garment, including its "
+        "required logos; keep the designated person's facial identity.\n"
+        f"{performer_continuity_directions()}\n"
         f"PRESENTER IDENTITY POLICY: {PRESENTER_IDENTITY_POLICY_VERSION}\n"
         f"PRODUCT IDENTITY: {json.dumps(context.get('productLock', {}), sort_keys=True)}\n"
         f"EXPECTATIONS HASH: {context.get('expectationsHash', '')}\n"
@@ -272,20 +287,27 @@ def _frame_subject_presence(
 async def _presenter_anchor(
     repair: Any, row: Any, identity: dict[str, Any], previous: dict[str, Any],
 ) -> tuple[UploadedMedia, dict[str, Any]] | None:
-    scope = ("policyVersion", "sourceMediaHash", "productMediaHash")
     prior = previous.get("presenterIdentity") or {}
-    if all(prior.get(key) == identity[key] for key in scope):
+    retained = previous.get("status") in {"submitting", "submitted", "completed"}
+    canonical = row.context_json.get("presenterIdentityAnchor") or {}
+    if retained and _same_presenter_scope(prior, identity):
         selected = prior.get("anchor")
         if not selected:
             return None  # A retained submission keeps its original identity inputs.
         candidates = [selected["requestHash"]]
+    elif _same_presenter_scope(canonical, identity):
+        selected = canonical.get("anchor")
+        if not isinstance(selected, dict) or not isinstance(selected.get("requestHash"), str):
+            raise _asset_invalid()
+        candidates = [selected["requestHash"]]
     else:
-        candidates = sorted(
+        assets = row.context_json.get("imageAssets", {})
+        candidates = sorted((
             request_hash for request_hash, record in row.context_json.get("imageAssets", {}).items()
             if isinstance(record, dict)
             and (actor := record.get("presenterIdentity") or {}).get("eligibleAnchor") is True
-            and all(actor.get(key) == identity[key] for key in scope)
-        )
+            and _same_presenter_scope(actor, identity)
+        ), key=lambda key: (_presenter_frame(assets[key]), key))
         selected = None
     if not candidates:
         return None
@@ -293,9 +315,7 @@ async def _presenter_anchor(
     if cached is None:
         raise _asset_invalid()
     actor = cached.get("presenterIdentity") or {}
-    if actor.get("eligibleAnchor") is not True or any(
-        actor.get(key) != identity[key] for key in scope
-    ):
+    if actor.get("eligibleAnchor") is not True or not _same_presenter_scope(actor, identity):
         raise _asset_invalid()
     anchor = {key: cached[key] for key in ("requestHash", "mediaHash", "storageKey")}
     if selected is not None and selected != anchor:
@@ -307,7 +327,31 @@ async def _presenter_anchor(
     # Recheck the bytes we actually send, rather than trusting an earlier storage read.
     if hashlib.sha256(data).hexdigest() != anchor["mediaHash"]:
         raise _asset_invalid()
+    if selected is None:
+        await repair.repository.merge_context(row, {
+            "presenterIdentityAnchor": _presenter_record(identity, anchor),
+        })
     return UploadedMedia(bytes=data, mime_type="image/png", file_name="presenter-identity"), anchor
+
+
+def _same_presenter_scope(value: Any, identity: dict[str, Any]) -> bool:
+    return isinstance(value, dict) and all(
+        value.get(key) == identity[key]
+        for key in ("policyVersion", "sourceMediaHash", "productMediaHash")
+    )
+
+
+def _presenter_frame(record: dict[str, Any]) -> int:
+    reference = record.get("referenceFrame") or record.get("openingFrame") or {}
+    frame = reference.get("frame")
+    return frame if type(frame) is int and frame >= 0 else 2**63
+
+
+def _presenter_record(identity: dict[str, Any], anchor: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **{key: identity[key] for key in ("policyVersion", "sourceMediaHash", "productMediaHash")},
+        "anchor": copy.deepcopy(anchor),
+    }
 
 
 def _image_request_hash(
@@ -405,6 +449,12 @@ async def prepare_scene_image(
         "productMediaHash": hashlib.sha256(product.bytes).hexdigest(),
         "eligibleAnchor": character is None and presence == "person",
     }
+    retained = previous.get("status") in {"submitting", "submitted", "completed"}
+    prior_identity = previous.get("presenterIdentity") or {}
+    if retained and _same_presenter_scope(prior_identity, identity) and (
+        (prior_identity.get("mode") == "custom") == (character is not None)
+    ):
+        identity = copy.deepcopy(prior_identity)
     prompt = _image_prompt(prompt_context, compiled_scene, frame_role=frame_role)
     # Expectations and extractor versions intentionally invalidate older layout caches.
     settings = {"model": model, "size": IMAGE_SIZE, "quality": quality}
@@ -419,19 +469,19 @@ async def prepare_scene_image(
         "frameRole": frame_role, "referenceFrame": reference_frame,
     }
     request_hash = _image_request_hash(binding, prompt, character, identity)
-    cached = await _cached_image(repair, row, request_hash)
-    # Check the original unanchored cache first, so the first presenter frame never
-    # becomes a reference to itself after a crash or a different operation resumes.
-    if cached is None and character is None and presence not in {"none", "hands_only"}:
+    if character is None:
         anchored = await _presenter_anchor(repair, row, identity, previous)
-        if anchored is not None:
+        # The canonical image itself must restore without becoming its own reference.
+        if anchored is not None and anchored[1]["requestHash"] != request_hash:
             character, anchor = anchored
             identity = {**identity, "mode": "anchored", "eligibleAnchor": False, "anchor": anchor}
             prompt = _image_prompt(
                 prompt_context, compiled_scene, frame_role=frame_role, presenter_anchor=True,
             )
             request_hash = _image_request_hash(binding, prompt, character, identity)
-            cached = await _cached_image(repair, row, request_hash)
+    if retained and previous.get("requestHash") != request_hash:
+        await _unresolved(operation, save)
+    cached = await _cached_image(repair, row, request_hash)
     validate_generation_payload(
         prompt, row.context_json.get("referenceAnalysis", {}), expectations["productLock"]
     )
@@ -440,7 +490,7 @@ async def prepare_scene_image(
             "OPENAI_IMAGE_VALIDATION_FAILED",
             "Saved constraints exceed the image prompt budget. Use concise requirements.",
         )
-    if cached is None and previous.get("status") in {"submitting", "completed"}:
+    if cached is None and retained:
         await _unresolved(operation, save)
     if cached is None:
         attempt, created = await reserve_generation_attempt(
@@ -555,10 +605,16 @@ async def prepare_scene_image(
                 **({"attemptId": attempt_id} if attempt_id else {}),
             }
             ensure_active()
-            await repair.repository.merge_context(
-                row,
-                {"imageAssets": {**row.context_json.get("imageAssets", {}), request_hash: cached}},
-            )
+            updates = {"imageAssets": {
+                **row.context_json.get("imageAssets", {}), request_hash: cached,
+            }}
+            if identity["eligibleAnchor"] and not _same_presenter_scope(
+                row.context_json.get("presenterIdentityAnchor"), identity,
+            ):
+                updates["presenterIdentityAnchor"] = _presenter_record(identity, {
+                    key: cached[key] for key in ("requestHash", "mediaHash", "storageKey")
+                })
+            await repair.repository.merge_context(row, updates)
         except Exception as exc:
             if getattr(exc, "code", "") == "JOB_ATTEMPT_SUPERSEDED":
                 raise

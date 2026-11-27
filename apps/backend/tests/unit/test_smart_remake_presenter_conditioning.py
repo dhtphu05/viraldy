@@ -113,12 +113,13 @@ async def test_product_or_hands_only_openings_do_not_become_face_anchors(present
 
 
 @pytest.mark.asyncio
-async def test_product_only_shot_does_not_receive_existing_presenter_anchor(presenter_setup):
-    _, row, _, client, _, _, _ = presenter_setup
-    await prepare_unit(presenter_setup)
+async def test_product_only_shot_keeps_identity_reference_without_adding_a_person(presenter_setup):
+    repair, row, _, client, _, _, _ = presenter_setup
+    first = await prepare_unit(presenter_setup)
     row.context_json["referenceAnalysis"]["sourceShots"][1]["subjectPresence"] = "none"
     await prepare_unit(presenter_setup, 1)
-    assert "character" not in client.calls[-1]
+    assert client.calls[-1]["character"].bytes == repair.media.objects[first["storageKey"]]
+    assert "its presence does not require a person in this frame" in client.calls[-1]["prompt"]
 
 
 @pytest.mark.asyncio
