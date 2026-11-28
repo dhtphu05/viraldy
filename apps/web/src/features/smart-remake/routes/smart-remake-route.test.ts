@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
     projectId: undefined as string | undefined,
     navigate: vi.fn(),
     hook: vi.fn(),
+    storyboard: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({
     createFileRoute: () => (options: unknown) => ({ options }),
@@ -57,16 +58,19 @@ vi.mock("../components/remake-storyboard", () => ({
     RemakeStoryboard: ({
         onRecompile,
         compileResult,
+        ...previewProps
     }: {
         onRecompile(): void;
         compileResult: { productLock?: { productName?: string } };
-    }) =>
-        createElement(
+    }) => {
+        state.storyboard({ ...previewProps, compileResult });
+        return createElement(
             "div",
             null,
             createElement("button", { onClick: onRecompile }, "Phân tích lại từ cảnh"),
             compileResult.productLock?.productName,
-        ),
+        );
+    },
 }));
 vi.mock("../components/remake-project-controls", () => ({
     RemakeProjectControls: () => createElement("section", null, "Duyệt và tải thành phẩm"),
@@ -112,6 +116,7 @@ beforeEach(() => {
     state.projectId = undefined;
     state.navigate.mockClear();
     state.hook.mockClear();
+    state.storyboard.mockClear();
     state.studio = {
         step: "prepare",
         busy: null,
@@ -191,6 +196,37 @@ function plan() {
 }
 
 describe("action-driven Smart Remake", () => {
+    it("previews current draft prompts with the latest owned project revision at script review", () => {
+        plan();
+        state.studio.sceneDrafts = { 0: { videoPrompt: "CURRENT_LOCAL_DRAFT" } };
+        state.studio.compiled = {
+            ...(state.studio.compiled as object),
+            projectId: "project",
+            revision: 2,
+            sceneMap: { sceneCount: 1, scenes: [{ videoPrompt: "CURRENT_LOCAL_DRAFT" }] },
+        };
+        state.studio.project = {
+            id: "project",
+            revision: 7,
+            scenes: [],
+            renderPlan: { units: [] },
+        };
+        renderPage();
+        expect(state.storyboard).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                workspaceId: "workspace",
+                projectRevision: 7,
+                sceneDrafts: state.studio.sceneDrafts,
+                requirements: expect.objectContaining(state.studio.requirements),
+                compileResult: expect.objectContaining({
+                    sceneMap: expect.objectContaining({
+                        scenes: [{ videoPrompt: "CURRENT_LOCAL_DRAFT" }],
+                    }),
+                }),
+            }),
+        );
+        expect(state.studio.requestAction).not.toHaveBeenCalled();
+    });
     it("makes failed reanalysis primary instead of presenting the saved script as a new result", () => {
         plan();
         state.studio.project = {

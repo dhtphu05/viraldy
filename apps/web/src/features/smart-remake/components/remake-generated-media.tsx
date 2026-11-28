@@ -154,16 +154,20 @@ export function RemakeGeneratedImage({
 export function RemakeKiePrompt({
     request,
     videoSubmitted,
+    mode = "sent",
+    expanded,
 }: {
-    request?: SmartRemakeKieRequest;
-    videoSubmitted: boolean | null;
+    request?: Pick<SmartRemakeKieRequest, "model" | "prompt"> & { requestHash?: string };
+    videoSubmitted?: boolean | null;
+    mode?: "sent" | "planned";
+    expanded?: boolean;
 }) {
     const [copyState, setCopy] = useState<{
-        requestHash: string;
+        requestHash?: string;
         prompt: string;
         status: "copied" | "error";
     } | null>(null);
-    const sent = videoSubmitted === true ? request : undefined;
+    const sent = mode === "planned" || videoSubmitted === true ? request : undefined;
     const copy =
         copyState?.requestHash === sent?.requestHash && copyState?.prompt === sent?.prompt
             ? copyState?.status
@@ -178,9 +182,16 @@ export function RemakeKiePrompt({
         }
     }
     return (
-        <details className="min-w-0 rounded-xl bg-surface-soft/65 px-4 py-3">
+        <details
+            open={expanded || undefined}
+            className="min-w-0 rounded-xl bg-surface-soft/65 px-4 py-3"
+        >
             <summary className="min-h-6 cursor-pointer text-sm font-medium">
-                {sent ? "Prompt đã gửi KIE" : "Prompt gửi KIE"}
+                {mode === "planned"
+                    ? "Prompt sẽ gửi KIE"
+                    : sent
+                      ? "Prompt đã gửi KIE"
+                      : "Prompt gửi KIE"}
             </summary>
             {sent ? (
                 <div className="mt-3 space-y-3">
@@ -214,9 +225,11 @@ export function RemakeKiePrompt({
                 </div>
             ) : (
                 <p className="mt-3 text-xs leading-relaxed text-text-secondary">
-                    {videoSubmitted === true
-                        ? "Lượt này chưa lưu prompt KIE."
-                        : "Prompt sẽ xuất hiện sau khi xác nhận gửi lượt tạo clip tới KIE."}
+                    {mode === "planned"
+                        ? "Chưa có bản xem trước prompt KIE."
+                        : videoSubmitted === true
+                          ? "Lượt này chưa lưu prompt KIE."
+                          : "Prompt sẽ xuất hiện sau khi xác nhận gửi lượt tạo clip tới KIE."}
                 </p>
             )}
         </details>

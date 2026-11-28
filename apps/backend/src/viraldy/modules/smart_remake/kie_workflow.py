@@ -26,11 +26,9 @@ from .engine.config import get_kie_poll_interval_seconds, get_kie_poll_timeout_s
 from .engine.errors import SmartRemakeError
 from .engine.kie_client import KieClient
 from .engine.prompt_sanitizer import (
-    validate_generation_payload,
     validate_sanitized_compiler_prompts,
 )
 from .engine.schemas import RenderSmartRemakeInput, UploadedMedia
-from .engine.video_requests import build_group_request, validate_video_input
 from .engine.wan_video_adapter import WAN_VIDEO_MODEL
 from .generation_budget import (
     character_reference,
@@ -49,6 +47,7 @@ from .generation_expectations import (
     validate_generation_expectations,
 )
 from .provider_errors import sanitize_provider_error
+from .provider_group_request import conditioned_group_request
 from .repair_media import RepairMediaStore
 from .repair_repository import RepairRepository
 from .repair_schemas import RepairSceneRequest
@@ -422,14 +421,6 @@ class KieWorkflow:
                 ) if key in compiled[position]},
                 **copy.deepcopy(scene),
             })
-        prompt_context = {
-            **row.context_json,
-            "p0": {**row.context_json.get("p0", {}),
-                   "requirements": snapshot.get("requirements", {})},
-        }
-        from .engine.video_directions import video_requirements
-
-        requirements_prompt = video_requirements(prompt_context)
         segments = (
             group["segments"]
             if group is not None
@@ -444,22 +435,8 @@ class KieWorkflow:
         # Validate the combined prompt before paid image edits. These public
         # literal placeholders are never fetched, uploaded or sent to KIE.
         request = await asyncio.to_thread(
-            build_group_request,
-            model=plan.get("videoModel", "veo3_lite"),
-            resolution=plan.get("videoResolution") or "720P",
-            audio=bool(row.context_json.get("audioRequired")),
-            scenes=scenes,
-            segments=segments,
-            reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
-            **({"has_character_reference": True} if character else {}),
-            product_lock=snapshot["productLock"],
-            reference_analysis=snapshot.get("sourceContext", {}),
-        )
-        request["input"]["prompt"] += requirements_prompt
-        await asyncio.to_thread(validate_video_input, request["model"], request["input"])
-        validate_generation_payload(
-            request["input"]["prompt"], row.context_json.get("referenceAnalysis", {}),
-            snapshot["productLock"],
+            conditioned_group_request, context=row.context_json, plan=plan, snapshot=snapshot,
+            scenes=scenes, segments=segments, has_character_reference=bool(character),
         )
         references: list[dict[str, Any]] = []
         from .image_workflow import prepare_scene_image

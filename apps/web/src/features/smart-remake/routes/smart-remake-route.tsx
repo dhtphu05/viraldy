@@ -816,6 +816,15 @@ function SmartRemakeStudio({
                                 </div>
                             )}
                             <RemakeStoryboard
+                                workspaceId={workspaceId}
+                                projectRevision={
+                                    studio.project?.revision ?? studio.compiled.revision
+                                }
+                                sceneDrafts={studio.sceneDrafts}
+                                requirements={normalizeRemakeRequirements(studio.requirements)}
+                                promptPreviewStale={Boolean(
+                                    needsPlanUpdate || studio.localMediaNeedsAnalysis,
+                                )}
                                 compileResult={previewCompile ?? studio.compiled}
                                 referenceUrl={studio.sourceUrl}
                                 productUrl={studio.productUrls[studio.primaryIndex]}

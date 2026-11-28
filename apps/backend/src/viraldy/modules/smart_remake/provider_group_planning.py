@@ -7,9 +7,8 @@ from typing import Any
 
 from viraldy.shared.errors.base import AppError
 
-from .engine.video_directions import video_requirements
-from .engine.video_requests import build_group_request, validate_video_input
 from .generation_expectations import validate_generation_expectations
+from .provider_group_request import conditioned_group_request
 
 
 def _fixed_windows(plan: dict[str, Any], total_frames: int) -> bool:
@@ -57,24 +56,12 @@ def freeze_provider_groups(context: dict[str, Any]) -> dict[str, Any]:
     units = {unit["id"]: unit for unit in plan["units"]}
     scenes = {scene["renderUnitId"]: scene for scene in snapshot["scenes"]}
     character = bool(context.get("characterKey"))
-    prompt_context = {
-        **context,
-        "p0": {**context.get("p0", {}), "requirements": snapshot["requirements"]},
-    }
-    suffix = video_requirements(prompt_context)
     for group in plan["groups"]:
         identities = group["renderUnitIds"]
-        request = build_group_request(
-            model=plan.get("videoModel", "veo3_lite"),
-            resolution=plan.get("videoResolution") or "720P",
-            audio=bool(context.get("audioRequired")),
+        conditioned_group_request(
+            context=context, plan=plan, snapshot=snapshot,
             scenes=[{**units[identity], **scenes[identity]} for identity in identities],
             segments=group["segments"],
-            reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
             has_character_reference=character,
-            product_lock=snapshot["productLock"],
-            reference_analysis=snapshot["sourceContext"],
         )
-        request["input"]["prompt"] += suffix
-        validate_video_input(request["model"], request["input"])
     return plan

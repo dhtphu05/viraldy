@@ -76,6 +76,14 @@ asset revisions. These rows do not retain the removed media bytes.
 
 ## Generated images and KIE prompts
 
+At **Duyệt kịch bản**, each clip has **Xem prompt KIE**. This displays **Prompt sẽ
+gửi KIE** from the current script text and product requirements. The read-only POST
+`/projects/{projectId}/generation/prompt-preview` checks workspace read permission
+and the saved revision, then uses the same prompt builder as KIE submission. It
+does not save edits, create jobs, generate images, upload media or reserve credits.
+Changing scene text invalidates the open preview; changing timing requires an
+updated saved clip plan before previewing again.
+
 Generated opening and ending images remain available in generation progress and
 the completed clip's **Ảnh & prompt** dialog. Each download requests a fresh signed
 attachment URL through `/projects/{projectId}/generation/{operationId}/images/{requestHash}/download`.
@@ -84,7 +92,7 @@ operation, expectations and storage binding before signing; it does not proxy by
 
 Update both the API and worker when deploying this change. New KIE submissions
 save their final prompt and URL-free request fields before dispatch. The UI shows
-the saved prompt only when its fingerprint matches verified submission evidence.
+**Prompt đã gửi KIE** only when its fingerprint matches verified submission evidence.
 Historical tasks without this snapshot explicitly report that the prompt was not
 saved. After Scene Fix, the dialog identifies these as original-generation assets,
 not the repaired version's inputs.

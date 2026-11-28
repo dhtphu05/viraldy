@@ -168,10 +168,10 @@ def test_legacy_group_plan_is_unchanged():
 def test_planner_validates_two_composed_frames_for_every_provider_window(
     monkeypatch, character, scene_count
 ):
-    from viraldy.modules.smart_remake import provider_group_planning
+    from viraldy.modules.smart_remake import provider_group_request
 
     value = context(count=scene_count, character=character, target_duration=16)
-    original = provider_group_planning.build_group_request
+    original = provider_group_request.build_group_request
     references = []
 
     def capture(**kwargs):
@@ -179,6 +179,6 @@ def test_planner_validates_two_composed_frames_for_every_provider_window(
         assert len(kwargs["reference_image_urls"]) == 2
         return original(**kwargs)
 
-    monkeypatch.setattr(provider_group_planning, "build_group_request", capture)
+    monkeypatch.setattr(provider_group_request, "build_group_request", capture)
     plan = freeze_provider_groups(value)
     assert len(plan["groups"]) == len(references) == 2

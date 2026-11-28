@@ -22,7 +22,6 @@ from .assembly_snapshots import (
     content_hash,
     record_assembly,
 )
-from .engine.prompt_sanitizer import validate_sanitized_compiler_prompts
 from .generation_expectations import (
     build_generation_expectations,
     expectations_hash,
@@ -447,39 +446,9 @@ async def enqueue_timeline_render(
                 assert_project_policy(row, purpose="generation")
             context, state = copy.deepcopy(row.context_json), copy.deepcopy(row.state_json)
             if prompt_drafts is not None:
-                if len(prompt_drafts) != len(state["scenes"]):
-                    raise AppError(
-                        "SMART_REMAKE_TIMELINE_INVALID", "The saved scene order cannot change."
-                    )
-                for index, draft in enumerate(prompt_drafts):
-                    compiled = context["sceneMap"]["scenes"][index]
-                    prompts = {
-                        name: draft[name] for name in ("prompt", "imagePrompt", "videoPrompt")
-                    }
-                    if any(
-                        not isinstance(value, str) or not value.strip() or len(value) > 12000
-                        for value in prompts.values()
-                    ):
-                        raise AppError(
-                            "SMART_REMAKE_PROMPT_INVALID", "Every scene needs valid prompts."
-                        )
-                    validate_sanitized_compiler_prompts(
-                        prompt=prompts["prompt"],
-                        image_prompt=prompts["imagePrompt"],
-                        video_prompt=prompts["videoPrompt"],
-                        analysis=context["referenceAnalysis"] or {},
-                        product_lock=context["productLock"],
-                        timeline=compiled.get("shotPlan") or {},
-                    )
-                    if all(compiled[field] == prompts[field] for field in prompts):
-                        continue
-                    for field in prompts:
-                        compiled[f"original{field[0].upper()}{field[1:]}"] = compiled[field]
-                    compiled.update(prompts)
-                    compiled["promptEdited"] = True
-                    state["scenes"][index].update(prompts)
-                    state["renderPlan"]["units"][index].update(prompts)
-                    context["renderPlan"]["units"][index].update(prompts)
+                from .scene_prompt_drafts import apply_scene_prompt_drafts
+
+                context, state = apply_scene_prompt_drafts(context, state, prompt_drafts)
             if project_name is not None:
                 context["projectName"] = project_name[:200]
             if audio_required is not None:

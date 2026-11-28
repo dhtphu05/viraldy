@@ -1629,6 +1629,7 @@ export function useRemakeStudio(
         linkedProduct,
         isSample,
         compiled: draftCompile,
+        sceneDrafts,
         result,
         project,
         busy,
