@@ -20,6 +20,7 @@ import { RemakeClipThumbnail } from "./remake-clip-thumbnail";
 import { RemakeEmptyOutput } from "./remake-empty-output";
 import { getTimelinePublishError } from "../lib/remake-timeline";
 import { getTimelinePreviewScope } from "../lib/remake-preview";
+import { getSourceComparisonSegments } from "../lib/remake-source-comparison";
 import { getRenderWindowFrames } from "../lib/remake-groups";
 import { getCurrentRemakeAssembly } from "../lib/remake-result-next-action";
 import { RemakeGenerationProgress } from "./remake-generation-progress";
@@ -171,6 +172,10 @@ function OutputSession(props: RemakeOutputProps) {
     const hasWholePreview = Boolean(
         previewAssembly?.technicalCheck.status === "passed" && finalUrl,
     );
+    const sourceComparisonSegments =
+        project && previewAssembly
+            ? getSourceComparisonSegments(project, previewAssembly.timeline)
+            : null;
     const previewApproved = Boolean(
         previewAssembly &&
         project?.release?.approvals?.some(
@@ -405,11 +410,27 @@ function OutputSession(props: RemakeOutputProps) {
                         </p>
                     </div>
                     {hasWholePreview ? (
-                        <RemakePlayer
-                            url={finalUrl!}
-                            scope={null}
-                            versionLabel={`Bản xem trước · ${project.targetDuration} giây`}
-                        />
+                        <div className="space-y-3">
+                            <RemakePlayer
+                                url={finalUrl!}
+                                scope={null}
+                                versionLabel={`Bản xem trước · ${project.targetDuration} giây`}
+                                sourceComparison={
+                                    project.sourceVideoUrl && sourceComparisonSegments
+                                        ? {
+                                              url: project.sourceVideoUrl,
+                                              segments: sourceComparisonSegments,
+                                          }
+                                        : undefined
+                                }
+                            />
+                            {project.sourceVideoUrl && !sourceComparisonSegments && (
+                                <p className="text-xs text-text-secondary">
+                                    Chưa có đủ mốc cảnh để đồng bộ video gốc. Bạn vẫn có thể xem bản
+                                    remake.
+                                </p>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-3">
                             <p role="status" className="text-sm text-text-secondary">

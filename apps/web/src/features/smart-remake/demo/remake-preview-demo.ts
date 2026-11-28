@@ -73,7 +73,8 @@ export function createRemakeClipRepairDemo(source: SmartRemakeProject): {
     };
 }
 
-// Explicit UI fixture: reuse the local video; no project or provider API is called.
+// Explicit UI fixture: the source is a 2× slower local copy of the preview.
+// Source frame bounds double while output/provider clocks stay unchanged; no AI is called.
 export function createRemakePreviewDemo(
     source: SmartRemakeProject,
     status: "ready" | "processing",
@@ -175,7 +176,7 @@ export function createRemakePreviewDemo(
         status: status === "ready" ? "ready" : "incomplete",
         targetDuration: 12,
         provider: "kie",
-        sourceVideoUrl: `${DEMO_ASSETS}whole-preview.mp4`,
+        sourceVideoUrl: `${DEMO_ASSETS}whole-preview-source.mp4`,
         finalVideoUrl: status === "ready" ? `${DEMO_ASSETS}whole-preview.mp4` : "",
         expectationsHash: source.expectationsHash ?? "fixture-whole-preview-base-expectations",
         constraintsHash: "fixture-whole-preview-constraints",
@@ -184,11 +185,11 @@ export function createRemakePreviewDemo(
             fps: 24,
             timingMode: "fit_target",
             sourceStartFrame: 0,
-            sourceFrameCount: 288,
+            sourceFrameCount: 576,
             scenes: units.map((unit, index) => ({
                 id: unit.sourceSceneId,
-                startFrame: unit.sourceStartFrame!,
-                endFrame: unit.sourceEndFrame!,
+                startFrame: unit.sourceStartFrame! * 2,
+                endFrame: unit.sourceEndFrame! * 2,
                 targetDurationFrames: unit.targetDurationFrames,
                 thumbnailUrl: `${DEMO_ASSETS}scene-${String((index % 13) + 1).padStart(2, "0")}.jpg`,
             })),
@@ -200,7 +201,11 @@ export function createRemakePreviewDemo(
             videoResolution: "720P",
             audioRequired: true,
             groupingPolicy: "fixed_provider_windows",
-            units,
+            units: units.map((unit) => ({
+                ...unit,
+                sourceStartFrame: unit.sourceStartFrame! * 2,
+                sourceEndFrame: unit.sourceEndFrame! * 2,
+            })),
             groups,
         },
         draftTimeline: timeline,
