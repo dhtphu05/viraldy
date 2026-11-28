@@ -49,7 +49,7 @@ class RenderUnit(TimelineModel):
     sourceEndFrame: int | None = Field(default=None, gt=0)
     fragmentIndex: int = Field(default=0, ge=0)
     fragmentCount: int = Field(default=1, ge=1)
-    rawDurationFrames: Literal[192] = RAW_DURATION_FRAMES
+    rawDurationFrames: Literal[144, 192] = RAW_DURATION_FRAMES
     targetDurationFrames: int = Field(gt=0, le=RAW_DURATION_FRAMES)
     prompt: str = ""
     imagePrompt: str = ""
@@ -57,6 +57,8 @@ class RenderUnit(TimelineModel):
 
     @model_validator(mode="after")
     def valid_source_fragment(self) -> RenderUnit:
+        if self.targetDurationFrames > self.rawDurationFrames:
+            raise ValueError("A render fragment must fit its saved provider window.")
         if (self.sourceStartFrame is None) != (self.sourceEndFrame is None):
             raise ValueError("A source fragment requires both exact frame bounds.")
         if (
@@ -79,7 +81,7 @@ class RenderGroupSegment(TimelineModel):
 class RenderGroup(TimelineModel):
     id: str
     renderUnitIds: list[str] = Field(min_length=1)
-    rawDurationFrames: Literal[192] = RAW_DURATION_FRAMES
+    rawDurationFrames: Literal[144, 192] = RAW_DURATION_FRAMES
     targetDurationFrames: int = Field(gt=0, le=RAW_DURATION_FRAMES)
     segments: list[RenderGroupSegment] = Field(min_length=1)
 
@@ -93,6 +95,7 @@ class RenderPlan(TimelineModel):
     groupingPolicy: Literal["fixed_provider_windows"] | None = None
     videoModel: Literal["veo3_lite", "wan/3-0-video"] | None = None
     videoResolution: Literal["480P", "720P", "1080P"] | None = None
+    audioRequired: bool | None = None
     imageModel: Literal["gpt-image-2.6-sunburst", "gpt-image-2.6-flare"] | None = None
     imageQuality: Literal["low", "medium", "high", "xhigh", "max"] | None = None
     imageComplexity: Literal["low", "medium", "high"] | None = None
@@ -116,5 +119,14 @@ class TimelineItem(TimelineModel):
 
 class DraftTimeline(TimelineModel):
     fps: Literal[24] = FPS
-    totalFrames: Literal[192, 384]
+    totalFrames: Literal[192, 288, 384]
     items: list[TimelineItem] = Field(min_length=1)
+
+
+def provider_window_frames(plan: dict[str, Any]) -> int:
+    """Twelve-second Wan plans use six-second windows; saved legacy plans retain eight."""
+    if sum(unit["targetDurationFrames"] for unit in plan["units"]) == 288:
+        if plan.get("videoModel") != "wan/3-0-video":
+            raise ValueError("Twelve-second output requires the Wan provider contract.")
+        return 144
+    return RAW_DURATION_FRAMES

@@ -25,8 +25,16 @@ def validate_video_input(model: str, data: dict[str, Any]) -> None:
 
 
 def build_group_request(
-    *, model: str = KIE_MODEL, audio: bool = False, resolution: str = "720P", **kwargs: Any,
+    *, model: str = KIE_MODEL, audio: bool = False, resolution: str = "720P",
+    duration_seconds: int = 8, window_context: dict[str, Any] | None = None, **kwargs: Any,
 ) -> dict[str, Any]:
     if canonical_video_model(model) == WAN_VIDEO_MODEL:
-        return build_wan_group_request(audio=audio, resolution=resolution, **kwargs)
+        return build_wan_group_request(
+            audio=audio, resolution=resolution, duration_seconds=duration_seconds, **kwargs,
+            window_context=window_context,
+        )
+    if type(duration_seconds) is not int or duration_seconds != 8 or window_context is not None:
+        raise SmartRemakeValidationError(
+            "Saved Veo groups require exactly eight seconds.", "KIE_VALIDATION_FAILED",
+        )
     return kie_adapter.build_kie_group_request(**kwargs)

@@ -95,6 +95,13 @@ async def create_intake(
     additional_products: Sequence[UploadedMedia | bytes] | None = None,
     staged_uploads: Sequence[dict[str, Any]] | None = None,
 ) -> SmartRemakeProjectModel:
+    if payload.targetDuration == 12:
+        from .engine.config import get_kie_video_model
+
+        if get_kie_video_model() != "wan/3-0-video":
+            raise AppError(
+                "SMART_REMAKE_VIDEO_DURATION_INVALID", "Twelve-second output requires Wan.", 422
+            )
     if len(additional_products or []) >= MAX_PRODUCT_REFERENCE_IMAGES:
         raise AppError(
             "SMART_REMAKE_PRODUCT_REFERENCES_INVALID", "Use at most fourteen product images.", 422
@@ -178,7 +185,7 @@ async def create_intake(
         context: dict[str, Any] = {
             "schemaVersion": 2,
             "projectName": payload.projectName,
-            "audioRequired": False,
+            "audioRequired": payload.targetDuration == 12,
             "p0": {
                 "schemaVersion": 1,
                 "phase": "intake",

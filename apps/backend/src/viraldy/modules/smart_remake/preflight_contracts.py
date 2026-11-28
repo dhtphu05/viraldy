@@ -25,7 +25,7 @@ class PreflightRequest(SmartRemakeApiModel):
     budgetMode: Literal["unlimited", "limited"] | None = None
     projectId: str | None = None
     expectedRevision: int | None = Field(default=None, ge=1)
-    targetDuration: Literal[8, 16] | None = None
+    targetDuration: Literal[8, 12, 16] | None = None
     referenceStartFrame: int | None = Field(default=None, ge=0)
     analysisScope: Literal["excerpt", "full_source"] | None = None
     sourceDurationSeconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)

@@ -138,7 +138,7 @@ def validate_kie_video_input(data: dict[str, Any]) -> None:
         public_media_url(image)
 
 
-def build_kie_group_request(
+def build_group_prompt(
     *,
     scenes: list[dict[str, Any]],
     segments: list[dict[str, Any]],
@@ -146,7 +146,13 @@ def build_kie_group_request(
     has_character_reference: bool = False,
     product_lock: dict[str, Any] | None = None,
     reference_analysis: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    duration_seconds: int = 8,
+) -> str:
+    if type(duration_seconds) is not int or not 2 <= duration_seconds <= 30:
+        raise SmartRemakeValidationError(
+            "A provider group requires a supported whole-second duration.", "KIE_VALIDATION_FAILED",
+        )
+    raw_frames = duration_seconds * 24
     if not isinstance(reference_image_urls, list) or len(reference_image_urls) != 2:
         raise SmartRemakeValidationError(
             "A group requires exactly two conditioned images: opening and final frames, in order.",
@@ -170,6 +176,7 @@ def build_kie_group_request(
     defaults = shot_defaults(scenes)
     parts = [video_brief(
         product_lock or {}, context, ending=True, language=language, defaults=defaults,
+        duration_seconds=duration_seconds,
     )]
     parts.append(
         "Fit actions to their assigned output intervals, preserving physical cause and effect."
@@ -182,11 +189,12 @@ def build_kie_group_request(
             type(start) is not int
             or type(next_end) is not int
             or start != end
-            or not start < next_end <= 192
+            or not start < next_end <= raw_frames
             or scene.get("targetDurationFrames", next_end - start) != next_end - start
         ):
             raise SmartRemakeValidationError(
-                "Group scenes must cover contiguous frame ranges within eight seconds.",
+                "Group scenes must cover contiguous frame ranges within "
+                + ("eight seconds." if duration_seconds == 8 else f"{duration_seconds} seconds."),
                 "KIE_VALIDATION_FAILED",
             )
         parts.append(scene_brief(
@@ -194,22 +202,41 @@ def build_kie_group_request(
             product=product_lock or {}, context=context, language=language, defaults=defaults,
         ))
         end = next_end
-    if end < 192:
+    if end < raw_frames:
         parts.append(
             f"After {end / 24:g} seconds, continue the last action naturally without "
             "new cuts, repeated actions, stretching or frozen frames. "
             "Only the timestamped scene ranges will be selected for the final edit."
         )
+    prompt = _PROMPT_SECTION_SEPARATOR.join(parts)
+    validate_generation_payload(prompt, reference_analysis or {}, product_lock or {})
+    return prompt
+
+
+
+def build_kie_group_request(
+    *,
+    scenes: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    reference_image_urls: list[str],
+    has_character_reference: bool = False,
+    product_lock: dict[str, Any] | None = None,
+    reference_analysis: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = build_group_prompt(
+        scenes=scenes, segments=segments, reference_image_urls=reference_image_urls,
+        has_character_reference=has_character_reference, product_lock=product_lock,
+        reference_analysis=reference_analysis,
+    )
     data = {
         "model": "veo3_lite",
         "generation_type": KIE_IMAGE_TO_VIDEO_MODE,
         "image_urls": list(reference_image_urls),
-        "prompt": _PROMPT_SECTION_SEPARATOR.join(parts),
+        "prompt": prompt,
         "aspect_ratio": "9:16",
         "duration": 8,
         "resolution": "720p",
         "enable_translation": False,
     }
-    validate_generation_payload(data["prompt"], reference_analysis or {}, product_lock or {})
     validate_kie_video_input(data)
     return {"model": KIE_MODEL, "input": data}

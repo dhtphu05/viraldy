@@ -292,7 +292,7 @@ def _compile_scene(
         })
     shot_plan = {
         "targetDuration": duration,
-        "rawDurationFrames": 192,
+        "rawDurationFrames": unit.get("rawDurationFrames", 192),
         "targetDurationFrames": unit["targetDurationFrames"],
         "shotCount": len(shots),
         "shots": shots,
@@ -355,7 +355,7 @@ def _compile_scene(
         "sourceSegment": segment,
         "shotPlan": shot_plan,
         "targetDurationFrames": unit["targetDurationFrames"],
-        "rawDurationFrames": 192,
+        "rawDurationFrames": unit.get("rawDurationFrames", 192),
     }, analysis, product_lock)
 
 
@@ -595,7 +595,7 @@ async def initialize_timeline_project(
         "sceneMap": result["sceneMap"],
         "productLock": result["productLock"],
         "referenceAnalysis": result["referenceAnalysis"],
-        "audioRequired": False,
+        "audioRequired": bool(result["renderPlan"].get("audioRequired", False)),
         "projectName": previous.get("projectName", "Smart Remake"),
         "textOverlays": [],
         "sourceSceneMap": result["sourceSceneMap"],
@@ -634,7 +634,7 @@ async def initialize_timeline_project(
                 "index": index,
                 "startSecond": result["draftTimeline"]["items"][index]["targetStartFrame"] / 24,
                 "durationSeconds": unit["targetDurationFrames"] / 24,
-                "rawDurationFrames": 192,
+                "rawDurationFrames": unit["rawDurationFrames"],
                 "activeVersionId": None,
                 "versions": [],
                 **{key: unit[key] for key in ("prompt", "imagePrompt", "videoPrompt")},
@@ -728,6 +728,14 @@ async def compile_timeline_request(
             "SMART_REMAKE_INTAKE_REQUIRED", "Create an owned intake before analyzing media.", 409
         )
     duration = _duration(target_duration)
+    if duration == 12:
+        from .engine.config import get_kie_video_model
+
+        if not full_source or project_id is None or get_kie_video_model() != "wan/3-0-video":
+            raise AppError(
+                "SMART_REMAKE_VIDEO_DURATION_INVALID",
+                "Twelve-second output requires an owned, full-source Wan timeline.", 422,
+            )
     reference = await read_media(reference_video, "video/mp4")
     product = await read_media(product_image, "image/png")
     owned = (

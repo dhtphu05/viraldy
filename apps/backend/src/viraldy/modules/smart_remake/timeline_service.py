@@ -45,7 +45,7 @@ from .timeline_retention import (
     _release_reads,
     _remember_media,
 )
-from .timeline_schemas import RenderPlan
+from .timeline_schemas import RenderPlan, provider_window_frames
 
 
 def _validate_group_plan(plan: dict[str, Any], used_ids: set[str]) -> None:
@@ -85,14 +85,17 @@ def _validate_group_plan(plan: dict[str, Any], used_ids: set[str]) -> None:
     fixed = plan.get("groupingPolicy") == "fixed_provider_windows"
     if fixed:
         total_frames = sum(unit["targetDurationFrames"] for unit in plan["units"])
+        raw_frames = provider_window_frames(plan)
         if (
             plan.get("renderGroupBreaks")
-            or total_frames not in (192, 384)
-            or len(groups) != total_frames // 192
-            or any(group["targetDurationFrames"] != 192 for group in groups)
+            or total_frames not in (192, 288, 384)
+            or (raw_frames == 144 and plan.get("audioRequired") is not True)
+            or len(groups) != total_frames // raw_frames
+            or any(group["targetDurationFrames"] != raw_frames
+                   or group["rawDurationFrames"] != raw_frames for group in groups)
         ):
             raise ValueError(
-                "A fixed provider plan needs exactly one complete eight-second window per call."
+                "Each provider call must match one complete saved video window."
             )
     boundaries, cursor = [], 0
     for group in groups[:-1]:
@@ -451,7 +454,9 @@ async def enqueue_timeline_render(
                 context, state = apply_scene_prompt_drafts(context, state, prompt_drafts)
             if project_name is not None:
                 context["projectName"] = project_name[:200]
-            if audio_required is not None:
+            if context["renderPlan"].get("audioRequired") is True:
+                context["audioRequired"] = True
+            elif audio_required is not None:
                 context["audioRequired"] = audio_required
             expectations = build_generation_expectations(context)
             context.update(
@@ -515,10 +520,16 @@ async def retain_timeline_clip(
         None,
         metadata,
         source="generated",
-        audio_required=row.context_json["audioRequired"],
+        audio_required=bool(row.context_json["renderPlan"].get(
+            "audioRequired", row.context_json["audioRequired"],
+        )),
+        expected_duration=row.context_json["renderPlan"]["units"][index]["rawDurationFrames"] // 24,
     )
     info = await run_in_threadpool(probe_timeline_media, data)
-    version.update(rawDurationFrames=192, frameCount=info["frameCount"])
+    version.update(
+        rawDurationFrames=row.context_json["renderPlan"]["units"][index]["rawDurationFrames"],
+        frameCount=info["frameCount"],
+    )
     state = copy.deepcopy(before)
     scene, item = state["scenes"][index], state["draftTimeline"]["items"][index]
     scene["versions"] = [*scene["versions"], version]
@@ -607,9 +618,14 @@ async def retain_timeline_group_clip(
             None,
             {**metadata, **bounds},
             source="generated",
-            audio_required=current.context_json["audioRequired"],
+            audio_required=bool(current.context_json["renderPlan"].get(
+                "audioRequired", current.context_json["audioRequired"],
+            )),
+            expected_duration=group["rawDurationFrames"] // 24,
         )
-        version.update(rawDurationFrames=192, frameCount=info["frameCount"], **bounds)
+        version.update(
+            rawDurationFrames=group["rawDurationFrames"], frameCount=info["frameCount"], **bounds,
+        )
         item = items[scene["id"]]
         selection = {**item, "inFrame": segment["inFrame"], "outFrame": segment["outFrame"]}
         if segment["outFrame"] > info["frameCount"]:

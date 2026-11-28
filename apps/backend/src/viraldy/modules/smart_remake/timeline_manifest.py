@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .timeline_schemas import provider_window_frames
+
 
 def _require(condition: bool) -> None:
     if not condition:
@@ -52,6 +54,7 @@ def _provider_fragments(
     )
     adapted = source.get("timingMode") == "fit_target"
     units, items, scenes = plan["units"], timeline["items"], state["scenes"]
+    raw_frames = provider_window_frames(plan)
     _require(1 <= len(units) == len(items) == len(scenes))
     counts = {shot_id: sum(unit["sourceSceneId"] == shot_id for unit in units) for shot_id in shots}
     _require(all(counts.values()) and (adapted or all(count == 1 for count in counts.values())))
@@ -62,7 +65,7 @@ def _provider_fragments(
     offset, previous_source = 0, 0
     for index, (unit, item, scene) in enumerate(zip(units, items, scenes, strict=True)):
         shot_id, length = unit["sourceSceneId"], unit["targetDurationFrames"]
-        _require(shot_id in shots and type(length) is int and 1 <= length <= 192)
+        _require(shot_id in shots and type(length) is int and 1 <= length <= raw_frames)
         source_index = source_order[shot_id]
         _require(source_index in {previous_source, previous_source + 1})
         left, right = _fragment_ranges(
@@ -72,7 +75,7 @@ def _provider_fragments(
         _require(unit["id"] == scene["id"] == item["renderUnitId"])
         _require(item["sourceSceneId"] == shot_id)
         _require(type(unit["sceneIndex"]) is int and unit["sceneIndex"] == scene["index"] == index)
-        _require(unit["rawDurationFrames"] == 192)
+        _require(unit["rawDurationFrames"] == raw_frames)
         _require(item["targetDurationFrames"] == length and item["targetStartFrame"] == offset)
         for value in (unit["id"], item["id"]):
             _require(isinstance(value, str) and bool(value) and value not in ids)
@@ -95,7 +98,7 @@ def validate_timeline_structure(state: dict[str, Any], context: dict[str, Any]) 
     _require(source == context["sourceSceneMap"] and plan == context["renderPlan"])
     _require(source["fps"] == plan["fps"] == timeline["fps"] == 24)
     _require(plan["provider"] == state["provider"] == "kie")
-    _require(timeline["totalFrames"] in (192, 384))
+    _require(timeline["totalFrames"] in (192, 288, 384))
     _require(timeline["totalFrames"] == state["targetDuration"] * 24)
     ids: set[str] = set()
     shots = _source_ranges(source, timeline["totalFrames"], ids)

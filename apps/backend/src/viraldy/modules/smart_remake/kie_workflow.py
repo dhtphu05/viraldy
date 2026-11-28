@@ -30,6 +30,7 @@ from .engine.prompt_sanitizer import (
 )
 from .engine.schemas import RenderSmartRemakeInput, UploadedMedia
 from .engine.wan_video_adapter import WAN_VIDEO_MODEL
+from .engine.window_continuity import WINDOW_CONTINUITY_VERSION, build_window_context
 from .generation_budget import (
     character_reference,
     generation_execution_receipt,
@@ -348,6 +349,15 @@ class KieWorkflow:
                 raise ConflictError(
                     "SMART_REMAKE_RENDER_PLAN_CHANGED", "The saved render plan changed."
                 )
+        fresh_policy: dict[str, str] = {}
+        if (
+            not operation.result_json.get("images") and not operation.result_json.get("tasks")
+            and not operation.result_json.get("windowContinuityVersion")
+            and current.get("videoModel") == WAN_VIDEO_MODEL
+            and len(current.get("groups") or []) == 2
+            and all(group.get("rawDurationFrames") == 144 for group in current["groups"])
+        ):
+            fresh_policy = {"windowContinuityVersion": WINDOW_CONTINUITY_VERSION}
         if frozen is None or current.get("groups") or current.get("imageModel"):
             await self._save(
                 operation,
@@ -357,6 +367,7 @@ class KieWorkflow:
                     "renderPlanHash": _fingerprint(current),
                     "generationExpectations": snapshot,
                     "expectationsHash": expectations_hash(snapshot),
+                    **fresh_policy,
                 },
             )
         return dict(current)
@@ -393,12 +404,20 @@ class KieWorkflow:
         character = await character_reference(self.repair, row)
         plan = operation.result_json.get("renderPlan") or row.context_json.get("renderPlan") or {}
         current_plan = row.context_json.get("renderPlan") or {}
-        if (plan.get("videoModel"), plan.get("videoResolution") or "720P") != (
+        if (
+            plan.get("videoModel"), plan.get("videoResolution") or "720P",
+            plan.get("audioRequired"),
+            [(group["rawDurationFrames"], group["targetDurationFrames"])
+             for group in plan.get("groups") or []],
+        ) != (
             current_plan.get("videoModel"), current_plan.get("videoResolution") or "720P",
+            current_plan.get("audioRequired"),
+            [(group["rawDurationFrames"], group["targetDurationFrames"])
+             for group in current_plan.get("groups") or []],
         ):
             raise ConflictError(
                 "SMART_REMAKE_RENDER_PLAN_CHANGED",
-                "Reconcile submitted tasks before changing the video model or resolution.",
+                "Reconcile submitted tasks before changing the saved video settings or duration.",
             )
         if not plan.get("imageModel"):
             raise AppError(
@@ -434,9 +453,16 @@ class KieWorkflow:
         )
         # Validate the combined prompt before paid image edits. These public
         # literal placeholders are never fetched, uploaded or sent to KIE.
+        window_context = (
+            build_window_context(plan, group, snapshot)
+            if group is not None and operation.result_json.get("windowContinuityVersion")
+            == WINDOW_CONTINUITY_VERSION else None
+        )
         request = await asyncio.to_thread(
             conditioned_group_request, context=row.context_json, plan=plan, snapshot=snapshot,
             scenes=scenes, segments=segments, has_character_reference=bool(character),
+            duration_seconds=(group or plan["units"][index]).get("rawDurationFrames", 192) // 24,
+            window_context=window_context,
         )
         references: list[dict[str, Any]] = []
         from .image_workflow import prepare_scene_image
@@ -834,7 +860,16 @@ class KieWorkflow:
             request.get("baseVersionId"),
             metadata,
             source="regenerated",
-            audio_required=row.context_json["audioRequired"],
+            audio_required=bool(
+                (operation.result_json.get("renderPlan")
+                 or row.context_json.get("renderPlan") or {})
+                .get("audioRequired", row.context_json["audioRequired"])
+            ),
+            expected_duration=(
+                (operation.result_json.get("renderPlan") or row.context_json["renderPlan"])
+                ["units"][index].get("rawDurationFrames", 192) // 24
+                if row.state_json.get("schemaVersion") == 2 else 8
+            ),
         )
         if row.state_json.get("schemaVersion") == 2:
             from .timeline_media import probe_timeline_media
@@ -845,7 +880,10 @@ class KieWorkflow:
                 unit["targetDurationFrames"] for unit in plan["units"] if unit["id"] == scene["id"]
             )
             version.update(
-                rawDurationFrames=192,
+                rawDurationFrames=next(
+                    unit["rawDurationFrames"] for unit in plan["units"]
+                    if unit["id"] == scene["id"]
+                ),
                 frameCount=info["frameCount"],
                 suggestedInFrame=0,
                 suggestedOutFrame=target_frames,

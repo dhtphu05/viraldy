@@ -8,6 +8,7 @@ import re
 from collections import Counter
 from typing import Any, cast
 
+from .errors import SmartRemakeValidationError
 from .performer_continuity import performer_continuity_directions
 from .prompt_edits import scene_edit_directions
 
@@ -108,9 +109,63 @@ def video_requirements(context: dict[str, Any]) -> str:
     )
 
 
+def window_brief(context: dict[str, Any]) -> str:
+    """Describe this window's place in the film; all shot timestamps remain provider-local."""
+    part = context.get("partIndex")
+    if (
+        type(part) is not int or part not in {1, 2} or context.get("partCount") != 2
+        or context.get("totalDuration") != 12 or context.get("globalStart") != (part - 1) * 6
+        or context.get("globalEnd") != part * 6
+    ):
+        raise SmartRemakeValidationError(
+            "Window continuity must match the frozen two-part film.", "KIE_VALIDATION_FAILED",
+        )
+    parts = [
+        f"PART {part} OF 2: {context['globalStart']}–{context['globalEnd']} seconds of one "
+        "12-second film. The timestamps below are local to this part; perform only its assigned "
+        "scenes in order.",
+        "The supplied FIRST and LAST conditioning images are authoritative for boundary "
+        "physical state, pose and layout. State analysis summaries below are context only, "
+        "not verified instants; they cannot override the conditioning images when they conflict. "
+        "Preserve every interior timed action and its order.",
+        (
+            "Begin the film, then handoff to the following part; this is not a complete ending. "
+            "Do not add an outro, fade or concluding pose unless the analyzed scene explicitly "
+            "requires it."
+            if part == 1 else
+            "Continue the same film, not a new introduction, recap or reprise. Do not restart or "
+            "replay previous scenes; continue any unfinished action from the FIRST conditioning "
+            "image."
+        ),
+    ]
+    for key, label in (
+        ("previousAction", "Previously shown (context only, do not replay)"),
+        ("openingState", "Opening-state analysis summary (context only, not a verified instant)"),
+        ("finalState", "Final-state analysis summary (context only, not a verified instant)"),
+        ("nextOpeningState", "Next opening-state analysis summary "
+         "(context only, not a verified instant)"),
+        ("boundaryKind", "Source boundary evidence"),
+    ):
+        if isinstance(value := context.get(key), str) and value.strip():
+            parts.append(f"{label}: {value.strip()}")
+    parts.append(
+        "Retain the analyzed cuts and changes of camera or state; story continuity does not "
+        "mean an unbroken camera shot. Keep one consistent audio mood, rhythm and language; "
+        "do not restart a music or voice introduction in each part. Do not recite a whole-video "
+        "feature summary in this window."
+    )
+    dialogue = context.get("windowDialogue") or []
+    if dialogue:
+        parts.append("Dialogue evidence for this part only (no invented timestamps): "
+                     + _json(dialogue))
+    return "\n".join(parts)
+
+
+
 def video_brief(
     product: dict[str, Any], context: dict[str, Any], *, ending: bool,
     language: str | None = None, defaults: dict[str, str] | None = None,
+    duration_seconds: int = 8,
 ) -> str:
     identity = {key: product[key] for key in (
         "productName", "productType", "visualIdentity", "mustPreserve", "forbiddenErrors",
@@ -130,7 +185,8 @@ def video_brief(
         "mode", "music", "ambience", "dialogue", "language", "soundEffects",
     ) if audio.get(key)}
     return "\n\n".join(part for part in (
-        "Create exactly 8 seconds, vertical 9:16. The FIRST image is the exact opening frame. "
+        f"Create exactly {duration_seconds} seconds, vertical 9:16. "
+        "The FIRST image is the exact opening frame. "
         + ("The SECOND image is the exact final frame. " if ending else "")
         + "Follow every timed scene and action in order; retain analyzed cuts and continuous "
         "motion. Use split screen only where the scene explicitly calls for it. "

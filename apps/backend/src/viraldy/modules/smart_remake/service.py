@@ -106,10 +106,10 @@ def _duration(value: str) -> int:
         duration = int(value)
     except ValueError as exc:
         raise AppError(
-            "INVALID_SMART_REMAKE_DURATION", "Duration must be 8 or 16 seconds."
+            "INVALID_SMART_REMAKE_DURATION", "Duration must be 8, 12 or 16 seconds."
         ) from exc
-    if duration not in {8, 16}:
-        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8 or 16 seconds.")
+    if duration not in {8, 12, 16}:
+        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8, 12 or 16 seconds.")
     return duration
 
 
@@ -132,6 +132,11 @@ async def compile_request(
         raise AppError("SMART_REMAKE_DISABLED", "Smart Remake is disabled.", 503)
     if aspect_ratio != "9:16":
         raise AppError("INVALID_SMART_REMAKE_ASPECT_RATIO", "Smart Remake supports 9:16 only.")
+    if _duration(target_duration) == 12:
+        raise AppError(
+            "SMART_REMAKE_VIDEO_DURATION_INVALID",
+            "Twelve-second output requires an owned Wan timeline intake.", 422,
+        )
     reference = await read_media(reference_video, "video/mp4")
     product = await read_media(product_image, "image/png")
     resolved_product_url = product_url.strip() if product_url else None

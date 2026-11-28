@@ -17,12 +17,16 @@ def conditioned_group_request(
     scenes: list[dict[str, Any]],
     segments: list[dict[str, Any]],
     has_character_reference: bool,
+    duration_seconds: int = 8,
+    window_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     # These literal image placeholders are never fetched, uploaded or sent to KIE.
     request = build_group_request(
         model=plan.get("videoModel", "veo3_lite"),
         resolution=plan.get("videoResolution") or "720P",
-        audio=bool(context.get("audioRequired")),
+        duration_seconds=duration_seconds,
+        audio=bool(plan.get("audioRequired", context.get("audioRequired"))),
+        **({"window_context": window_context} if window_context is not None else {}),
         scenes=scenes,
         segments=segments,
         reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],

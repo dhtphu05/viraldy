@@ -25,8 +25,8 @@ def source_boundaries(analysis: dict[str, Any], *, total_frames: int) -> list[in
 def validate_source_excerpt(
     *, target_duration: int, source_frame_count: int, reference_start_frame: int
 ) -> int:
-    if type(target_duration) is not int or target_duration not in {8, 16}:
-        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8 or 16 seconds.")
+    if type(target_duration) is not int or target_duration not in {8, 12, 16}:
+        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8, 12 or 16 seconds.")
     total = target_duration * 24
     if (
         type(reference_start_frame) is not int
@@ -50,6 +50,15 @@ def build_timeline_plan(
     image_quality: str = "max",
     timing_mode: str = "source_rhythm",
 ) -> dict[str, Any]:
+    video_model = get_kie_video_model()
+    if target_duration == 12 and video_model != "wan/3-0-video":
+        raise AppError("SMART_REMAKE_VIDEO_DURATION_INVALID", "Twelve-second output requires Wan.")
+    if target_duration == 12 and timing_mode != "fit_target":
+        raise AppError(
+            "SMART_REMAKE_VIDEO_DURATION_INVALID",
+            "Twelve-second output requires a fitted Wan timeline.", 422,
+        )
+    raw_frames = 144 if target_duration == 12 else 192
     total, source_total = _timing_lengths(
         target_duration, source_frame_count, reference_start_frame, timing_mode
     )
@@ -66,7 +75,7 @@ def build_timeline_plan(
             "Cut boundaries must cover the analyzed source in increasing integer frames.",
         )
     source_lengths = [b - a for a, b in zip(cut_frames, cut_frames[1:], strict=False)]
-    if timing_mode == "source_rhythm" and any(length > 192 for length in source_lengths):
+    if timing_mode == "source_rhythm" and any(length > raw_frames for length in source_lengths):
         raise AppError(
             "SMART_REMAKE_TIMELINE_SCENE_TOO_LONG",
             "A source scene exceeds eight seconds. Choose an explicit cut before rendering.",
@@ -93,7 +102,9 @@ def build_timeline_plan(
     fragments = [
         unit
         for source, start in zip(sources, source_starts, strict=False)
-        for unit in _source_fragments(source, timing_mode, target_start_frame=start)
+        for unit in _source_fragments(
+            source, timing_mode, target_start_frame=start, raw_duration_frames=raw_frames,
+        )
     ]
     units = [{**unit, "sceneIndex": index} for index, unit in enumerate(fragments)]
     items = _timeline_items(units)
@@ -104,7 +115,6 @@ def build_timeline_plan(
             "SMART_REMAKE_RENDER_GROUPS_INVALID",
             "Image quality must be low, medium, high, xhigh or max.",
         )
-    video_model = get_kie_video_model()
     video_resolution = get_kie_video_resolution(video_model)
     return {
         "sourceSceneMap": SourceSceneMap.model_validate(
@@ -144,6 +154,7 @@ def build_timeline_plan(
                     else {}
                 ),
                 "videoModel": video_model,
+                **({"audioRequired": True} if target_duration == 12 else {}),
                 **({"videoResolution": video_resolution} if video_model == "wan/3-0-video" else {}),
                 "imageModel": "gpt-image-2.6-sunburst",
                 "imageQuality": image_quality,
@@ -189,8 +200,8 @@ def _timing_lengths(
         return total, total
     if timing_mode != "fit_target":
         raise AppError("SMART_REMAKE_TIMELINE_INVALID", "Unknown timeline timing mode.")
-    if type(target_duration) is not int or target_duration not in {8, 16}:
-        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8 or 16 seconds.")
+    if type(target_duration) is not int or target_duration not in {8, 12, 16}:
+        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8, 12 or 16 seconds.")
     if (
         type(source_frame_count) is not int
         or source_frame_count < 1
@@ -231,17 +242,18 @@ def _allocate_target_frames(source_lengths: list[int], total: int) -> list[int]:
 
 
 def _source_fragments(
-    source: dict[str, Any], timing_mode: str, *, target_start_frame: int
+    source: dict[str, Any], timing_mode: str, *, target_start_frame: int,
+    raw_duration_frames: int = 192,
 ) -> list[dict[str, Any]]:
     duration = source["targetDurationFrames"]
     boundaries = [
         0,
         *(
             [
-                frame * 192 - target_start_frame
+                frame * raw_duration_frames - target_start_frame
                 for frame in range(
-                    target_start_frame // 192 + 1,
-                    (target_start_frame + duration - 1) // 192 + 1,
+                    target_start_frame // raw_duration_frames + 1,
+                    (target_start_frame + duration - 1) // raw_duration_frames + 1,
                 )
             ]
             if timing_mode == "fit_target"
@@ -265,7 +277,7 @@ def _source_fragments(
         {
             "id": str(uuid4()),
             "sourceSceneId": source["id"],
-            "rawDurationFrames": 192,
+            "rawDurationFrames": raw_duration_frames,
             "targetDurationFrames": end - start,
             **(
                 {
@@ -314,14 +326,23 @@ def build_render_groups(
             "Group boundaries must be unique ordered scene positions before the final scene.",
         )
     groups: list[dict[str, Any]] = []
+    raw_frames = units[0].get("rawDurationFrames", 192) if units else 192
+    if raw_frames not in {144, 192} or any(
+        unit.get("rawDurationFrames", 192) != raw_frames
+        or not 0 < unit["targetDurationFrames"] <= raw_frames for unit in units
+    ):
+        raise AppError("SMART_REMAKE_RENDER_GROUPS_INVALID", "Provider window sizes must agree.")
     for index, unit in enumerate(units):
         length = unit["targetDurationFrames"]
-        if not groups or index in breaks or groups[-1]["targetDurationFrames"] + length > 192:
+        if (
+            not groups or index in breaks
+            or groups[-1]["targetDurationFrames"] + length > raw_frames
+        ):
             groups.append(
                 {
                     "id": str(uuid4()),
                     "renderUnitIds": [],
-                    "rawDurationFrames": 192,
+                    "rawDurationFrames": raw_frames,
                     "targetDurationFrames": 0,
                     "segments": [],
                 }

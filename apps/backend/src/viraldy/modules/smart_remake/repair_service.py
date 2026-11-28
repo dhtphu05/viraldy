@@ -67,6 +67,7 @@ def _new_version(
     *,
     source: str,
     audio_required: bool,
+    expected_duration: int = 8,
 ) -> dict[str, Any]:
     return {
         "id": str(uuid4()),
@@ -85,7 +86,9 @@ def _new_version(
             for field in ("generationExpectations", "expectationsHash")
             if field in metadata
         },
-        "technicalCheck": technical_check(data, expected_duration=8, audio_required=audio_required),
+        "technicalCheck": technical_check(
+            data, expected_duration=expected_duration, audio_required=audio_required
+        ),
     }
 
 
@@ -1005,8 +1008,13 @@ class RepairService:
         check = await run_in_threadpool(
             technical_check,
             data,
-            expected_duration=8,
-            audio_required=row.context_json["audioRequired"],
+            expected_duration=(
+                version.get("rawDurationFrames", 192) // 24
+                if row.state_json.get("schemaVersion") == 2 else 8
+            ),
+            audio_required=bool((row.context_json.get("renderPlan") or {}).get(
+                "audioRequired", row.context_json["audioRequired"],
+            )),
         )
         if check["mediaHash"] != version["mediaHash"]:
             check = {

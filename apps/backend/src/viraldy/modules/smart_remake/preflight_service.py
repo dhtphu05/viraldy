@@ -216,18 +216,20 @@ def _scope(
         and not any(block.action == "reconcile" for block in blockers)
         and (
             plan.get("groupingPolicy") != "fixed_provider_windows"
-            or duration not in {8, 16}
-            or len(groups) != duration // 8
+            or duration not in {8, 12, 16}
+            or (duration == 12 and (plan.get("videoModel") != "wan/3-0-video"
+                                   or plan.get("audioRequired") is not True))
+            or len(groups) != (2 if duration == 12 else duration // 8)
             or any(
-                group.get("rawDurationFrames") != 192
-                or group.get("targetDurationFrames") != 192
+                group.get("rawDurationFrames") != (144 if duration == 12 else 192)
+                or group.get("targetDurationFrames") != (144 if duration == 12 else 192)
                 for group in groups
             )
         )
     ):
         blockers.append(_block(
             "PROVIDER_PLAN_UPDATE_REQUIRED",
-            "Cập nhật kịch bản để tạo một lượt video cho 8 giây hoặc hai lượt cho 16 giây.",
+            "Cập nhật kịch bản để dùng đầy đủ các clip theo thời lượng đã chọn.",
         ))
     elif request.action == "repair":
         scene = _scene(state, request.sceneId)

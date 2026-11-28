@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from viraldy.shared.errors.base import AppError, ConflictError, NotFoundError
 
+from .engine.window_continuity import build_window_context
 from .generation_expectations import build_generation_expectations
 from .project_contracts import SmartRemakeRequirements
 from .provider_group_planning import freeze_provider_groups
@@ -80,6 +81,8 @@ async def preview_generation_prompts(
             scenes=[{**units[identity], **scenes[identity]} for identity in group["renderUnitIds"]],
             segments=group["segments"],
             has_character_reference=bool(context.get("characterKey")),
+            duration_seconds=group["rawDurationFrames"] // 24,
+            window_context=build_window_context(plan, group, snapshot),
         )
         groups.append(
             {

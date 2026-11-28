@@ -18,6 +18,7 @@ from .generation_expectations import (
 )
 from .provider_errors import public_provider_error_fields
 from .provider_execution import safe_provider_identifier, validated_execution_evidence
+from .timeline_schemas import provider_window_frames
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,18 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
     except (AppError, TypeError, ValueError):
         return None
     groups, units = plan["groups"], plan.get("units", [])
-    if row.state_json.get("targetDuration") not in {8, 16}:
+    duration = row.state_json.get("targetDuration")
+    if duration not in {8, 12, 16}:
         return None
-    if len(groups) != row.state_json["targetDuration"] // 8:
+    try:
+        raw_frames = provider_window_frames(plan)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if (
+        sum(unit["targetDurationFrames"] for unit in units) != duration * 24
+        or (duration == 12 and plan.get("audioRequired") is not True)
+        or len(groups) != duration * 24 // raw_frames
+    ):
         return None
     unit_ids = [unit.get("id") for unit in units]
     selected = []
@@ -80,8 +90,8 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
         cursor = 0
         if (
             not safe_provider_identifier(group.get("id"))
-            or group.get("rawDurationFrames") != 192
-            or group.get("targetDurationFrames") != 192
+            or group.get("rawDurationFrames") != raw_frames
+            or group.get("targetDurationFrames") != raw_frames
             or not group.get("renderUnitIds")
         ):
             return None
@@ -94,11 +104,11 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
                 type(end) is not int
                 or type(segment.get("inFrame")) is not int
                 or segment["inFrame"] != cursor
-                or not cursor < end <= 192
+                or not cursor < end <= raw_frames
             ):
                 return None
             cursor = end
-        if cursor != 192:
+        if cursor != raw_frames:
             return None
         selected.extend(group["renderUnitIds"])
     return plan if selected == unit_ids and len(set(selected)) == len(selected) else None
@@ -472,6 +482,7 @@ def _video_key(
     prefix = f"workspaces/{row.workspace_id}/smart-remake/{row.id}/"
     key, digest = versions[0].get("storageKey"), versions[0].get("mediaHash")
     frame_count = versions[0].get("frameCount")
+    raw_frames = group["rawDurationFrames"]
     if (
         not isinstance(key, str)
         or not key.startswith(prefix)
@@ -479,7 +490,7 @@ def _video_key(
         or not isinstance(digest, str)
         or re.fullmatch(r"[a-f0-9]{64}", digest) is None
         or type(frame_count) is not int
-        or frame_count < 192
+        or frame_count < raw_frames
     ):
         return None
     for version, segment in zip(versions, group["segments"], strict=True):
@@ -487,7 +498,7 @@ def _video_key(
             version.get("storageKey") != key
             or version.get("mediaHash") != digest
             or version.get("frameCount") != frame_count
-            or version.get("rawDurationFrames") != 192
+            or version.get("rawDurationFrames") != raw_frames
             or version.get("suggestedInFrame") != segment["inFrame"]
             or version.get("suggestedOutFrame") != segment["outFrame"]
             or version.get("technicalCheck", {}).get("status") != "passed"
