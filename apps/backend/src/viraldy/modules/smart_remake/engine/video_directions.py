@@ -161,7 +161,6 @@ def window_brief(context: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-
 def video_brief(
     product: dict[str, Any], context: dict[str, Any], *, ending: bool,
     language: str | None = None, defaults: dict[str, str] | None = None,

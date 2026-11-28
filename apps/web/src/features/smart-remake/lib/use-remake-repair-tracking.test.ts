@@ -101,6 +101,7 @@ it("restores an exact receipt and only exposes a candidate present in that scene
     calls.project.mockResolvedValue(fresh);
     const hook = harness(fresh);
     await waitFor(() => expect(hook.result.current.candidate?.versionId).toBe("c"));
+    expect(hook.result.current.candidate).toEqual({ projectId: "p", sceneId: "s", versionId: "c" });
     expect(calls.receipt).toHaveBeenCalledWith("w", "p", "key");
     await act(() => hook.result.current.acknowledgeCandidate("viewed"));
     expect(hook.result.current.candidate).toBeNull();
@@ -268,4 +269,251 @@ it("does not reopen a completed repair that was already viewed", async () => {
     await act(() => hook.result.current.refresh());
     expect(calls.project).not.toHaveBeenCalled();
     expect(onProject).not.toHaveBeenCalled();
+});
+
+const affectedVersions = [
+    { sceneId: "s", baseVersionId: "v", candidateVersionId: "c" },
+    { sceneId: "sibling", baseVersionId: "sibling-base", candidateVersionId: "sibling-candidate" },
+];
+const repairBaseTimeline = affectedVersions.map((binding, index) => ({
+    renderUnitId: binding.sceneId,
+    versionId: binding.baseVersionId,
+    inFrame: index * 48,
+    outFrame: (index + 1) * 48,
+}));
+const groupReceipt = {
+    operationId: "group-op",
+    sceneId: "s",
+    baseVersionId: "v",
+    candidateVersionId: "c",
+    status: "completed",
+    needsReconciliation: false,
+    repairScope: "provider_group",
+    renderGroupId: "group",
+    affectedVersions,
+};
+function groupProject() {
+    return {
+        ...project,
+        draftTimeline: {
+            fps: 24,
+            totalFrames: 96,
+            items: repairBaseTimeline.map((item) => ({ ...item })),
+        },
+        scenes: affectedVersions.map((binding) => ({
+            id: binding.sceneId,
+            activeVersionId: binding.baseVersionId,
+            versions: [
+                { id: binding.baseVersionId, parentVersionId: null },
+                {
+                    id: binding.candidateVersionId,
+                    parentVersionId: binding.baseVersionId,
+                    providerMetadata: {
+                        repairScope: "provider_group",
+                        renderGroupId: "group",
+                        repairOperationId: "group-op",
+                        repairAffectedVersions: affectedVersions,
+                        repairBaseTimeline,
+                    },
+                },
+            ],
+        })),
+    } as unknown as SmartRemakeProject;
+}
+it("recovers exact provider-group bindings and exposes the whole repair candidate", async () => {
+    calls.list.mockResolvedValue([{ ...marker, repairScope: "provider_group" }]);
+    calls.receipt.mockResolvedValue({ receipt: groupReceipt });
+    const hook = harness(groupProject());
+    await waitFor(() =>
+        expect(hook.result.current.candidate).toEqual({
+            projectId: "p",
+            sceneId: "s",
+            versionId: "c",
+            operationId: "group-op",
+            repairScope: "provider_group",
+            renderGroupId: "group",
+            affectedVersions,
+        }),
+    );
+    expect(calls.update).toHaveBeenCalledWith(
+        scope,
+        "key",
+        expect.objectContaining({
+            repairScope: "provider_group",
+            renderGroupId: "group",
+            affectedVersions,
+        }),
+    );
+    expect(calls.write).not.toHaveBeenCalled();
+});
+it("upgrades a completed legacy group marker using its exact receipt after reload", async () => {
+    calls.list.mockResolvedValue([
+        { ...marker, status: "completed", operationId: "group-op", candidateVersionId: "c" },
+    ]);
+    calls.receipt.mockResolvedValue({ receipt: groupReceipt });
+    const hook = harness(groupProject());
+    await waitFor(() => expect(calls.receipt).toHaveBeenCalledWith("w", "p", "key"));
+    await waitFor(() =>
+        expect(hook.result.current.candidate).toMatchObject({
+            repairScope: "provider_group",
+            affectedVersions,
+        }),
+    );
+    expect(calls.write).not.toHaveBeenCalled();
+});
+it.each([
+    { repairScope: undefined },
+    { renderGroupId: "different" },
+    {
+        affectedVersions: [
+            { ...affectedVersions[0], baseVersionId: "different" },
+            affectedVersions[1],
+        ],
+    },
+    {
+        affectedVersions: [
+            affectedVersions[0],
+            { ...affectedVersions[1], baseVersionId: "different" },
+        ],
+    },
+    { affectedVersions: [affectedVersions[0], affectedVersions[0]] },
+])("rejects a changed provider-group receipt identity before storing: %j", async (patch) => {
+    calls.list.mockResolvedValue([
+        { ...marker, repairScope: "provider_group", renderGroupId: "group", affectedVersions },
+    ]);
+    calls.receipt.mockResolvedValue({ receipt: { ...groupReceipt, ...patch } });
+    const hook = harness(groupProject());
+    await waitFor(() => expect(hook.result.current.error).toContain("không khớp"));
+    expect(calls.update).not.toHaveBeenCalled();
+    expect(hook.result.current.candidate).toBeNull();
+});
+it("retains nullable candidate bindings while a group repair is queued", async () => {
+    calls.list.mockResolvedValue([{ ...marker, repairScope: "provider_group" }]);
+    const queuedBindings = affectedVersions.map((binding) => ({
+        ...binding,
+        candidateVersionId: null,
+    }));
+    calls.receipt.mockResolvedValue({
+        receipt: {
+            ...groupReceipt,
+            status: "queued",
+            candidateVersionId: null,
+            affectedVersions: queuedBindings,
+        },
+    });
+    const hook = harness(groupProject());
+    await waitFor(() =>
+        expect(calls.update).toHaveBeenCalledWith(
+            scope,
+            "key",
+            expect.objectContaining({ status: "running", affectedVersions: queuedBindings }),
+        ),
+    );
+    expect(hook.result.current.candidate).toBeNull();
+    expect(hook.result.current.unresolved).toBe(true);
+});
+it.each([
+    { renderGroupId: "different" },
+    { affectedVersions: [affectedVersions[0]] },
+    { operationId: "different" },
+    { operationId: "" },
+    { operationId: undefined },
+])(
+    "does not bind a first group receipt that contradicts an existing candidate: %j",
+    async (patch) => {
+        calls.list.mockResolvedValue([{ ...marker, repairScope: "provider_group" }]);
+        calls.receipt.mockResolvedValue({ receipt: { ...groupReceipt, ...patch } });
+        const hook = harness(groupProject());
+        await waitFor(() => expect(hook.result.current.error).toContain("không khớp"));
+        expect(calls.update).not.toHaveBeenCalled();
+        expect(hook.result.current.candidate).toBeNull();
+    },
+);
+it.each([
+    "missing-member",
+    "wrong-parent",
+    "wrong-operation",
+    "wrong-group",
+    "wrong-member-bindings",
+])("does not expose a group candidate with %s", async (problem) => {
+    calls.list.mockResolvedValue([{ ...marker, ...groupReceipt }]);
+    const current = groupProject();
+    const sibling = current.scenes[1];
+    if (problem === "missing-member") sibling.versions = sibling.versions.slice(0, 1);
+    if (problem === "wrong-parent") sibling.versions[1].parentVersionId = "unrelated";
+    if (problem === "wrong-operation")
+        (
+            sibling.versions[1] as unknown as { providerMetadata: { repairOperationId: string } }
+        ).providerMetadata.repairOperationId = "unrelated";
+    if (problem === "wrong-group")
+        (
+            sibling.versions[1] as unknown as { providerMetadata: { renderGroupId: string } }
+        ).providerMetadata.renderGroupId = "unrelated";
+    if (problem === "wrong-member-bindings")
+        (
+            sibling.versions[1] as unknown as {
+                providerMetadata: { repairAffectedVersions: unknown[] };
+            }
+        ).providerMetadata.repairAffectedVersions = [affectedVersions[0]];
+    const hook = harness(current);
+    await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+    expect(hook.result.current.candidate).toBeNull();
+});
+it("keeps a completed group marker unresolved when its exact receipt is missing", async () => {
+    calls.list.mockResolvedValue([
+        { ...marker, status: "completed", operationId: "group-op", candidateVersionId: "c" },
+    ]);
+    const hook = harness(groupProject());
+    await waitFor(() => expect(calls.receipt).toHaveBeenCalled());
+    await waitFor(() => expect(hook.result.current.unresolved).toBe(true));
+    expect(hook.result.current.candidate).toBeNull();
+    expect(calls.write).not.toHaveBeenCalled();
+});
+it.each([0, 1])(
+    "does not offer a completed group candidate after member %i trim changes",
+    async (memberIndex) => {
+        calls.list.mockResolvedValue([{ ...marker, ...groupReceipt }]);
+        const current = groupProject();
+        const changed = {
+            ...current,
+            draftTimeline: {
+                ...current.draftTimeline!,
+                items: current.draftTimeline!.items.map((item, index) =>
+                    index === memberIndex
+                        ? { ...item, inFrame: item.inFrame + 1, outFrame: item.outFrame + 1 }
+                        : item,
+                ),
+            },
+        };
+        const hook = harness(changed);
+        await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+        expect(hook.result.current.candidate).toBeNull();
+        expect(hook.result.current.unresolved).toBe(false);
+        expect(calls.receipt).not.toHaveBeenCalled();
+    },
+);
+it("records a completed group receipt as terminal even when the current trim is stale", async () => {
+    calls.list.mockResolvedValue([{ ...marker, repairScope: "provider_group" }]);
+    calls.receipt.mockResolvedValue({ receipt: groupReceipt });
+    const current = groupProject();
+    const changed = {
+        ...current,
+        draftTimeline: {
+            ...current.draftTimeline!,
+            items: current.draftTimeline!.items.map((item) => ({
+                ...item,
+                inFrame: item.inFrame + 1,
+            })),
+        },
+    };
+    const hook = harness(changed);
+    await waitFor(() =>
+        expect(calls.update).toHaveBeenCalledWith(
+            scope,
+            "key",
+            expect.objectContaining({ status: "completed", affectedVersions }),
+        ),
+    );
+    await waitFor(() => expect(hook.result.current.unresolved).toBe(false));
+    expect(hook.result.current.candidate).toBeNull();
 });

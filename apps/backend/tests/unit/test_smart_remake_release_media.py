@@ -71,7 +71,7 @@ def _lower_frame(path: Path, frame: int) -> bytes:
     return decoded.stdout
 
 
-@pytest.mark.parametrize(("frames", "audio"), [(192, True), (384, False)])
+@pytest.mark.parametrize(("frames", "audio"), [(192, True), (288, True), (384, False)])
 def test_real_export_burns_visible_label_and_preserves_technical_contract(tmp_path, frames, audio):
     source = _video(tmp_path, frames=frames, audio=audio)
     output, check = export_media.export_labeled_media(

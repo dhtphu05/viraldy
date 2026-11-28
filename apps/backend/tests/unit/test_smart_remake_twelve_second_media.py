@@ -193,6 +193,23 @@ def test_retained_product_manifest_is_owned_and_preserves_frozen_hash():
         require_generation_expectations(data)
 
 
+def test_real_owned_product_views_require_refreshing_a_legacy_single_photo_snapshot():
+    data = context(target_duration=8)
+    before = copy.deepcopy(data["generationExpectations"])
+    data["p0"]["additionalProductReferences"] = [{
+        "role": "product", "storageKey": "private-owned-view", "mimeType": "image/png",
+        "mediaHash": "c" * 64,
+    }]
+    current = build_generation_expectations(data)
+    assert current["productReferenceHashes"] == [data["productMediaHash"], "c" * 64]
+    assert data["generationExpectations"] == before
+    with pytest.raises(AppError):
+        require_generation_expectations(data)
+    # An explicit new compile can freeze all views without reusing the old snapshot.
+    data.pop("generationExpectations")
+    assert build_generation_expectations(data) == current
+
+
 @pytest.mark.parametrize(
     "provider,scope,owned",
     [

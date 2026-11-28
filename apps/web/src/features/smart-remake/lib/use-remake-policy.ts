@@ -61,6 +61,9 @@ interface PolicyOptions {
     isLocked(): boolean;
 }
 
+const sameProductAngles = (left: File[] = [], right: File[] = []) =>
+    left.length === right.length && left.every((file, index) => file === right[index]);
+
 export function useRemakePolicy({
     workspaceId,
     project,
@@ -86,6 +89,7 @@ export function useRemakePolicy({
     const intakeAttempt = useRef<{
         source: File;
         product: File | undefined;
+        additionalProducts?: File[];
         productUrl?: string;
         character: File | null;
         metadataHash: string;
@@ -95,27 +99,38 @@ export function useRemakePolicy({
     } | null>(null);
     async function restoreIntakeBinding(
         saved: SmartRemakeProject,
-        inputs: { video: File | null; product?: File; productUrl?: string; character: File | null },
+        inputs: {
+            video: File | null;
+            product?: File;
+            additionalProducts?: File[];
+            productUrl?: string;
+            character: File | null;
+        },
         isCurrent: () => boolean = () => true,
     ): Promise<boolean> {
         const expected = saved.inputMediaHashes;
         if (!expected || !inputs.video || !inputs.product || (project && saved.id !== project.id))
             return false;
-        const [source, product, character] = await Promise.all([
+        const [source, product, character, additionalProducts] = await Promise.all([
             hashRemakeFile(inputs.video),
             hashRemakeFile(inputs.product),
             inputs.character ? hashRemakeFile(inputs.character) : null,
+            Promise.all((inputs.additionalProducts ?? []).map(hashRemakeFile)),
         ]);
         if (!isCurrent()) return false;
         if (
             source !== expected.source ||
             product !== expected.product ||
-            character !== (expected.character ?? null)
+            character !== (expected.character ?? null) ||
+            JSON.stringify(additionalProducts) !== JSON.stringify(expected.additionalProducts ?? [])
         )
             return false;
         intakeAttempt.current = {
             source: inputs.video,
             product: inputs.product,
+            additionalProducts: inputs.additionalProducts
+                ? [...inputs.additionalProducts]
+                : undefined,
             productUrl: inputs.productUrl,
             character: inputs.character,
             metadataHash: "",
@@ -129,6 +144,7 @@ export function useRemakePolicy({
     async function prepareProject({
         video,
         product,
+        additionalProducts = [],
         productUrl,
         productImageUrl,
         duration,
@@ -136,16 +152,19 @@ export function useRemakePolicy({
     }: {
         video: File | null;
         product?: File;
+        additionalProducts?: File[];
         productUrl?: string;
         productImageUrl?: string;
         duration: 8 | 12 | 16;
         snapshot?: RemakeActionSnapshot;
     }): Promise<SmartRemakeProject> {
+        if (additionalProducts.length > 13)
+            throw new Error("Tối đa 14 ảnh sản phẩm. Xóa bớt ảnh rồi thử lại nhé.");
         if (!video && project && project.targetDuration !== duration)
             throw new Error(
                 "Thêm lại video mẫu để tạo dự án với thời lượng mới. Dự án trước vẫn được giữ.",
             );
-        if (!video && (product || productUrl || characterFile))
+        if (!video && (product || additionalProducts.length || productUrl || characterFile))
             throw new Error(
                 "Thêm lại video mẫu để lưu bộ tư liệu mới trước khi phân tích. Tư liệu cũ vẫn được giữ.",
             );
@@ -164,6 +183,7 @@ export function useRemakePolicy({
             project.targetDuration === duration &&
             previous.source === video &&
             previous.product === product &&
+            sameProductAngles(previous.additionalProducts, additionalProducts) &&
             previous.productUrl === productUrl &&
             previous.character === characterFile;
         if (video && !reusesLocalInputs) {
@@ -171,6 +191,7 @@ export function useRemakePolicy({
                 !previous ||
                 previous.source !== video ||
                 previous.product !== product ||
+                !sameProductAngles(previous.additionalProducts, additionalProducts) ||
                 previous.productUrl !== productUrl ||
                 previous.character !== characterFile ||
                 previous.metadataHash !== metadataHash
@@ -178,6 +199,7 @@ export function useRemakePolicy({
                 intakeAttempt.current = {
                     source: video,
                     product,
+                    additionalProducts: [...additionalProducts],
                     productUrl: productUrl,
                     character: characterFile,
                     metadataHash,
@@ -207,6 +229,9 @@ export function useRemakePolicy({
                 },
                 referenceVideo: video,
                 productImage: upload,
+                ...(additionalProducts.length
+                    ? { additionalProductImages: additionalProducts }
+                    : {}),
                 ...(characterFile ? { characterImage: characterFile } : {}),
             });
             owned = created.project;
@@ -483,6 +508,7 @@ export function useRemakePolicy({
             product: File | undefined,
             productUrl: string | undefined,
             duration: 8 | 12 | 16,
+            additionalProducts: File[] = [],
         ) =>
             !video ||
             Boolean(
@@ -490,6 +516,7 @@ export function useRemakePolicy({
                 project?.targetDuration === duration &&
                 intakeAttempt.current?.source === video &&
                 intakeAttempt.current?.product === product &&
+                sameProductAngles(intakeAttempt.current?.additionalProducts, additionalProducts) &&
                 intakeAttempt.current?.productUrl === productUrl &&
                 intakeAttempt.current?.character === characterFile,
             ),

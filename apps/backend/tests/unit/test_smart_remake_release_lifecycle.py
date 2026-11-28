@@ -18,6 +18,27 @@ from viraldy.modules.smart_remake.release_policy import create_approval, validat
 from viraldy.shared.errors.base import AppError
 
 
+def test_current_release_accepts_verified_twelve_second_frame_count():
+    from viraldy.modules.smart_remake.release_policy import _current
+
+    timeline = {"fps": 24, "totalFrames": 288, "items": [
+        {"targetStartFrame": 0, "targetDurationFrames": 144, "inFrame": 0, "outFrame": 144},
+        {"targetStartFrame": 144, "targetDurationFrames": 144, "inFrame": 0, "outFrame": 144},
+    ]}
+    manifest = {"timeline": timeline}
+    assembly = {
+        "id": "twelve-second-preview", "timeline": timeline, "manifest": manifest,
+        "manifestHash": content_hash(manifest), "constraintsHash": "constraints",
+        "mediaHash": "verified-output",
+        "technicalCheck": {"status": "passed", "frameCount": 288, "mediaHash": "verified-output"},
+    }
+    p0 = {"assemblies": {"activeAssemblyId": assembly["id"], "records": [assembly]}}
+    assert _current(
+        p0, assembly_id=assembly["id"], constraints_hash="constraints",
+        current_manifest_hash=assembly["manifestHash"], rights_valid=True,
+    ) == assembly
+
+
 @pytest.fixture
 def assembled():
     timeline = {

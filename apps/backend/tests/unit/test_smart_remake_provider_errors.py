@@ -70,15 +70,15 @@ def test_public_projection_limits_messages_and_rejects_invalid_status_and_code()
 
 
 @pytest.mark.parametrize("message", [
-    "Rejected https://cdn.test/file?token='PRIVATE' end",
-    'Rejected requestBody={"private": "PRIVATE"}',
+    "Rejected https://cdn.test/file?token='REDACT_ME' end",
+    'Rejected requestBody={"private": "REDACT_ME"}',
 ])
 def test_quoted_url_tokens_and_camel_case_body_echoes_are_not_public(message):
     from viraldy.modules.smart_remake.provider_errors import sanitize_provider_error
 
     result = sanitize_provider_error({"providerMessage": message})
     assert "Rejected" in result["providerMessage"]
-    assert "PRIVATE" not in result["providerMessage"]
+    assert "REDACT_ME" not in result["providerMessage"]
 
 
 @pytest.mark.parametrize("code,secrets", [

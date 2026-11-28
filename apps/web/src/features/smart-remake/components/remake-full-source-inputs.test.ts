@@ -70,6 +70,7 @@ describe("full-source intake", () => {
         expect(screen.queryByRole("alert")).toBeNull();
         expect(screen.getByText("16 giây")).toBeTruthy();
         expect(screen.getByText("Thời lượng dự án đã lưu · Video dọc 9:16")).toBeTruthy();
+        expect(screen.queryByText(/2 clip × 6 giây|Có âm thanh/)).toBeNull();
     });
 
     it("updates the source duration after media metadata has loaded", () => {

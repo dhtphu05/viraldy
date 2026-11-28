@@ -63,6 +63,8 @@ def assembly_expectations(
                 base = copy.deepcopy(snapshot)
             if any(snapshot[key] != base[key] for key in ("productLock", "references")):
                 raise ValueError("Selected clips have incompatible product references.")
+            if snapshot.get("productReferenceHashes") != base.get("productReferenceHashes"):
+                raise ValueError("Selected clips have incompatible product views.")
             expectation = copy.deepcopy(
                 next(s for s in snapshot["scenes"] if s["renderUnitId"] == item["renderUnitId"])
             )
@@ -84,6 +86,8 @@ def assembly_expectations(
         ):
             raise ValueError("The product/source references changed.")
         current = build_generation_expectations(context)
+        if current.get("productReferenceHashes") != base.get("productReferenceHashes"):
+            raise ValueError("The product views changed.")
         if current["productLock"] != base["productLock"]:
             raise AppError(
                 "SMART_REMAKE_EXPECTATIONS_REQUIRED",
@@ -197,6 +201,7 @@ def record_assembly(
     actor_id: str,
     operation_id: str,
     context: dict[str, Any] | None = None,
+    review_mode: str | None = None,
 ) -> dict[str, Any]:
     manifest = assembly_manifest(timeline, state)
     expectations = (
@@ -263,6 +268,7 @@ def record_assembly(
         "actorId": str(actor_id),
         "operationId": str(operation_id),
         "createdAt": now_iso(),
+        **({"reviewMode": review_mode} if review_mode == "whole_video" else {}),
         **(
             {
                 "generationExpectations": expectations,

@@ -147,6 +147,9 @@ describe("durable repair submission markers", () => {
         const drafts = store();
         const initial = await drafts.writeSubmissionMarker(scope, marker);
         expect(initial.status).toBe("awaiting_receipt");
+        expect(initial).not.toHaveProperty("repairScope");
+        expect(initial).not.toHaveProperty("renderGroupId");
+        expect(initial).not.toHaveProperty("affectedVersions");
         expect(await drafts.readSubmissionMarker(scope, marker.requestKey)).toEqual(initial);
         expect(
             await drafts.readSubmissionMarker({ ...scope, accountId: "other" }, marker.requestKey),
@@ -177,6 +180,60 @@ describe("durable repair submission markers", () => {
         await expect(
             drafts.updateSubmissionMarker(scope, "missing", { status: "running" }),
         ).rejects.toMatchObject({ code: "aborted" });
+        drafts.close();
+    });
+    it("persists exact group bindings and refuses replacing their scope or member bases", async () => {
+        const drafts = store();
+        const affectedVersions = [
+            { sceneId: "scene", baseVersionId: "version-1", candidateVersionId: null },
+            { sceneId: "sibling", baseVersionId: "version-2", candidateVersionId: null },
+        ];
+        await drafts.writeSubmissionMarker(scope, {
+            ...marker,
+            repairScope: "provider_group",
+            renderGroupId: "group",
+            affectedVersions,
+        });
+        const completedBindings = affectedVersions.map((binding, index) => ({
+            ...binding,
+            candidateVersionId: `candidate-${index}`,
+        }));
+        const completed = await drafts.updateSubmissionMarker(scope, marker.requestKey, {
+            status: "completed",
+            operationId: "operation",
+            candidateVersionId: "candidate-0",
+            repairScope: "provider_group",
+            renderGroupId: "group",
+            affectedVersions: completedBindings,
+        });
+        expect(
+            (await drafts.readSubmissionMarker(scope, marker.requestKey))?.affectedVersions,
+        ).toEqual(completedBindings);
+        await expect(
+            drafts.updateSubmissionMarker(scope, marker.requestKey, { renderGroupId: "other" }),
+        ).rejects.toMatchObject({ code: "conflict" });
+        await expect(
+            drafts.updateSubmissionMarker(scope, marker.requestKey, {
+                affectedVersions: [
+                    { ...completedBindings[0], baseVersionId: "other" },
+                    completedBindings[1],
+                ],
+            }),
+        ).rejects.toMatchObject({ code: "conflict" });
+        await expect(
+            drafts.writeSubmissionMarker(scope, {
+                ...marker,
+                repairScope: "provider_group",
+                renderGroupId: "other",
+                affectedVersions,
+            }),
+        ).rejects.toMatchObject({ code: "conflict" });
+        const stalePoll = await drafts.updateSubmissionMarker(scope, marker.requestKey, {
+            status: "running",
+            affectedVersions,
+        });
+        expect(stalePoll.affectedVersions).toEqual(completed.affectedVersions);
+        expect(stalePoll.status).toBe("completed");
         drafts.close();
     });
 });

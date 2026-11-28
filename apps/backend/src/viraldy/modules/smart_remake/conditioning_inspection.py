@@ -16,6 +16,7 @@ from viraldy.shared.errors.base import AppError
 from .budgeted_analysis import inspection_invoke
 from .generation_budget import require_generation_policy
 from .generation_expectations import expectations_hash, validate_generation_expectations
+from .product_references import product_reference_assets
 from .project_policy import constraints_hash, policy_hash, stable_hash
 from .repair_media import now_iso
 from .timeline_media import probe_timeline_media
@@ -50,6 +51,7 @@ def _snapshot(row: Any, image: dict[str, Any], binding: dict[str, Any]) -> dict[
     )
     scene_id = binding.get("imageSceneId")
     scene = next((s for s in value["scenes"] if s["renderUnitId"] == scene_id), None)
+    product_views = product_reference_assets(row.context_json)
     if (
         scene is None
         or image.get("renderUnitId") != scene_id
@@ -57,6 +59,8 @@ def _snapshot(row: Any, image: dict[str, Any], binding: dict[str, Any]) -> dict[
         or image.get("openingFrame") != scene["openingFrame"]
         or image.get("expectationsHash") != binding["expectationsHash"]
         or value["requirementsHash"] != expectations_hash(p0["requirements"])
+        or value.get("productReferenceHashes", [value["references"]["product"]["mediaHash"]])
+        != [asset.get("mediaHash") for asset in product_views]
     ):
         raise _error("CONTEXT_INVALID", "Conditioning needs its exact frozen scene expectations.")
     manifest = {"protocolVersion": "conditioning-p0-v2", "image": image, "binding": binding}
@@ -79,9 +83,16 @@ def _snapshot(row: Any, image: dict[str, Any], binding: dict[str, Any]) -> dict[
         "timeline": {},
         "manifest": manifest,
         "references": {
-            role: copy.deepcopy(p0["assets"][role])
-            for role in ("source", "product", "character")
-            if role in p0["assets"]
+            **{
+                role: copy.deepcopy(p0["assets"][role])
+                for role in ("source", "product", "character")
+                if role in p0["assets"]
+            },
+            **{
+                f"product-reference-{index + 1}": {**copy.deepcopy(asset), "role": "product"}
+                for index, asset in enumerate(product_views)
+                if index > 0
+            },
         },
     }
 
@@ -222,8 +233,8 @@ async def check_conditioning_images(
             repair, image, "conditioning-" + image["requestHash"], "conditioning"
         )
         references = [
-            await _read_owned(repair, value, role, role)
-            for role, value in snapshot["references"].items()
+            await _read_owned(repair, value, identity, value.get("role", identity))
+            for identity, value in snapshot["references"].items()
         ]
         constraints = {
             key: snapshot[key]

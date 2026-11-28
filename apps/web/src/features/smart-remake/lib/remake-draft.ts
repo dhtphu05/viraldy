@@ -126,6 +126,26 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
         };
     });
 }
+function repairBindingConflict(
+    previous: RemakeSubmissionMarker["affectedVersions"],
+    next: RemakeSubmissionMarker["affectedVersions"],
+) {
+    return Boolean(
+        previous &&
+        next &&
+        (previous.length !== next.length ||
+            previous.some((binding, index) => {
+                const replacement = next[index];
+                return (
+                    binding.sceneId !== replacement.sceneId ||
+                    binding.baseVersionId !== replacement.baseVersionId ||
+                    (binding.candidateVersionId &&
+                        replacement.candidateVersionId &&
+                        binding.candidateVersionId !== replacement.candidateVersionId)
+                );
+            })),
+    );
+}
 export function createRemakeDraftStore(
     options: { factory?: IDBFactory | null; databaseName?: string } = {},
 ) {
@@ -388,7 +408,14 @@ export function createRemakeDraftStore(
                 (old.requestFingerprint !== input.requestFingerprint ||
                     old.projectId !== input.projectId ||
                     old.sceneId !== input.sceneId ||
-                    old.baseVersionId !== input.baseVersionId)
+                    old.baseVersionId !== input.baseVersionId ||
+                    (old.repairScope &&
+                        input.repairScope &&
+                        old.repairScope !== input.repairScope) ||
+                    (old.renderGroupId &&
+                        input.renderGroupId &&
+                        old.renderGroupId !== input.renderGroupId) ||
+                    repairBindingConflict(old.affectedVersions, input.affectedVersions))
             ) {
                 conflict = true;
                 transaction.abort();
@@ -442,17 +469,38 @@ export function createRemakeDraftStore(
                 (old.operationId && patch.operationId && old.operationId !== patch.operationId) ||
                 (old.candidateVersionId &&
                     patch.candidateVersionId &&
-                    old.candidateVersionId !== patch.candidateVersionId)
+                    old.candidateVersionId !== patch.candidateVersionId) ||
+                (old.repairScope && patch.repairScope && old.repairScope !== patch.repairScope) ||
+                (old.renderGroupId &&
+                    patch.renderGroupId &&
+                    old.renderGroupId !== patch.renderGroupId) ||
+                repairBindingConflict(old.affectedVersions, patch.affectedVersions)
             ) {
                 conflict = true;
                 transaction.abort();
                 return;
             }
+            const affectedVersions = old.affectedVersions
+                ? old.affectedVersions.map((binding, index) => ({
+                      ...binding,
+                      candidateVersionId:
+                          binding.candidateVersionId ??
+                          patch.affectedVersions?.[index].candidateVersionId ??
+                          null,
+                  }))
+                : patch.affectedVersions;
             result = {
                 ...old,
                 ...patch,
                 operationId: old.operationId ?? patch.operationId ?? null,
                 candidateVersionId: old.candidateVersionId ?? patch.candidateVersionId ?? null,
+                ...((old.repairScope ?? patch.repairScope)
+                    ? { repairScope: old.repairScope ?? patch.repairScope }
+                    : {}),
+                ...((old.renderGroupId ?? patch.renderGroupId)
+                    ? { renderGroupId: old.renderGroupId ?? patch.renderGroupId }
+                    : {}),
+                ...(affectedVersions ? { affectedVersions } : {}),
                 status: old.status === "completed" ? "completed" : (patch.status ?? old.status),
                 key: old.key,
                 scope: old.scope,

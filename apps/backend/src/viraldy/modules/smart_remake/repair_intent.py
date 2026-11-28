@@ -15,6 +15,7 @@ from .generation_expectations import expectations_scene, require_generation_expe
 from .repair_schemas import RepairApiModel, RepairIntent
 
 NORMALIZER_VERSION = "repair-intent-normalizer-v1"
+GROUP_NORMALIZER_VERSION = "repair-group-intent-normalizer-v1"
 PROMPT_FIELDS = ("prompt", "imagePrompt", "videoPrompt")
 
 
@@ -54,6 +55,23 @@ class RepairNormalizationResult(RepairApiModel):
     def matching_result(self) -> RepairNormalizationResult:
         if (self.status == "accepted") != (self.scenePatch is not None):
             raise ValueError("Only accepted repairs contain a scene patch.")
+        return self
+
+
+class RepairGroupUnitPatch(RepairApiModel):
+    unitIndex: int = Field(ge=0, strict=True)
+    scenePatch: RepairScenePatch
+
+
+class RepairGroupNormalizationResult(RepairApiModel):
+    status: Literal["accepted", "conflict", "insufficient_evidence"]
+    reason: str = Field(min_length=1, max_length=2000)
+    scenePatches: list[RepairGroupUnitPatch] | None = Field(default=None, max_length=144)
+
+    @model_validator(mode="after")
+    def matching_result(self) -> RepairGroupNormalizationResult:
+        if (self.status == "accepted") != (self.scenePatches is not None):
+            raise ValueError("Only accepted group repairs contain scene patches.")
         return self
 
 
@@ -182,3 +200,67 @@ def fixture_repair_result(compiled: dict[str, Any], intent: RepairIntent) -> dic
             ],
         },
     }
+
+
+def group_repair_bases(row: Any, repair_group: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every active member and trim remains frozen until the group candidate is accepted."""
+    group, bases = repair_group.get("group") or {}, repair_group.get("baseVersions") or []
+    current_group = next((item for item in row.context_json["renderPlan"].get("groups", [])
+                          if item["id"] == group.get("id")), None)
+    if (
+        current_group != group
+        or [item.get("sceneId") for item in bases] != group.get("renderUnitIds")
+    ):
+        raise invalid_intent()
+    snapshot = require_generation_expectations(row.context_json)
+    scenes = {scene["id"]: scene for scene in row.state_json["scenes"]}
+    selections = {item["renderUnitId"]: item for item in
+                  row.state_json.get("draftTimeline", {}).get("items", [])}
+    compiled = []
+    for base in bases:
+        scene = scenes.get(base["sceneId"])
+        if scene is None or scene["activeVersionId"] != base.get("baseVersionId"):
+            raise AppError("SMART_REMAKE_BASE_VERSION_CONFLICT", "Phiên bản clip đã thay đổi.", 409)
+        version = next((value for value in scene["versions"]
+                        if value["id"] == scene["activeVersionId"]), None)
+        if version is None:
+            raise AppError("SMART_REMAKE_BASE_VERSION_CONFLICT", "Phiên bản clip đã thay đổi.", 409)
+        selected = selections.get(scene["id"]) or {}
+        if any(version.get(key) != base.get(key) for key in (
+            "storageKey", "mediaHash", "expectationsHash",
+        )) or any(selected.get(key) != base.get(key) for key in ("inFrame", "outFrame")) or (
+            selected.get("versionId") != scene["activeVersionId"]
+        ):
+            raise AppError("SMART_REMAKE_INPUT_CHANGED", "Đoạn clip đang dùng đã thay đổi.", 409)
+        active = retained_expectations(version)
+        if (
+            active is None
+            or active.get("productReferenceHashes") != snapshot.get("productReferenceHashes")
+        ):
+            raise AppError("SMART_REMAKE_INPUT_CHANGED", "Tư liệu sản phẩm đã thay đổi.", 409)
+        compiled.append(repair_base_scene(row, scene))
+    return compiled
+
+
+def apply_group_repair_result(
+    compiled: list[dict[str, Any]], response: Any, context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    try:
+        result = RepairGroupNormalizationResult.model_validate(response)
+    except (ValidationError, TypeError, ValueError):
+        raise invalid_intent() from None
+    if result.status != "accepted":
+        raise AppError("SMART_REMAKE_REPAIR_INTENT_REJECTED", result.reason, 409,
+                       {"status": result.status, "reason": result.reason})
+    patches = result.scenePatches or []
+    indices = [patch.unitIndex for patch in patches]
+    if indices != sorted(set(indices)) or any(index >= len(compiled) for index in indices):
+        raise invalid_intent()
+    by_index = {patch.unitIndex: patch.scenePatch for patch in patches}
+    return [
+        apply_repair_result(scene, {
+            "status": "accepted", "reason": result.reason,
+            "scenePatch": by_index[index].model_dump(exclude_none=True),
+        }, context) if index in by_index else copy.deepcopy(scene)
+        for index, scene in enumerate(compiled)
+    ]

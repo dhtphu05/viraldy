@@ -6,17 +6,17 @@ import { RemakeGenerationRecovery } from "./remake-generation-recovery";
 import "./remake-result-next-step.css";
 
 const workflowSteps = [
-    "Duyệt từng cảnh",
-    "Ghép bản xem trước",
+    "Xem toàn video",
+    "Sửa cảnh khi cần",
     "Kiểm tra & duyệt",
     "Tải video",
 ] as const;
 const actionStep: Partial<Record<RemakeResultNextAction["kind"], number>> = {
     update_plan: 0,
-    candidate: 0,
-    scene: 0,
-    compose: 1,
-    assembly_error: 1,
+    candidate: 1,
+    scene: 1,
+    compose: 0,
+    assembly_error: 0,
     inspect: 2,
     findings: 2,
     approve: 2,

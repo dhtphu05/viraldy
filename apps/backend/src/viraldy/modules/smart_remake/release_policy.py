@@ -50,7 +50,7 @@ def _current(
         technical.get("status") != "passed"
         or technical.get("mediaHash") != assembly["mediaHash"]
         or technical.get("frameCount") != frames
-        or frames not in (192, 384)
+        or frames not in (192, 288, 384)
     ):
         _blocked("The final assembly must pass its frame-accurate technical check.")
     return assembly

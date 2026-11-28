@@ -15,6 +15,8 @@ export function RemakeTrimTools({
     item,
     versionId,
     rawFrameCount,
+    plannedFrameCount = 192,
+    suggestedInFrame,
     busy,
     onSave,
     onPreview,
@@ -23,19 +25,25 @@ export function RemakeTrimTools({
     item: SmartRemakeTimeline["items"][number];
     versionId: string;
     rawFrameCount: number | null;
+    plannedFrameCount?: number;
+    suggestedInFrame?: number;
     busy: boolean;
     onSave(items: SmartRemakeTimelineSelectionInput[]): Promise<void>;
     onPreview(scope: { start: number; end: number } | null): void;
     sharedClip?: boolean;
 }) {
     const id = useId();
-    const [inFrame, setInFrame] = useState(item.versionId === versionId ? item.inFrame : 0);
+    const [inFrame, setInFrame] = useState(
+        item.versionId === versionId
+            ? item.inFrame
+            : (suggestedInFrame ?? (item.versionId === null ? item.inFrame : 0)),
+    );
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const length = item.targetDurationFrames;
     const outFrame = inFrame + length;
     const measured = rawFrameCount !== null;
-    const max = Math.max(0, (rawFrameCount ?? 192) - length);
+    const max = Math.max(0, (rawFrameCount ?? plannedFrameCount) - length);
     const tooShort = measured && rawFrameCount < length;
     const valid = measured && !tooShort && inFrame >= 0 && outFrame <= rawFrameCount;
     const canTrim = measured && !tooShort;
@@ -80,8 +88,8 @@ export function RemakeTrimTools({
                 <span
                     aria-hidden="true"
                     style={{
-                        left: `${(inFrame / (rawFrameCount || 192)) * 100}%`,
-                        width: `${Math.min(100, (length / (rawFrameCount || 192)) * 100)}%`,
+                        left: `${(inFrame / (rawFrameCount || plannedFrameCount)) * 100}%`,
+                        width: `${Math.min(100, (length / (rawFrameCount || plannedFrameCount)) * 100)}%`,
                     }}
                 >
                     {seconds(length)} giây
@@ -149,7 +157,7 @@ export function RemakeTrimTools({
                 </summary>
                 <div className="space-y-4 pt-2">
                     <p className="text-xs font-medium text-text-secondary">
-                        Clip AI · {seconds(rawFrameCount ?? 192)} giây
+                        Clip AI · {seconds(rawFrameCount ?? plannedFrameCount)} giây
                     </p>
                     <p className="text-xs leading-relaxed text-text-secondary">
                         Độ dài được giữ theo cảnh mẫu; điểm kết thúc tự đi cùng điểm bắt đầu.

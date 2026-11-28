@@ -22,6 +22,7 @@ from .engine.media_binaries import ffmpeg_path
 from .engine.openai_images import (
     IMAGE_MODEL,
     IMAGE_SIZE,
+    MAX_IMAGE_REFERENCES,
     SUPPORTED_IMAGE_MODELS,
     validate_generated_png,
 )
@@ -45,6 +46,7 @@ from .generation_expectations import (
 
 OPENING_FRAME_EXTRACTOR_VERSION = "source-opening-frame-v1"
 PRESENTER_IDENTITY_POLICY_VERSION = "fictional-vietnamese-presenter-v2"
+SOURCE_FRAME_POLICY_VERSION = "source-frame-authority-v1"
 ConditioningFrameRole = Literal["opening", "ending"]
 
 
@@ -152,28 +154,64 @@ def _source_binding(
 def _image_prompt(
     context: dict[str, Any], scene: dict[str, Any], *,
     frame_role: ConditioningFrameRole = "opening", presenter_anchor: bool = False,
+    product_reference_count: int = 1, continuity_frame: bool = False,
+    terminal_repair: dict[str, Any] | None = None,
 ) -> str:
     direction = scene.get("videoPrompt") if frame_role == "ending" else scene.get("imagePrompt")
     if not isinstance(direction, str) or not direction.strip():
         raise AppError(
             "OPENAI_IMAGE_VALIDATION_FAILED", f"An {frame_role}-frame direction is required."
         )
+    source_authority = context.get("conditioningPolicy") == SOURCE_FRAME_POLICY_VERSION
+    repaired_ending = source_authority and frame_role == "ending" and terminal_repair is not None
+    person_pose = (
+        "Keep the source framing and camera while changing facial identity; use the validated "
+        "terminal action below for the ending pose. "
+        if repaired_ending else (
+            "Preserve the observed action, pose, gaze, framing and camera while changing "
+            "facial identity. "
+        )
+    )
+    layout_index, character_index = product_reference_count + 1, product_reference_count + 2
+    product_directions = (
+        "Image 1 is the seller's real product and the sole product identity reference. "
+        "Preserve its exact shape, proportions, colors, material, markings and physical details. "
+        "If image 1 is a cutaway or section diagram, use it as a construction reference and render "
+        "the intact finished outer body for normal product use, unless the saved scene explicitly "
+        "requests a section illustration. Do not invent components or mechanisms. "
+        if product_reference_count == 1 else (
+            f"Images 1 through {product_reference_count} show the same seller product from "
+            "different angles. Image 1 is the primary appearance reference; use all supporting "
+            "views to preserve its complete shape, proportions, colors, materials, markings and "
+            "physical details. A detail unobserved in one view is not evidence that it is absent; "
+            "use another view where it is visible. Cutaways and section diagrams show "
+            "construction, "
+            "not missing parts: render the intact finished outer body for normal use unless the "
+            "saved scene explicitly requests a section illustration. Do not invent components, "
+            "mechanisms or details unobserved in all views. Do not copy people, backgrounds or "
+            "composition from the product references. "
+        )
+    )
     character = (
-        "Image 3 is the authorized target character identity. Preserve that person's face and "
-        "appearance. Do not use faces from composition image 2.\n"
+        f"Image {character_index} is the authorized target character identity. Preserve that "
+        f"person's face and appearance. Do not use faces from composition image {layout_index}.\n"
         if context.get("characterKey") else (
-            "When a person or face is visible in image 2, replace that identity with a "
-            "distinct fictional adult Vietnamese presenter, distinct from every person in image 2. "
-            "Do not infer the source person's ethnicity. Preserve the observed action, pose, "
-            "gaze, framing and camera while changing facial identity. Do not add a person or face "
+            f"When a person or face is visible in image {layout_index}, "
+            "replace that identity with a "
+            "distinct fictional adult Vietnamese presenter, distinct from every person in "
+            f"image {layout_index}. "
+            "Do not infer the source person's ethnicity. "
+            f"{person_pose}Do not add a person or face "
             "to product-only or hands-only shots; preserve hands-only framing.\n"
             "This identity replacement takes precedence over source-person descriptions and "
             "creative edits that ask to retain the source face. Use a plain unbranded top as "
             "supporting wardrobe only; do not carry over the source person's clothing or graphic "
             "T-shirt unless it is the exact target garment required by the seller.\n"
-            + ("Image 3 is the previously generated target presenter. Reuse that same fictional "
+            + (f"Image {character_index} is the previously generated target presenter. "
+               "Reuse that same fictional "
                "adult's same face, hairstyle and wardrobe when a person is visible. Read only the "
-               "person region, even if image 3 is a montage; never copy the anchor's layout, "
+               f"person region, even if image {character_index} is a montage; "
+               "never copy the anchor's layout, "
                "product, pose, camera, background or composition. It is identity-only evidence; "
                "its presence does not require a person in this frame.\n"
                if presenter_anchor else "")
@@ -185,18 +223,70 @@ def _image_prompt(
         if frame_role == "ending" else
         "Render its stateBefore at the source opening, before movement or stateAfter takes place."
     )
+    scene_direction = (
+        f"CONDITIONING POLICY: {SOURCE_FRAME_POLICY_VERSION}\n"
+        "The exact supplied source frame is authoritative for physical state, product position, "
+        "hand contact, body pose, camera, background and panel layout. Recreate that instant, "
+        "replacing only product and person identity as instructed above. Scene summaries can "
+        "describe a different instant: never invent a terminal pose or switch viewpoints to "
+        "illustrate an action, stateBefore or stateAfter."
+        if source_authority else (
+            f"{frame_role.upper()} FRAME DIRECTIONS: {direction.strip()}"
+            f"\nSCENE REQUIREMENTS: {json.dumps(scene.get('shotPlan', {}), sort_keys=True)}"
+            f"\nThe shot plan describes the full action as context. {state}"
+        )
+    )
+    if repaired_ending:
+        scene_direction = (
+            f"CONDITIONING POLICY: {SOURCE_FRAME_POLICY_VERSION}\n"
+            "Apply only this validated terminal action and state from the accepted structured "
+            "repair, after the immutable opening. These normalized terminal instructions "
+            "override the source ending's physical state and action pose; do not restore its "
+            "old state. The source camera, background and panel layout remain fixed. Preserve "
+            "the exact seller product and designated presenter identity. Never change product "
+            "construction or add panels to illustrate the action. Only supplied changed fields "
+            "may override the source ending; preserve its actual state/pose for unspecified "
+            "fields.\nVALIDATED TERMINAL REPAIR: "
+            + json.dumps(terminal_repair, sort_keys=True)
+        )
+    if continuity_frame:
+        continuity_index = product_reference_count + 2 + int(
+            bool(context.get("characterKey")) or presenter_anchor
+        )
+        scene_direction += (
+            f"\nImage {continuity_index} is the previous clip's generated ending, not the current "
+            "source frame. It is optional continuity context: preserve stable product details, "
+            "the designated person's identity and pose only when compatible with the current "
+            "source frame. The current source frame always wins for camera, state, contact and "
+            "layout. A real source cut can change framing. Do not copy the previous composition "
+            "or add its person to a hands-only/product-only frame. Do not infer a seamless cut."
+        )
+    product_replacement = (
+        "with the exact product from image 1, including its existing branding. Do not copy "
+        if product_reference_count == 1 else (
+            f"with the exact product from all product reference images 1 through "
+            f"{product_reference_count}, preserving primary appearance and supporting views' "
+            "visible geometry, including its existing branding. Do not copy "
+        )
+    )
+    frame_preservation = (
+        "preserve its composition, camera, background and panel layout; adapt only the "
+        "validated terminal action/state below; replace its product "
+        if repaired_ending else (
+            "preserve its physical state, composition, camera, pose and background; "
+            "replace its product "
+        )
+    )
     return (
         f"Create one photorealistic 9:16 {frame_role} frame for a product video. "
-        "Image 1 is the seller's real product and the sole product identity reference. "
-        "Preserve its exact shape, proportions, colors, material, markings and physical details. "
-        "If image 1 is a cutaway or section diagram, use it as a construction reference and render "
-        "the intact finished outer body for normal product use, unless the saved scene explicitly "
-        "requests a section illustration. Do not invent components or mechanisms. "
-        f"Image 2 is the exact source scene {frame_role} frame: preserve its physical state, "
-        "composition, camera, pose and background; replace its product "
-        "with the exact product from image 1, including its existing branding. Do not copy "
-        "source-video captions, unrelated branding or faces from composition image 2. "
-        "Preserve the exact panel count and layout from image 2: retain a source split-screen "
+        f"{product_directions}"
+        f"Image {layout_index} is the exact source scene {frame_role} frame: "
+        f"{frame_preservation}"
+        f"{product_replacement}"
+        "source-video captions, unrelated branding or faces from composition "
+        f"image {layout_index}. "
+        f"Preserve the exact panel count and layout from image {layout_index}: "
+        "retain a source split-screen "
         "when present, and use a single full frame otherwise. Do not add panels, frame labels "
         "or captions.\n"
         f"{character}"
@@ -212,12 +302,11 @@ def _image_prompt(
             'renderUnitId', 'sourceSceneId', 'sourceRange', 'openingFrame'
         )}, sort_keys=True)}\n"
         f"CONDITIONING FRAME: {json.dumps(context.get('conditioningFrame', {}), sort_keys=True)}\n"
-        f"{frame_role.upper()} FRAME DIRECTIONS: {direction.strip()}"
-        f"\nSCENE REQUIREMENTS: {json.dumps(scene.get('shotPlan', {}), sort_keys=True)}"
-        f"\nThe shot plan describes the full action as context. {state}"
+        f"{scene_direction}"
         + ("\nSELLER SCENE EDITS: " + scene["userEdits"]
            + "\nApply these creative directions while product identity, saved requirements and "
-           f"the {frame_role} physical state remain fixed."
+           + ("the validated terminal state remain fixed." if repaired_ending else
+              f"the {frame_role} physical state remain fixed.")
            if scene.get("userEdits") else "")
         + saved_requirements_prompt(context)
     )
@@ -338,7 +427,7 @@ def _same_presenter_scope(value: Any, identity: dict[str, Any]) -> bool:
     return isinstance(value, dict) and all(
         value.get(key) == identity[key]
         for key in ("policyVersion", "sourceMediaHash", "productMediaHash")
-    )
+    ) and value.get("productReferenceHashes") == identity.get("productReferenceHashes")
 
 
 def _presenter_frame(record: dict[str, Any]) -> int:
@@ -350,6 +439,8 @@ def _presenter_frame(record: dict[str, Any]) -> int:
 def _presenter_record(identity: dict[str, Any], anchor: dict[str, Any]) -> dict[str, Any]:
     return {
         **{key: identity[key] for key in ("policyVersion", "sourceMediaHash", "productMediaHash")},
+        **({"productReferenceHashes": copy.deepcopy(identity["productReferenceHashes"])}
+           if "productReferenceHashes" in identity else {}),
         "anchor": copy.deepcopy(anchor),
     }
 
@@ -362,6 +453,98 @@ def _image_request_hash(
         **binding, "prompt": prompt, "presenterIdentity": identity,
         **({"characterHash": hashlib.sha256(character.bytes).hexdigest()} if character else {}),
     }, sort_keys=True).encode()).hexdigest()
+
+
+async def _previous_generated_ending(
+    repair: Any, row: Any, operation: Any, index: int, expectations: dict[str, Any],
+) -> tuple[UploadedMedia, dict[str, Any]] | None:
+    plan = operation.result_json.get("renderPlan") or row.context_json["renderPlan"]
+    groups = plan.get("groups") or []
+    unit = plan["units"][index]
+    position = next((i for i, group in enumerate(groups)
+                     if group.get("renderUnitIds", [None])[0] == unit["id"]), None)
+    if position is None or position == 0:
+        return None
+    prior_id = groups[position - 1]["renderUnitIds"][-1]
+    prior = next(value for value in plan["units"] if value["id"] == prior_id)
+    record = operation.result_json.get("images", {}).get(f"{prior['sceneIndex']}:ending", {})
+    if record.get("status") != "completed":
+        return None
+    scene = expectations_scene(expectations, prior_id)
+    reference = record.get("referenceFrame") or {}
+    if (
+        record.get("frameRole") != "ending" or record.get("renderUnitId") != prior_id
+        or record.get("expectationsHash") != operation.result_json["expectationsHash"]
+        or reference.get("sourceMediaHash") != expectations["references"]["source"]["mediaHash"]
+        or reference.get("frame") != scene["sourceRange"]["endFrame"] - 1
+    ):
+        raise _asset_invalid()
+    cached = await _cached_image(repair, row, record["requestHash"])
+    keys = ("requestHash", "mediaHash", "storageKey", "renderUnitId", "referenceFrame",
+            "expectationsHash")
+    if cached is None or any(cached.get(key) != record.get(key) for key in keys):
+        raise _asset_invalid()
+    data = await repair.media.read(cached["storageKey"])
+    if hashlib.sha256(data).hexdigest() != cached["mediaHash"]:
+        raise _asset_invalid()
+    return UploadedMedia(bytes=data, mime_type="image/png"), {
+        key: copy.deepcopy(cached[key]) for key in keys
+    }
+
+
+def _validated_group_terminal(
+    operation: Any, scene: dict[str, Any],
+) -> dict[str, Any] | None:
+    from .repair_intent import GROUP_NORMALIZER_VERSION
+
+    result = operation.result_json
+    request = result.get("request") or {}
+    normalization = result.get("repairNormalization") or {}
+    if not (
+        result.get("kind") == "repair" and request.get("repairScope") == "provider_group"
+        and request.get("repairIntent")
+        and normalization.get("version") == GROUP_NORMALIZER_VERSION
+        and normalization.get("phase") == "resolved"
+        and normalization.get("validationError") is False
+        and (normalization.get("result") or {}).get("status") == "accepted"
+    ):
+        return None
+    compiled = result.get("compiledScenes") or []
+    identities = result["repairGroup"]["group"]["renderUnitIds"]
+    matching = next((value for value in compiled
+                     if value.get("renderUnitId") == scene["renderUnitId"]), None)
+    if (
+        [value.get("renderUnitId") for value in compiled] != identities
+        or matching is None
+        or any(matching.get(key, {}) != scene.get(key, {}) for key in (
+            "prompt", "imagePrompt", "videoPrompt", "shotPlan", "sourceSegment",
+        ))
+    ):
+        raise AppError(
+            "SMART_REMAKE_INPUT_CHANGED", "Yêu cầu sửa cuối clip không khớp kịch bản đã lưu.", 409,
+        )
+    shots = (scene.get("shotPlan") or {}).get("shots") or []
+    patch = next((value for value in normalization["result"].get("scenePatches") or []
+                  if value.get("unitIndex") == len(identities) - 1), None)
+    bases = result.get("repairBaseScenes") or []
+    if patch is None or [value.get("renderUnitId") for value in bases] != identities:
+        return None
+    prior_shots = (bases[-1].get("shotPlan") or {}).get("shots") or []
+    changes = (patch.get("scenePatch") or {}).get("shots") or []
+    fields = ("action", "stateAfter", "physicalAction")
+    if (
+        not shots or len(prior_shots) != len(shots) or len(changes) != len(shots)
+        or changes[-1].get("shotIndex") != len(shots) - 1
+        or not any(
+            changes[-1].get(key) is not None and shots[-1].get(key) != prior_shots[-1].get(key)
+            for key in fields
+        )
+    ):
+        return None
+    return {
+        key: copy.deepcopy(shots[-1][key]) for key in fields
+        if changes[-1].get(key) is not None and shots[-1].get(key) != prior_shots[-1].get(key)
+    }
 
 
 async def prepare_scene_image(
@@ -381,6 +564,24 @@ async def prepare_scene_image(
     row = await repair.repository.project(repair.workspace_id, row.id)
     await require_generation_policy(repair, row)
     plan = row.context_json["renderPlan"]
+    if (operation.result_json.get("request") or {}).get("repairScope") == "provider_group":
+        group = (operation.result_json.get("repairGroup") or {}).get("group") or {}
+        identities = group.get("renderUnitIds") or []
+        saved_group = next((value for value in operation.result_json.get("renderPlan", {}).get(
+            "groups", []
+        ) if value.get("id") == group.get("id")), None)
+        if (
+            operation.result_json.get("kind") != "repair"
+            or not identities or saved_group is None
+            or saved_group.get("renderUnitIds") != identities
+            or frame_role not in {"opening", "ending"}
+            or type(index) is not int or not 0 <= index < len(plan["units"])
+            or plan["units"][index]["id"] != identities[0 if frame_role == "opening" else -1]
+        ):
+            raise AppError(
+                "SMART_REMAKE_REPAIR_SCOPE_INVALID",
+                "Ảnh sửa phải thuộc đúng khung đầu và cuối của clip đã chọn.", 409,
+            )
     model = plan.get("imageModel")
     quality = plan.get("imageQuality", "low")
     complexity = plan.get("imageComplexity")
@@ -393,6 +594,14 @@ async def prepare_scene_image(
     ):
         raise AppError("OPENAI_IMAGE_VALIDATION_FAILED", "The saved image settings are invalid.")
     product, layout = await _references(repair, row, index, frame_role=frame_role)
+    products = [product]
+    if (row.context_json.get("p0") or {}).get("additionalProductReferences"):
+        from .product_references import read_product_references
+
+        products = await read_product_references(row.context_json, repair.media)
+        product = products[0]
+    product_hashes = [hashlib.sha256(value.bytes).hexdigest() for value in products]
+    reference_hashes = {"productReferenceHashes": product_hashes} if len(products) > 1 else {}
     current_expectations = require_generation_expectations(row.context_json)
     frozen = operation.result_json.get("generationExpectations")
     if not operation.result_json.get("expectationsHash"):
@@ -405,6 +614,7 @@ async def prepare_scene_image(
     )
     if any(expectations.get(key) != current_expectations.get(key) for key in (
         "productLock", "requirements", "requirementsHash", "references", "sourceContext",
+        "productReferenceHashes",
     )):
         raise AppError(
             "SMART_REMAKE_EXPECTATIONS_CHANGED", "The saved product or requirements changed.", 409,
@@ -420,6 +630,15 @@ async def prepare_scene_image(
         "p0": {**row.context_json.get("p0", {}),
                "requirements": expectations.get("requirements", {})},
     }
+    source_authority = (
+        operation.result_json.get("conditioningPolicy") == SOURCE_FRAME_POLICY_VERSION
+    )
+    if source_authority:
+        prompt_context["conditioningPolicy"] = SOURCE_FRAME_POLICY_VERSION
+    terminal_repair = (
+        _validated_group_terminal(operation, expected_scene)
+        if source_authority and frame_role == "ending" else None
+    )
     if (
         expected_scene["sourceSceneId"] != unit["sourceSceneId"]
         or expected_scene["sourceRange"] != source_range
@@ -428,6 +647,8 @@ async def prepare_scene_image(
             != hashlib.sha256(layout.bytes).hexdigest())
         or expectations["references"]["product"]["mediaHash"]
         != hashlib.sha256(product.bytes).hexdigest()
+        or expectations.get("productReferenceHashes")
+        != reference_hashes.get("productReferenceHashes")
     ):
         raise _asset_invalid()
     frame = source_range["startFrame"] if frame_role == "opening" else source_range["endFrame"] - 1
@@ -447,6 +668,7 @@ async def prepare_scene_image(
         "mode": "custom" if character else "synthetic",
         "sourceMediaHash": reference_frame["sourceMediaHash"],
         "productMediaHash": hashlib.sha256(product.bytes).hexdigest(),
+        **reference_hashes,
         "eligibleAnchor": character is None and presence == "person",
     }
     retained = previous.get("status") in {"submitting", "submitted", "completed"}
@@ -455,18 +677,24 @@ async def prepare_scene_image(
         (prior_identity.get("mode") == "custom") == (character is not None)
     ):
         identity = copy.deepcopy(prior_identity)
-    prompt = _image_prompt(prompt_context, compiled_scene, frame_role=frame_role)
+    prompt = _image_prompt(
+        prompt_context, compiled_scene, frame_role=frame_role,
+        product_reference_count=len(products),
+        terminal_repair=terminal_repair,
+    )
     # Expectations and extractor versions intentionally invalidate older layout caches.
     settings = {"model": model, "size": IMAGE_SIZE, "quality": quality}
     if complexity is not None:
         settings["complexity"] = complexity
     binding = {
         **settings, "productHash": identity["productMediaHash"],
+        **reference_hashes,
         "layoutHash": reference_frame["layoutHash"],
         "expectationsHash": operation.result_json.get("expectationsHash")
         or row.context_json["expectationsHash"],
         "openingFrame": expected_scene["openingFrame"],
         "frameRole": frame_role, "referenceFrame": reference_frame,
+        **({"conditioningPolicy": SOURCE_FRAME_POLICY_VERSION} if source_authority else {}),
     }
     request_hash = _image_request_hash(binding, prompt, character, identity)
     if character is None:
@@ -477,6 +705,25 @@ async def prepare_scene_image(
             identity = {**identity, "mode": "anchored", "eligibleAnchor": False, "anchor": anchor}
             prompt = _image_prompt(
                 prompt_context, compiled_scene, frame_role=frame_role, presenter_anchor=True,
+                product_reference_count=len(products),
+                terminal_repair=terminal_repair,
+            )
+            request_hash = _image_request_hash(binding, prompt, character, identity)
+    continuity = None
+    continuity_binding: dict[str, Any] = {}
+    if (
+        source_authority and frame_role == "opening"
+        and len(products) + 1 + int(character is not None) < MAX_IMAGE_REFERENCES
+    ):
+        continuity = await _previous_generated_ending(repair, row, operation, index, expectations)
+        if continuity is not None:
+            continuity_binding = {"continuityReference": continuity[1]}
+            binding = {**binding, **continuity_binding}
+            prompt = _image_prompt(
+                prompt_context, compiled_scene, frame_role=frame_role,
+                presenter_anchor=identity["mode"] == "anchored",
+                product_reference_count=len(products), continuity_frame=True,
+                terminal_repair=terminal_repair,
             )
             request_hash = _image_request_hash(binding, prompt, character, identity)
     if retained and previous.get("requestHash") != request_hash:
@@ -506,6 +753,8 @@ async def prepare_scene_image(
             "requestHash": request_hash,
             "frameRole": frame_role, "referenceFrame": reference_frame,
             "presenterIdentity": identity,
+            **({"conditioningPolicy": SOURCE_FRAME_POLICY_VERSION} if source_authority else {}),
+            **continuity_binding,
             **settings,
         }
         await save(operation, {**operation.result_json, "images": {**images, image_key: intent}})
@@ -525,7 +774,9 @@ async def prepare_scene_image(
                 prompt=prompt,
                 product=product,
                 layout=layout,
+                **({"additional_products": products[1:]} if len(products) > 1 else {}),
                 **({"character": character} if character else {}),
+                **({"continuity_frame": continuity[0]} if continuity else {}),
                 model=model,
                 quality=quality,
                 complexity=complexity or "high",
@@ -602,6 +853,8 @@ async def prepare_scene_image(
                 "openingFrame": copy.deepcopy(expected_scene["openingFrame"]),
                 "frameRole": frame_role, "referenceFrame": reference_frame,
                 "presenterIdentity": identity,
+                **({"conditioningPolicy": SOURCE_FRAME_POLICY_VERSION} if source_authority else {}),
+                **continuity_binding,
                 **({"attemptId": attempt_id} if attempt_id else {}),
             }
             ensure_active()

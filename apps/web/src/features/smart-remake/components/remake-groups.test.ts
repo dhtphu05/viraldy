@@ -82,6 +82,7 @@ describe("desktop render group plan", () => {
                 }),
             );
             expect(html).toContain(`Clip dọc 9:16 · ${label} · 8 giây mỗi lượt`);
+            expect(html).not.toContain("Có âm thanh");
             expect(html).toContain("720 × 1280");
             expect(html).toContain("4 cảnh · 2 lượt tạo video");
         },

@@ -512,10 +512,14 @@ export function RemakeStoryboard({
                         />
                     ) : (
                         <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                            {sourceMap.scenes.length} cảnh · {sourceMap.scenes.length} lượt tạo ·
-                            Video hoàn chỉnh {compileResult.inputSummary.targetDuration} giây. Mỗi
-                            lượt tạo một clip 8 giây. Bạn chọn và duyệt đoạn phù hợp cho từng cảnh
-                            trước khi ghép.
+                            {sourceMap.scenes.length} cảnh ·{" "}
+                            {compileResult.inputSummary.targetDuration === 12
+                                ? 2
+                                : sourceMap.scenes.length}{" "}
+                            lượt tạo · Video hoàn chỉnh {compileResult.inputSummary.targetDuration}{" "}
+                            giây. Mỗi lượt tạo một clip{" "}
+                            {compileResult.inputSummary.targetDuration === 12 ? 6 : 8} giây. Bạn
+                            chọn và duyệt đoạn phù hợp cho từng cảnh trước khi ghép.
                         </p>
                     )}
                 </details>

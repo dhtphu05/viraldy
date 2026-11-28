@@ -1,5 +1,4 @@
 """Six-second Wan windows retain every scene without changing historical Veo requests."""
-
 from __future__ import annotations
 
 import copy
@@ -25,18 +24,12 @@ def six_second_args():
 def test_six_second_wan_request_uses_actual_duration_in_wire_and_scene_prose():
     args = six_second_args()
     args["reference_analysis"]["audioPlan"] = {
-        "music": "upbeat instrumental",
-        "dialogue": "observed product explanation",
-        "language": "Vietnamese",
-        "ambience": "soft room tone",
+        "music": "upbeat instrumental", "dialogue": "observed product explanation",
+        "language": "Vietnamese", "ambience": "soft room tone",
     }
     before = copy.deepcopy(args)
     request = build_group_request(
-        model=MODEL,
-        duration_seconds=6,
-        resolution="480P",
-        audio=True,
-        **args,
+        model=MODEL, duration_seconds=6, resolution="480P", audio=True, **args,
     )
     validate(request, json.loads(SCHEMA.read_text())["requestSchema"])
     assert request["input"]["duration"] == 6
@@ -65,19 +58,13 @@ def test_two_six_second_requests_retain_all_source_actions_in_order():
     for window in range(2):
         args = six_second_args()
         args["scenes"] = [
-            {
-                "prompt": f"Action number {scene + window * 12 + 1:02d}.",
-                "targetDurationFrames": 12,
-                "rawDurationFrames": 144,
-            }
+            {"prompt": f"Action number {scene + window * 12 + 1:02d}.",
+             "targetDurationFrames": 12, "rawDurationFrames": 144}
             for scene in range(12)
         ]
         args["segments"] = [
-            {
-                "renderUnitId": f"unit-{window}-{scene}",
-                "inFrame": scene * 12,
-                "outFrame": (scene + 1) * 12,
-            }
+            {"renderUnitId": f"unit-{window}-{scene}",
+             "inFrame": scene * 12, "outFrame": (scene + 1) * 12}
             for scene in range(12)
         ]
         requests.append(build_group_request(model=MODEL, duration_seconds=6, **args))
@@ -85,9 +72,8 @@ def test_two_six_second_requests_retain_all_source_actions_in_order():
     assert sum(request["input"]["duration"] for request in requests) == 12
     for window, request in enumerate(requests):
         prompt = request["input"]["prompt"]
-        positions = [
-            prompt.index(f"Action number {scene + window * 12 + 1:02d}") for scene in range(12)
-        ]
+        positions = [prompt.index(f"Action number {scene + window * 12 + 1:02d}")
+                     for scene in range(12)]
         assert positions == sorted(positions)
         assert "[00:05.500–00:06.000] SCENE 12" in prompt
 

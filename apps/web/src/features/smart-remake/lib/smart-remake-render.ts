@@ -43,6 +43,12 @@ export function getRemakeErrorMessage(cause: unknown): string {
             return "Cần kiểm tra trạng thái lượt AI trước. Các dữ liệu đã có vẫn được giữ; hệ thống chưa gửi lượt mới để tránh gọi trùng.";
         case "SMART_REMAKE_BASE_VERSION_REQUIRED":
             return "Cảnh này chưa có clip để sửa. Tiếp tục tạo video trước.";
+        case "SMART_REMAKE_GROUP_REPAIR_STALE":
+            return "Clip hoặc đoạn cắt đã thay đổi. Làm mới dự án rồi mở lại yêu cầu sửa clip.";
+        case "SMART_REMAKE_GROUP_REPAIR_UNAVAILABLE":
+            return "Sửa theo clip cần kịch bản Wan 12 giây với hai clip 6 giây có tiếng. Cập nhật kịch bản để tiếp tục.";
+        case "SMART_REMAKE_GROUP_REPAIR_ANCHOR_REQUIRED":
+            return "Mở lại phần xem video và chọn lại Clip 1 hoặc Clip 2 cần sửa.";
         case "SMART_REMAKE_BASE_VERSION_CONFLICT":
         case "SMART_REMAKE_CANDIDATE_STALE":
         case "SMART_REMAKE_IDEMPOTENCY_CONFLICT":
@@ -262,6 +268,11 @@ export function hasRemakeRepairClip(
 }
 
 export function getRemakeProjectPollInterval(project: SmartRemakeProject | null): 5000 | false {
+    if (project?.preview?.status === "pending" || project?.preview?.status === "processing")
+        return project.pendingOperation?.needsReconciliation ||
+            project.lastOperation?.needsReconciliation
+            ? false
+            : 5000;
     return project?.pendingOperation &&
         (project.provider === "kie" ||
             project.phase !== undefined ||

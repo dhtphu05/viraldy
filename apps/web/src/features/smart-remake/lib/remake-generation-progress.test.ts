@@ -105,6 +105,24 @@ describe("provider window generation progress", () => {
         expect(progress.groups[0].kieRequest).toEqual(sent);
         expect(progress.groups[1].kieRequest).toBeUndefined();
     });
+    it("projects a saved twelve-second plan into two six-second windows", () => {
+        const project = generationProject();
+        project.targetDuration = 12;
+        project.renderPlan!.groups = project.renderPlan!.groups!.map((group) => ({
+            ...group,
+            rawDurationFrames: 144,
+            targetDurationFrames: 144,
+        }));
+        const progress = getRemakeGenerationProgress(project)!;
+        expect(progress.plannedCount).toBe(2);
+        expect(
+            progress.groups.map(({ startSecond, endSecond }) => [startSecond, endSecond]),
+        ).toEqual([
+            [0, 6],
+            [6, 12],
+        ]);
+    });
+
     it("counts planned groups separately from source scenes/fragments and submitted video calls", () => {
         const progress = getRemakeGenerationProgress(generationProject())!;
         expect(progress.plannedCount).toBe(2);

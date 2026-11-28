@@ -1,3 +1,4 @@
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -423,7 +424,7 @@ class ProductMetadata(BaseModel):
 
 class CompileSmartRemakeRequest(BaseModel):
     mode: Literal["smart_remake", "montage"] = "smart_remake"
-    targetDuration: Literal[8, 16, 24, 32]
+    targetDuration: Literal[8, 12, 16, 24, 32]
     aspectRatio: Literal["9:16"]
     language: str | None = None
     prompt: str | None = None
@@ -436,9 +437,23 @@ class CompileSmartRemakeRequest(BaseModel):
     productReference: dict[str, Any] | None = None
     referenceVideo: UploadedMedia | None = None
     productImage: UploadedMedia | None = None
+    additionalProductImages: list[UploadedMedia] = Field(default_factory=list, max_length=13)
     productMetadata: ProductMetadata | None = None
     productSource: Literal["url", "upload", "url_and_upload", "prompt", "reference"]
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def valid_product_references(self) -> "CompileSmartRemakeRequest":
+        if self.additionalProductImages:
+            if self.productImage is None:
+                raise ValueError("Additional product images require a primary image.")
+            hashes = [
+                hashlib.sha256(image.bytes).hexdigest()
+                for image in [self.productImage, *self.additionalProductImages]
+            ]
+            if len(hashes) != len(set(hashes)):
+                raise ValueError("Choose distinct product reference images.")
+        return self
 
 
 class RenderSmartRemakeInput(BaseModel):

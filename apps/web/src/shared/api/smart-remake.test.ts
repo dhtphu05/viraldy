@@ -106,24 +106,29 @@ describe("Smart Remake controlled repair API", () => {
 });
 
 describe("Smart Remake timeline v2 API", () => {
-    it("keeps analysis scope separate from output duration", async () => {
-        const fetch = vi.fn().mockResolvedValue(response({ schemaVersion: 2, projectId: "draft" }));
-        vi.stubGlobal("fetch", fetch);
-        await api.compileSmartRemake("workspace", {
-            targetDuration: 8,
-            language: "vi",
-            prompt: "",
-            description: "",
-            timelineMode: "reference",
-            analysisScope: "full_source",
-            referenceStartFrame: 0,
-            sourceCutFrames: [0, 72, 144, 216, 288, 360, 720],
-        });
-        const body = fetch.mock.calls[0][1].body as FormData;
-        expect(body.get("analysisScope")).toBe("full_source");
-        expect(body.get("targetDuration")).toBe("8");
-        expect(body.get("sourceCutFrames")).toBe("[0,72,144,216,288,360,720]");
-    });
+    it.each([8, 12, 16] as const)(
+        "keeps full-source analysis separate from %s-second output",
+        async (targetDuration) => {
+            const fetch = vi
+                .fn()
+                .mockResolvedValue(response({ schemaVersion: 2, projectId: "draft" }));
+            vi.stubGlobal("fetch", fetch);
+            await api.compileSmartRemake("workspace", {
+                targetDuration,
+                language: "vi",
+                prompt: "",
+                description: "",
+                timelineMode: "reference",
+                analysisScope: "full_source",
+                referenceStartFrame: 0,
+                sourceCutFrames: [0, 72, 144, 216, 288, 360, 720],
+            });
+            const body = fetch.mock.calls[0][1].body as FormData;
+            expect(body.get("analysisScope")).toBe("full_source");
+            expect(body.get("targetDuration")).toBe(String(targetDuration));
+            expect(body.get("sourceCutFrames")).toBe("[0,72,144,216,288,360,720]");
+        },
+    );
     it("compiles an explicit excerpt and complete cut boundaries", async () => {
         const fetch = vi.fn().mockResolvedValue(response({ schemaVersion: 2, projectId: "draft" }));
         vi.stubGlobal("fetch", fetch);
@@ -185,14 +190,21 @@ describe("Smart Remake timeline v2 API", () => {
         );
     });
 
-    it("publishes a saved revision independently of paid generation", async () => {
-        const fetch = vi.fn().mockResolvedValue(response({ status: "running" }));
-        vi.stubGlobal("fetch", fetch);
-        const input = { expectedRevision: 6, idempotencyKey: "compose-v2" };
-        await api.publishSmartRemakeTimeline("workspace", "draft", input);
-        expect(fetch).toHaveBeenCalledWith(
-            "/api/backend/workspaces/workspace/smart-remake/projects/draft/publish",
-            expect.objectContaining({ method: "POST", body: JSON.stringify(input) }),
-        );
-    });
+    it.each([undefined, "whole_video"] as const)(
+        "publishes a saved revision with %s review mode independently of paid generation",
+        async (reviewMode) => {
+            const fetch = vi.fn().mockResolvedValue(response({ status: "running" }));
+            vi.stubGlobal("fetch", fetch);
+            const input = {
+                expectedRevision: 6,
+                idempotencyKey: "compose-v2",
+                ...(reviewMode ? { reviewMode } : {}),
+            };
+            await api.publishSmartRemakeTimeline("workspace", "draft", input);
+            expect(fetch).toHaveBeenCalledWith(
+                "/api/backend/workspaces/workspace/smart-remake/projects/draft/publish",
+                expect.objectContaining({ method: "POST", body: JSON.stringify(input) }),
+            );
+        },
+    );
 });

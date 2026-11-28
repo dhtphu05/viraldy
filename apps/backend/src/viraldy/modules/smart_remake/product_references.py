@@ -20,8 +20,7 @@ MAX_PRODUCT_REFERENCE_IMAGES = 14
 def _invalid() -> AppError:
     return AppError(
         "SMART_REMAKE_PRODUCT_REFERENCES_INVALID",
-        "Use one main product image and at most thirteen additional product views.",
-        422,
+        "Use one main product image and at most thirteen additional product views.", 422,
     )
 
 
@@ -31,23 +30,20 @@ def product_reference_assets(context: dict[str, Any]) -> list[dict[str, Any]]:
     primary = (p0.get("assets") or {}).get("product")
     if primary is None:
         primary = {
-            "role": "product",
-            "storageKey": context.get("productKey"),
+            "role": "product", "storageKey": context.get("productKey"),
             "mimeType": context.get("productMimeType"),
             "mediaHash": context.get("productMediaHash"),
         }
     extras = p0.get("additionalProductReferences", [])
     if (
-        not isinstance(primary, dict)
-        or not isinstance(extras, list)
+        not isinstance(primary, dict) or not isinstance(extras, list)
         or len(extras) >= MAX_PRODUCT_REFERENCE_IMAGES
         or any(not isinstance(asset, dict) or asset.get("role") != "product" for asset in extras)
     ):
         raise _invalid()
     hashes = [asset.get("mediaHash") for asset in [primary, *extras]]
     if (
-        extras
-        and all(isinstance(value, str) for value in hashes)
+        extras and all(isinstance(value, str) for value in hashes)
         and len(set(hashes)) != len(hashes)
     ):
         raise _invalid()
@@ -81,21 +77,16 @@ async def read_product_references(context: dict[str, Any], media: Any) -> list[U
     for index, asset in enumerate(product_reference_assets(context)):
         key, digest = asset.get("storageKey"), asset.get("mediaHash")
         if (
-            not isinstance(key, str)
-            or not key
-            or not isinstance(digest, str)
+            not isinstance(key, str) or not key or not isinstance(digest, str)
             or asset.get("mimeType") not in {"image/png", "image/jpeg", "image/webp"}
         ):
             raise AppError(
-                "SMART_REMAKE_INPUT_CHANGED",
-                "Product reference binding is missing.",
-                409,
+                "SMART_REMAKE_INPUT_CHANGED", "Product reference binding is missing.", 409,
             )
         if index == 0 and any(
             context.get(alias) not in {None, asset.get(field)}
             for alias, field in (
-                ("productKey", "storageKey"),
-                ("productMediaHash", "mediaHash"),
+                ("productKey", "storageKey"), ("productMediaHash", "mediaHash"),
                 ("productMimeType", "mimeType"),
             )
         ):
@@ -104,9 +95,7 @@ async def read_product_references(context: dict[str, Any], media: Any) -> list[U
             data = await media.read(key)
         except Exception as exc:
             raise AppError(
-                "SMART_REMAKE_INPUT_UNAVAILABLE",
-                "A product reference is unavailable.",
-                409,
+                "SMART_REMAKE_INPUT_UNAVAILABLE", "A product reference is unavailable.", 409,
             ) from exc
         if hashlib.sha256(data).hexdigest() != digest:
             raise AppError("SMART_REMAKE_INPUT_CHANGED", "Product reference bytes changed.", 409)

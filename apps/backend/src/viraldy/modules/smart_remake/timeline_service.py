@@ -134,8 +134,9 @@ def validate_manifest(row: Any) -> None:
         ) from exc
 
 
-def _ready(timeline: dict[str, Any]) -> None:
-    if any(not item.get("versionId") or not item.get("reviewed") for item in timeline["items"]):
+def _ready(timeline: dict[str, Any], *, require_reviewed: bool = True) -> None:
+    if any(not item.get("versionId") or (require_reviewed and not item.get("reviewed"))
+           for item in timeline["items"]):
         raise AppError(
             "SMART_REMAKE_TIMELINE_UNREVIEWED",
             "Choose and confirm a clip range for every scene before assembling.",
@@ -313,11 +314,17 @@ async def enqueue_publish(
             validate_manifest(row)
             _revision(row.state_json, request.expectedRevision)
             timeline = copy.deepcopy(row.state_json["draftTimeline"])
-            _ready(timeline)
+            _ready(timeline, require_reviewed=request.reviewMode != "whole_video")
             manifest = []
             for item in timeline["items"]:
                 await validate_selection_media(service, row.state_json, item)
                 version = _version(_scene(row.state_json, item["renderUnitId"]), item["versionId"])
+                if request.reviewMode == "whole_video" and _scene(
+                    row.state_json, item["renderUnitId"]
+                )["activeVersionId"] != version["id"]:
+                    raise AppError(
+                        "SMART_REMAKE_CANDIDATE_NOT_ACCEPTED", "Accept a candidate before preview.",
+                    )
                 manifest.append(
                     {
                         "versionId": version["id"],
@@ -333,11 +340,25 @@ async def enqueue_publish(
                 if row.context_json.get("p0")
                 else None
             )
+            if request.reviewMode == "whole_video" and row.context_json.get("p0"):
+                from .project_preview import preview_snapshot_hash, update_project_preview
+
+                previous = row.context_json["p0"].get("preview", {})
+                update_project_preview(
+                    row, schemaVersion=1, status="processing", operationId=str(operation.id),
+                    snapshotHash=preview_snapshot_hash(row), requestKey=request.idempotencyKey,
+                    revision=request.expectedRevision, assemblyId=None, errorCode=None,
+                    sourceRenderOperationId=(
+                        previous.get("sourceRenderOperationId")
+                        if previous.get("requestKey") == request.idempotencyKey else None
+                    ),
+                )
             await service.repository.finish(
                 operation,
                 "running",
                 {
                     "kind": "compose",
+                    **({"reviewMode": request.reviewMode} if request.reviewMode else {}),
                     "actorId": str(actor_id) if actor_id else None,
                     "constraintsHash": constraints_hash(row.context_json),
                     "policyHash": policy_hash(row.context_json),
@@ -660,6 +681,11 @@ async def accept_timeline_version(
     version: dict[str, Any],
 ) -> None:
     _assert_in_use(row)
+    if version.get("providerMetadata", {}).get("repairScope") == "provider_group":
+        from .provider_group_repair import accept_group_repair
+
+        await accept_group_repair(service, row, state, operation, version)
+        return
     item = next(
         item for item in state["draftTimeline"]["items"] if item["renderUnitId"] == scene["id"]
     )
@@ -701,7 +727,10 @@ class TimelineWorkflow:
                     raise AppError(
                         "SMART_REMAKE_REVISION_CONFLICT", "The reviewed timeline changed."
                     )
-                _ready(timeline)
+                _ready(
+                    timeline,
+                    require_reviewed=operation.result_json.get("reviewMode") != "whole_video",
+                )
                 manifest = operation.result_json.get("mediaManifest", [])
                 if len(manifest) != len(timeline["items"]):
                     raise AppError(
@@ -762,8 +791,16 @@ class TimelineWorkflow:
                         actor_id=operation.result_json["actorId"],
                         operation_id=str(operation.id),
                         context=context,
+                        review_mode=operation.result_json.get("reviewMode"),
                     )
                     current.context_json = context
+                    if operation.result_json.get("reviewMode") == "whole_video":
+                        from .project_preview import update_project_preview
+
+                        update_project_preview(
+                            current, status="ready", errorCode=None,
+                            assemblyId=context["p0"]["assemblies"]["activeAssemblyId"],
+                        )
                 self.ensure_active()
                 await repo.complete(current, state, operation, operation.result_json)
                 return {"status": "completed", "project_id": str(project_id)}
@@ -772,6 +809,17 @@ class TimelineWorkflow:
                     "JOB_ATTEMPT_SUPERSEDED",
                     "JOB_ATTEMPT_NOT_CLAIMED",
                 }:
+                    if operation.result_json.get("reviewMode") == "whole_video":
+                        from .project_preview import update_project_preview
+
+                        current = await repo.project(service.workspace_id, project_id, lock=True)
+                        if (current.context_json.get("p0") or {}).get("preview", {}).get(
+                            "operationId"
+                        ) == str(operation.id):
+                            update_project_preview(
+                                current, status="failed",
+                                errorCode=getattr(exc, "code", "SMART_REMAKE_COMPOSE_FAILED"),
+                            )
                     await repo.finish(
                         operation,
                         "failed",

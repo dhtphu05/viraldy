@@ -127,6 +127,7 @@ async def compile_request(
     product_description: str | None,
     reference_video: UploadFile | None,
     product_image: UploadFile | None,
+    additional_product_images: list[UploadFile] | None = None,
 ) -> dict[str, Any]:
     if not feature_enabled(settings):
         raise AppError("SMART_REMAKE_DISABLED", "Smart Remake is disabled.", 503)
@@ -139,6 +140,10 @@ async def compile_request(
         )
     reference = await read_media(reference_video, "video/mp4")
     product = await read_media(product_image, "image/png")
+    additional = [
+        value for upload in additional_product_images or []
+        if (value := await read_media(upload, "image/png")) is not None
+    ]
     resolved_product_url = product_url.strip() if product_url else None
     resolved_product_title = product_title
     resolved_product_description = product_description
@@ -166,6 +171,7 @@ async def compile_request(
         productUrl=resolved_product_url,
         referenceVideo=reference,
         productImage=product,
+        **({"additionalProductImages": additional} if additional else {}),
         productMetadata=ProductMetadata(
             title=resolved_product_title,
             description=resolved_product_description,

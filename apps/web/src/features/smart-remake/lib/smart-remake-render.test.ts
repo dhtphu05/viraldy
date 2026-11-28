@@ -71,6 +71,17 @@ describe("renderSmartRemakeVideo", () => {
         const message = getRemakeErrorMessage(new ApiError(code, "internal", 409));
         expect(message).not.toMatch(/8 giây|16 giây/);
     });
+    it.each([
+        ["SMART_REMAKE_GROUP_REPAIR_STALE", /đoạn cắt.*thay đổi.*mở lại yêu cầu sửa clip/],
+        ["SMART_REMAKE_GROUP_REPAIR_UNAVAILABLE", /Wan 12 giây.*hai clip 6 giây/],
+        ["SMART_REMAKE_GROUP_REPAIR_ANCHOR_REQUIRED", /chọn lại Clip 1 hoặc Clip 2/],
+    ])("explains clip repair recovery for %s", (code, expected) => {
+        const message = getRemakeErrorMessage(
+            new ApiError(code as string, "PRIVATE_OPERATION_PAYLOAD", 409),
+        );
+        expect(message).toMatch(expected as RegExp);
+        expect(message).not.toContain("PRIVATE_OPERATION_PAYLOAD");
+    });
     it("keeps provider setup instructions valid for a saved Wan plan", async () => {
         const message =
             "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
@@ -370,6 +381,39 @@ describe("saved KIE project polling", () => {
     it("checks a running KIE project every five seconds", () => {
         expect(getRemakeProjectPollInterval(pending)).toBe(5000);
     });
+    it.each(["pending", "processing"] as const)(
+        "keeps reading a %s preview after rendering has finished",
+        (status) => {
+            const value = {
+                ...pending,
+                pendingOperation: undefined,
+                preview: { schemaVersion: 1 as const, status },
+            };
+            expect(getRemakeProjectPollInterval(value)).toBe(5000);
+            expect(
+                getRemakeProjectPollInterval({
+                    ...value,
+                    lastOperation: {
+                        id: "uncertain",
+                        status: "failed",
+                        needsReconciliation: true,
+                    },
+                }),
+            ).toBe(false);
+        },
+    );
+    it.each(["ready", "failed", "stale"] as const)(
+        "stops reading a terminal %s preview",
+        (status) => {
+            expect(
+                getRemakeProjectPollInterval({
+                    ...pending,
+                    pendingOperation: undefined,
+                    preview: { schemaVersion: 1, status },
+                }),
+            ).toBe(false);
+        },
+    );
 
     it("stops when complete, missing, or waiting for manual reconciliation", () => {
         expect(getRemakeProjectPollInterval(null)).toBe(false);

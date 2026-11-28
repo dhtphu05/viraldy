@@ -17,7 +17,7 @@ from .guards import (
     assert_no_reference_video_in_render_payload,
 )
 from .media_validation import assert_product_image, assert_reference_video
-from .product_lock_generator import generate_product_lock
+from .product_lock_generator import generate_product_lock, prepare_product_analysis_images
 from .prompt_sanitizer import sanitize_generation_scene
 from .reference_analyzer import (
     analyze_reference_video,
@@ -94,6 +94,10 @@ async def compile_smart_remake(
         assert_reference_video(input_data.referenceVideo)
     if input_data.productImage:
         assert_product_image(input_data.productImage)
+    analysis_images = prepare_product_analysis_images(
+        ([input_data.productImage] if input_data.productImage else [])
+        + input_data.additionalProductImages
+    )
 
     normalized = normalize_analyze_input(_input_for_normalizer(input_data))
     if not has_analyze_source(
@@ -143,7 +147,9 @@ async def compile_smart_remake(
             warnings.append(formatted)
 
     product_lock = await generate_product_lock(
-        product_image=input_data.productImage,
+        product_image=analysis_images[0] if analysis_images else None,
+        **({"additional_product_images": analysis_images[1:]}
+           if input_data.additionalProductImages else {}),
         metadata=input_data.productMetadata,
         prompt=normalized.get("prompt"),
         description=normalized.get("description"),

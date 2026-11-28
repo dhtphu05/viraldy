@@ -4,6 +4,7 @@ import {
     getRenderGroups,
     getRenderGroupBreaks,
     getRenderTaskCount,
+    getRenderWindowFrames,
     previewRenderGroups,
 } from "./remake-groups";
 
@@ -25,6 +26,21 @@ function plan(lengths: number[]): SmartRemakeRenderPlan {
 }
 
 describe("video generation groups", () => {
+    it("reads six-second saved windows and preserves the eight-second legacy fallback", () => {
+        const value = plan([3, 3, 3, 3]);
+        const groups = [0, 1].map((index) => ({
+            id: `six-${index}`,
+            renderUnitIds: [`unit-${index * 2}`, `unit-${index * 2 + 1}`],
+            rawDurationFrames: 144,
+            targetDurationFrames: 144,
+            segments: [],
+        }));
+        expect(getRenderWindowFrames({ ...value, groups })).toBe(144);
+        expect(getRenderWindowFrames(value)).toBe(192);
+        expect(getRenderWindowFrames({ ...value, units: [] })).toBe(192);
+        expect(getRenderWindowFrames(undefined)).toBe(192);
+    });
+
     it("keeps frozen provider windows despite stale manual splits", () => {
         const value: SmartRemakeRenderPlan = {
             ...plan([5, 3, 2, 6]),

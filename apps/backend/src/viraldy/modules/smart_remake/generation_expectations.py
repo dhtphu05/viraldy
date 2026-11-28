@@ -320,12 +320,23 @@ def build_generation_expectations(
         "sourceContext": _safe_json(source_context),
         "scenes": canonical,
     }
-    # Retain an already-frozen product-view manifest without changing historical snapshots.
-    # The manifest is rebuilt from owned assets; a stored list cannot inject unrelated hashes.
-    if (context.get("generationExpectations") or {}).get("productReferenceHashes") is not None:
-        additional = p0.get("additionalProductReferences") or []
-        if not isinstance(additional, list):
-            raise _required()
+    additional = p0.get("additionalProductReferences") or []
+    if not isinstance(additional, list):
+        raise _required()
+    saved = context.get("generationExpectations")
+    # Historical hash-only aliases were not usable owned image references. Keep
+    # their frozen serialization; canonical retained images must bind every view.
+    owned_views = all(
+        isinstance(asset, dict) and isinstance(asset.get("storageKey"), str)
+        and bool(asset["storageKey"])
+        and asset.get("mimeType") in {"image/png", "image/jpeg", "image/webp"}
+        for asset in additional
+    )
+    if additional and (
+        not isinstance(saved, dict)
+        or saved.get("productReferenceHashes") is not None
+        or owned_views
+    ):
         value["productReferenceHashes"] = [
             references["product"]["mediaHash"],
             *(asset.get("mediaHash") if isinstance(asset, dict) else None for asset in additional),

@@ -219,6 +219,22 @@ async def enqueue_kie_repair(
                     "Cảnh chưa có video để sửa. Hãy tạo video trước.", 409,
                 )
             _version(scene, base_id)
+            group_directions: dict[str, Any] = {}
+            if request.repairScope == "provider_group":
+                from .provider_group_repair import freeze_repair_group
+                from .repair_intent import repair_base_scene
+
+                if request.repairIntent is None:
+                    raise AppError("SMART_REMAKE_GROUP_REPAIR_INTENT_REQUIRED",
+                                   "Mô tả phần muốn sửa trong clip thay vì nhập prompt.", 422)
+                repair_group = freeze_repair_group(row, str(scene_id))
+                group_directions = {
+                    "repairGroup": repair_group,
+                    "repairScope": "provider_group",
+                    "renderGroupId": repair_group["group"]["id"],
+                    "repairBaseScenes": [repair_base_scene(row, _scene(row.state_json, member))
+                                         for member in repair_group["group"]["renderUnitIds"]],
+                }
             if request.repairIntent is not None:
                 from .repair_intent import NORMALIZER_VERSION, repair_base_scene
 
@@ -257,6 +273,7 @@ async def enqueue_kie_repair(
                     "sceneIndex": scene["index"],
                     "request": payload,
                     **directions,
+                    **group_directions,
                     "tasks": {},
                     **(
                         {"renderPlan": copy.deepcopy(plan), "renderPlanHash": _fingerprint(plan)}
@@ -331,8 +348,12 @@ class KieWorkflow:
                 )
         require_generation_expectations(row.context_json)
         scenes = None
-        if operation.result_json.get("compiledScene"):
-            scenes = copy.deepcopy(row.context_json["sceneMap"]["scenes"])
+        if operation.result_json.get("repairGroup"):
+            from .provider_group_repair import group_repair_generation_scenes
+
+            scenes = group_repair_generation_scenes(row, operation.result_json)
+        elif operation.result_json.get("compiledScene"):
+            scenes = list(copy.deepcopy(row.context_json["sceneMap"]["scenes"]))
             scenes[operation.result_json["sceneIndex"]] = operation.result_json["compiledScene"]
         snapshot = build_generation_expectations(row.context_json, scenes=scenes)
         frozen = operation.result_json.get("generationExpectations")
@@ -349,15 +370,19 @@ class KieWorkflow:
                 raise ConflictError(
                     "SMART_REMAKE_RENDER_PLAN_CHANGED", "The saved render plan changed."
                 )
-        fresh_policy: dict[str, str] = {}
+        fresh_policies: dict[str, str] = {}
         if (
             not operation.result_json.get("images") and not operation.result_json.get("tasks")
             and not operation.result_json.get("windowContinuityVersion")
+            and not operation.result_json.get("conditioningPolicy")
             and current.get("videoModel") == WAN_VIDEO_MODEL
             and len(current.get("groups") or []) == 2
             and all(group.get("rawDurationFrames") == 144 for group in current["groups"])
         ):
-            fresh_policy = {"windowContinuityVersion": WINDOW_CONTINUITY_VERSION}
+            fresh_policies = {
+                "windowContinuityVersion": WINDOW_CONTINUITY_VERSION,
+                "conditioningPolicy": "source-frame-authority-v1",
+            }
         if frozen is None or current.get("groups") or current.get("imageModel"):
             await self._save(
                 operation,
@@ -367,7 +392,7 @@ class KieWorkflow:
                     "renderPlanHash": _fingerprint(current),
                     "generationExpectations": snapshot,
                     "expectationsHash": expectations_hash(snapshot),
-                    **fresh_policy,
+                    **fresh_policies,
                 },
             )
         return dict(current)
@@ -390,8 +415,16 @@ class KieWorkflow:
             await self._save(operation, {**operation.result_json, "referencePreparation": "direct"})
         snapshot_hash = expectations_hash(snapshot)
         override_scenes = None
-        if operation.result_json.get("compiledScene"):
-            override_scenes = copy.deepcopy(row.context_json["sceneMap"]["scenes"])
+        if operation.result_json.get("repairGroup"):
+            from .provider_group_repair import validate_repair_group
+
+            validate_repair_group(row, operation.result_json["repairGroup"])
+        if operation.result_json.get("repairGroup"):
+            from .provider_group_repair import group_repair_generation_scenes
+
+            override_scenes = group_repair_generation_scenes(row, operation.result_json)
+        elif operation.result_json.get("compiledScene"):
+            override_scenes = list(copy.deepcopy(row.context_json["sceneMap"]["scenes"]))
             override_scenes[operation.result_json["sceneIndex"]] = (
                 operation.result_json["compiledScene"]
             )
@@ -459,10 +492,13 @@ class KieWorkflow:
             == WINDOW_CONTINUITY_VERSION else None
         )
         request = await asyncio.to_thread(
-            conditioned_group_request, context=row.context_json, plan=plan, snapshot=snapshot,
-            scenes=scenes, segments=segments, has_character_reference=bool(character),
-            duration_seconds=(group or plan["units"][index]).get("rawDurationFrames", 192) // 24,
+            conditioned_group_request,
+            context=row.context_json, plan=plan, snapshot=snapshot,
+            duration_seconds=(group or plan["units"][index])["rawDurationFrames"] // 24,
             window_context=window_context,
+            scenes=scenes,
+            segments=segments,
+            has_character_reference=bool(character),
         )
         references: list[dict[str, Any]] = []
         from .image_workflow import prepare_scene_image
@@ -956,6 +992,10 @@ class KieWorkflow:
             self.repair.workspace_id, project_id, operation_id
         )
         if operation.status != "running":
+            if operation.status == "completed" and operation.result_json.get("kind") == "render":
+                from .project_preview import queue_automatic_preview
+
+                await queue_automatic_preview(self.repair, row, operation)
             return {
                 "project_id": str(project_id),
                 "operation_id": str(operation_id),
@@ -981,6 +1021,8 @@ class KieWorkflow:
                     return {"project_id": str(project_id), "status": "running"}
             plan = await self._freeze_plan(row, operation)
             groups = plan.get("groups") if operation.result_json["kind"] == "render" else None
+            if operation.result_json.get("repairGroup"):
+                groups = [operation.result_json["repairGroup"]["group"]]
             work = (
                 [(0, group) for group in groups] if groups else [(index, None) for index in indices]
             )
@@ -992,19 +1034,32 @@ class KieWorkflow:
                 if task is None:
                     return {"project_id": str(project_id), "status": "running"}
                 if group is not None:
-                    await self._retain_group(row, group, task)
+                    if operation.result_json["kind"] == "repair":
+                        from .provider_group_repair import retain_group_repair
+
+                        await retain_group_repair(
+                            self.repair, row, operation, task, self.client,
+                            ensure_active=self.ensure_active,
+                        )
+                    else:
+                        await self._retain_group(row, group, task)
                 else:
                     await self._retain(row, operation, index, task)
             if operation.result_json["kind"] == "render":
-                row = await self.repair.repository.project(self.repair.workspace_id, project_id)
+                row = await self.repair.repository.project(
+                    self.repair.workspace_id, project_id, lock=True,
+                )
                 if row.state_json.get("schemaVersion") == 2:
-                    # Retained raw clips are only suggestions. Seller confirms
-                    # fixed-duration ranges before the separate compose job.
+                    from .project_preview import mark_automatic_preview, queue_automatic_preview
+
+                    mark_automatic_preview(row, operation)
+                    # Pending local preview and paid completion commit together.
                     await self._save(
                         operation,
                         {**operation.result_json, "needsReconciliation": False},
                         status="completed",
                     )
+                    await queue_automatic_preview(self.repair, row, operation)
                     return {
                         "project_id": str(project_id),
                         "operation_id": str(operation_id),

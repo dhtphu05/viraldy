@@ -99,19 +99,36 @@ async def validate_selection_media(
     await selection_bytes(service, state, item)
 
 
-def _assemble(clips: list[bytes], items: list[dict[str, Any]]) -> bytes:
+def _assemble(
+    clips: list[bytes], items: list[dict[str, Any]], *, resolution: str = "720P"
+) -> bytes:
+    width, height = {"480P": (480, 854), "720P": (720, 1280), "1080P": (1080, 1920)}[resolution]
+    parts: list[tuple[bytes, dict[str, Any], bytes]] = []
+    for data, item in zip(clips, items, strict=True):
+        digest = hashlib.sha256(data).digest()
+        if parts and parts[-1][2] == digest and parts[-1][1]["outFrame"] == item["inFrame"]:
+            previous_data, previous, _ = parts[-1]
+            parts[-1] = (previous_data, {
+                **previous,
+                "outFrame": item["outFrame"],
+                "targetDurationFrames": (
+                    previous["targetDurationFrames"] + item["targetDurationFrames"]
+                ),
+            }, digest)
+        else:
+            parts.append((data, dict(item), digest))
     with tempfile.TemporaryDirectory(prefix="smart-remake-timeline-") as tmp:
         folder = Path(tmp)
         normalized = []
-        for index, (data, item) in enumerate(zip(clips, items, strict=True)):
+        for index, (data, item, _) in enumerate(parts):
             source, output = folder / f"raw-{index}.mp4", folder / f"part-{index}.mp4"
             source.write_bytes(data)
             info = probe_timeline_media(data)
             start, end = item["inFrame"], item["outFrame"]
             video_filter = (
                 f"[0:v:0]fps=24,trim=start_frame={start}:end_frame={end},"
-                "setpts=PTS-STARTPTS,scale=720:1280:force_original_aspect_ratio=decrease,"
-                "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1[v];"
+                f"setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v];"
             )
             audio_input = "[0:a:0]" if info["hasAudio"] else "[1:a:0]"
             audio_filter = (
@@ -182,7 +199,9 @@ async def compose_timeline(
     service: Any, row: Any, timeline: dict[str, Any]
 ) -> tuple[bytes, dict[str, Any]]:
     clips = [await selection_bytes(service, row.state_json, item) for item in timeline["items"]]
-    output = await run_in_threadpool(_assemble, clips, timeline["items"])
+    plan = row.context_json.get("renderPlan") or {}
+    options = {"resolution": plan["videoResolution"]} if plan.get("videoResolution") else {}
+    output = await run_in_threadpool(_assemble, clips, timeline["items"], **options)
     check = await run_in_threadpool(
         technical_check,
         output,

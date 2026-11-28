@@ -1,5 +1,4 @@
 """Derive story handoffs from one frozen film without exposing private identifiers."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -11,8 +10,7 @@ WINDOW_CONTINUITY_VERSION = "two-part-film-v1"
 
 def _invalid() -> SmartRemakeValidationError:
     return SmartRemakeValidationError(
-        "Window continuity must match the frozen two-part film.",
-        "KIE_VALIDATION_FAILED",
+        "Window continuity must match the frozen two-part film.", "KIE_VALIDATION_FAILED",
     )
 
 
@@ -37,12 +35,9 @@ def _dialogue(scenes: list[dict[str, Any]]) -> list[str]:
             timing = shot.get("sourceTimeRange") or {}
             start, end = timing.get("startSecond"), timing.get("endSecond")
             if (
-                isinstance(start, int | float)
-                and not isinstance(start, bool)
-                and isinstance(end, int | float)
-                and not isinstance(end, bool)
-                and type(source.get("startFrame")) is int
-                and type(source.get("endFrame")) is int
+                isinstance(start, int | float) and not isinstance(start, bool)
+                and isinstance(end, int | float) and not isinstance(end, bool)
+                and type(source.get("startFrame")) is int and type(source.get("endFrame")) is int
                 and source["startFrame"] / 24 <= start < end <= source["endFrame"] / 24
             ):
                 candidates.append(shot.get("dialogue"))
@@ -53,19 +48,15 @@ def _dialogue(scenes: list[dict[str, Any]]) -> list[str]:
 
 
 def build_window_context(
-    plan: dict[str, Any],
-    group: dict[str, Any],
-    snapshot: dict[str, Any],
+    plan: dict[str, Any], group: dict[str, Any], snapshot: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Only new 12-second plans gain handoffs; historical 8/16-second inputs stay exact."""
     groups = plan.get("groups") or []
     if (
         plan.get("videoModel") != "wan/3-0-video"
         or len(groups) != 2
-        or any(
-            item.get("rawDurationFrames") != 144 or item.get("targetDurationFrames") != 144
-            for item in groups
-        )
+        or any(item.get("rawDurationFrames") != 144
+               or item.get("targetDurationFrames") != 144 for item in groups)
     ):
         return None
     try:
@@ -81,14 +72,10 @@ def build_window_context(
     first_plan = first.get("shotPlan") or {}
     segment = first.get("sourceSegment") or first_plan.get("sourceSegment") or {}
     value = {
-        "partIndex": index + 1,
-        "partCount": len(groups),
-        "globalStart": index * 6,
-        "globalEnd": (index + 1) * 6,
-        "totalDuration": 12,
+        "partIndex": index + 1, "partCount": len(groups),
+        "globalStart": index * 6, "globalEnd": (index + 1) * 6, "totalDuration": 12,
         "previousAction": _shot(parts[index - 1][-1], ending=True).get("action") if index else None,
-        "openingState": _state(first),
-        "finalState": _state(last, ending=True),
+        "openingState": _state(first), "finalState": _state(last, ending=True),
         "nextOpeningState": _state(parts[index + 1][0]) if index + 1 < len(parts) else None,
         # This is retained evidence, not an inference of identical pixels or a seamless cut.
         "boundaryKind": (segment.get("boundary") or {}).get("kind", "unknown"),

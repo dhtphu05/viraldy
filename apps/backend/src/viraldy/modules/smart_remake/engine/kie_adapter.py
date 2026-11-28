@@ -213,7 +213,6 @@ def build_group_prompt(
     return prompt
 
 
-
 def build_kie_group_request(
     *,
     scenes: list[dict[str, Any]],

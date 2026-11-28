@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AlertCircle, LoaderCircle, Pause, Play, Volume2, VolumeX } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
@@ -8,6 +8,10 @@ import {
     getComparisonPlaybackTime,
     type RemakePreviewScope,
 } from "../lib/remake-preview";
+import {
+    getSourceComparisonPlayback,
+    type RemakeSourceComparisonSegment,
+} from "../lib/remake-source-comparison";
 
 export interface RemakePlayerProps {
     url: string;
@@ -15,6 +19,7 @@ export interface RemakePlayerProps {
     poster?: string;
     scope: { start: number; end: number } | null;
     compareScope?: RemakePreviewScope;
+    sourceComparison?: { url: string; segments: readonly RemakeSourceComparisonSegment[] };
     versionLabel?: string;
     compareLabel?: string;
     onError?(): void;
@@ -43,7 +48,14 @@ function nativeFrameStyle(info: MediaInfo | null): CSSProperties {
 
 export function RemakePlayer(props: RemakePlayerProps) {
     // A new output starts paused; comparison/layout changes retain the same video elements.
-    return <PlayerSession key={props.url} {...props} />;
+    const sourceIdentity = JSON.stringify(props.sourceComparison ?? null);
+    const stableSource = useMemo<RemakePlayerProps["sourceComparison"]>(
+        () => JSON.parse(sourceIdentity) ?? undefined,
+        [sourceIdentity],
+    );
+    const identity =
+        stableSource && !props.compareUrl ? `${props.url}:${sourceIdentity}` : props.url;
+    return <PlayerSession key={identity} {...props} sourceComparison={stableSource} />;
 }
 
 function PlayerSession({
@@ -52,6 +64,7 @@ function PlayerSession({
     poster,
     scope,
     compareScope,
+    sourceComparison,
     versionLabel = "Bản đang dùng",
     compareLabel = "Bản mới",
     onError,
@@ -61,26 +74,36 @@ function PlayerSession({
     const videoRef = useRef<HTMLVideoElement>(null);
     const comparisonRef = useRef<HTMLVideoElement>(null);
     const playbackRequest = useRef(0);
+    const playbackWanted = useRef(false);
+    const playPending = useRef(false);
+    const bufferState = useRef({ primary: false, secondary: false });
+    const internalPauses = useRef(new WeakMap<HTMLMediaElement, number>());
     const [containerWidth, setContainerWidth] = useState(0);
     const [info, setInfo] = useState<MediaInfo | null>(null);
     const [comparisonInfo, setComparisonInfo] = useState<MediaInfo | null>(null);
     const [failure, setFailure] = useState<MediaFailure | null>(null);
     const [comparisonFailure, setComparisonFailure] = useState<MediaFailure | null>(null);
     const [playing, setPlaying] = useState(false);
+    const [starting, setStarting] = useState(false);
+    const [remakeOnly, setRemakeOnly] = useState(false);
+    const [sourceAttempt, setSourceAttempt] = useState(0);
+    const [buffering, setBuffering] = useState({ primary: false, secondary: false });
     const [muted, setMuted] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [activeVersion, setActiveVersion] = useState<"current" | "compare">("current");
     const [playbackError, setPlaybackError] = useState<string | null>(null);
 
+    const sourceMode = Boolean(sourceComparison && !compareUrl && !remakeOnly);
+    const secondaryUrl = sourceMode ? sourceComparison!.url : compareUrl;
     const primaryInfo = info?.source === url ? info : null;
-    const secondaryInfo = comparisonInfo?.source === compareUrl ? comparisonInfo : null;
+    const secondaryInfo = comparisonInfo?.source === secondaryUrl ? comparisonInfo : null;
     const primaryFailure = failure?.source === url ? failure.message : null;
     const secondaryFailure =
-        comparisonFailure && comparisonFailure.source === compareUrl
+        comparisonFailure && comparisonFailure.source === secondaryUrl
             ? comparisonFailure.message
             : null;
     const hasComparison = Boolean(compareUrl);
-    const active = hasComparison ? activeVersion : "current";
+    const active = hasComparison || sourceMode ? activeVersion : "current";
     const wideComparison = hasComparison && containerWidth >= 640;
     const duration = primaryInfo?.duration ?? 0;
     const requestedStart = scope && Number.isFinite(scope.start) ? scope.start : 0;
@@ -103,16 +126,99 @@ function PlayerSession({
         Math.max(0, requestedComparisonEnd),
     );
     const comparisonShorter = Boolean(
-        secondaryInfo && comparisonEnd - comparisonStart < end - start,
+        !sourceMode && secondaryInfo && comparisonEnd - comparisonStart < end - start,
     );
-    const comparisonTime = (time: number) =>
-        getComparisonPlaybackTime(time, start, comparisonStart, comparisonEnd);
-    const canPlay = Boolean(primaryInfo && !primaryFailure && !invalidScope);
+    const comparisonTime = useCallback(
+        (time: number) =>
+            sourceMode
+                ? (getSourceComparisonPlayback(sourceComparison!.segments, time)?.time ?? 0)
+                : getComparisonPlaybackTime(time, start, comparisonStart, comparisonEnd),
+        [sourceMode, sourceComparison, start, comparisonStart, comparisonEnd],
+    );
+    const canPlay = Boolean(
+        primaryInfo &&
+        !primaryFailure &&
+        !invalidScope &&
+        (!sourceMode ||
+            (secondaryInfo &&
+                !secondaryFailure &&
+                !buffering.primary &&
+                !buffering.secondary &&
+                getSourceComparisonPlayback(sourceComparison!.segments, start))),
+    );
     const singleFrame = Boolean(
         scope && requestedEnd > requestedStart && requestedEnd - requestedStart <= 1 / 24 + 1e-6,
     );
     const lastTime = Math.max(start, end - 1 / 24);
     const safeTime = clampRemakePreviewTime(currentTime, start, end);
+
+    const stopPlayers = useCallback(() => {
+        for (const player of [videoRef.current, comparisonRef.current]) {
+            if (!player) continue;
+            if (!player.paused)
+                internalPauses.current.set(player, (internalPauses.current.get(player) ?? 0) + 1);
+            player.pause();
+        }
+    }, []);
+    const pauseBoth = useCallback(() => {
+        playbackWanted.current = false;
+        playbackRequest.current += 1;
+        playPending.current = false;
+        stopPlayers();
+        setPlaying(false);
+        setStarting(false);
+    }, [stopPlayers]);
+    const reportFailure = useCallback(
+        (source: string, comparison: boolean, message: string) => {
+            if (comparison) setComparisonFailure({ source, message });
+            else setFailure({ source, message });
+            pauseBoth();
+            if (!(comparison && sourceMode)) onError?.();
+        },
+        [pauseBoth, sourceMode, onError],
+    );
+    const syncSource = useCallback(
+        (time: number, force = false) => {
+            const comparison = comparisonRef.current;
+            const mapped = sourceMode
+                ? getSourceComparisonPlayback(sourceComparison!.segments, time)
+                : null;
+            if (!comparison || !secondaryInfo || !mapped) return false;
+            try {
+                const rate = Math.min(16, Math.max(0.0625, mapped.playbackRate));
+                const speedChanged = comparison.playbackRate !== rate;
+                try {
+                    comparison.playbackRate = rate;
+                } catch {
+                    comparison.playbackRate = Math.min(4, Math.max(0.5, rate));
+                }
+                const mappedTime = Math.min(secondaryInfo.duration - 1 / 24, mapped.time);
+                const drift = Math.abs(comparison.currentTime - mappedTime);
+                if (drift > (force || speedChanged ? 1e-6 : 0.15))
+                    comparison.currentTime = Math.max(0, mappedTime);
+                return true;
+            } catch {
+                reportFailure(
+                    secondaryUrl!,
+                    true,
+                    "Không đồng bộ được video gốc. Thử tải lại hoặc chỉ xem bản remake.",
+                );
+                return false;
+            }
+        },
+        [sourceMode, sourceComparison, secondaryInfo, secondaryUrl, reportFailure],
+    );
+
+    useEffect(() => {
+        const video = videoRef.current;
+        const comparison = comparisonRef.current;
+        return () => {
+            playbackWanted.current = false;
+            playbackRequest.current += 1;
+            video?.pause();
+            comparison?.pause();
+        };
+    }, [sourceAttempt]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -135,14 +241,21 @@ function PlayerSession({
             video.currentTime = start;
         }
         if (comparisonRef.current && secondaryInfo) {
-            comparisonRef.current.currentTime = getComparisonPlaybackTime(
-                video.currentTime,
-                start,
-                comparisonStart,
-                comparisonEnd,
-            );
+            if (sourceMode) syncSource(video.currentTime, true);
+            else comparisonRef.current.currentTime = comparisonTime(video.currentTime);
         }
-    }, [start, end, primaryInfo, secondaryInfo, invalidScope, comparisonStart, comparisonEnd]);
+    }, [
+        start,
+        end,
+        primaryInfo,
+        secondaryInfo,
+        invalidScope,
+        comparisonStart,
+        comparisonEnd,
+        sourceMode,
+        comparisonTime,
+        syncSource,
+    ]);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -150,19 +263,16 @@ function PlayerSession({
         let callback = 0;
         const usesVideoFrames = typeof video.requestVideoFrameCallback === "function";
         const check = (mediaTime: number) => {
+            if (sourceMode) syncSource(Math.min(mediaTime, lastTime));
             if (mediaTime + 1e-6 >= lastTime) {
+                playbackWanted.current = false;
                 playbackRequest.current += 1;
                 video.pause();
                 video.currentTime = lastTime;
                 const comparison = comparisonRef.current;
                 if (comparison) {
                     comparison.pause();
-                    comparison.currentTime = getComparisonPlaybackTime(
-                        lastTime,
-                        start,
-                        comparisonStart,
-                        comparisonEnd,
-                    );
+                    comparison.currentTime = comparisonTime(lastTime);
                 }
                 setCurrentTime(lastTime);
                 setPlaying(false);
@@ -180,52 +290,134 @@ function PlayerSession({
             if (usesVideoFrames) video.cancelVideoFrameCallback(callback);
             else cancelAnimationFrame(callback);
         };
-    }, [playing, canPlay, lastTime, start, comparisonStart, comparisonEnd]);
+    }, [
+        playing,
+        canPlay,
+        lastTime,
+        start,
+        comparisonStart,
+        comparisonEnd,
+        sourceMode,
+        comparisonTime,
+        syncSource,
+    ]);
 
-    function pauseBoth() {
-        playbackRequest.current += 1;
-        videoRef.current?.pause();
-        comparisonRef.current?.pause();
-        setPlaying(false);
-    }
-
-    function seek(time: number) {
+    function seek(time: number, preservePlayback = false) {
+        if (starting && !preservePlayback) pauseBoth();
         const next = clampRemakePreviewTime(time, start, end);
         if (videoRef.current) videoRef.current.currentTime = next;
         if (comparisonRef.current && secondaryInfo) {
-            comparisonRef.current.currentTime = comparisonTime(next);
+            if (sourceMode) syncSource(next, true);
+            else comparisonRef.current.currentTime = comparisonTime(next);
         }
         setCurrentTime(next);
     }
 
-    async function togglePlayback() {
-        if (playing) {
-            pauseBoth();
-            return;
-        }
+    async function startPlayback(resuming = false) {
         const video = videoRef.current;
-        if (!video || !canPlay || singleFrame) return;
+        if (!video || playPending.current || singleFrame) return;
+        if (
+            sourceMode &&
+            (!secondaryInfo || bufferState.current.primary || bufferState.current.secondary)
+        )
+            return;
         setPlaybackError(null);
-        if (video.currentTime >= end - 0.05 || video.currentTime < start) seek(start);
+        if (video.currentTime >= end - 0.05 || video.currentTime < start) seek(start, true);
         const request = ++playbackRequest.current;
+        playbackWanted.current = true;
+        playPending.current = true;
+        setStarting(true);
         const comparison = comparisonRef.current;
         try {
             const players = [video];
-            if (comparison && secondaryInfo && comparisonTime(video.currentTime) < comparisonEnd) {
-                comparison.currentTime = comparisonTime(video.currentTime);
+            if (
+                comparison &&
+                secondaryInfo &&
+                (sourceMode || comparisonTime(video.currentTime) < comparisonEnd)
+            ) {
+                if (sourceMode) {
+                    if (!syncSource(video.currentTime, !resuming)) return;
+                } else comparison.currentTime = comparisonTime(video.currentTime);
                 players.push(comparison);
             }
-            await Promise.all(players.map((player) => player.play()));
-            if (request !== playbackRequest.current) players.forEach((player) => player.pause());
+            await Promise.all(
+                players.map(async (player) => {
+                    try {
+                        await player.play();
+                    } catch (error) {
+                        if (
+                            sourceMode &&
+                            player === comparison &&
+                            request === playbackRequest.current
+                        )
+                            setComparisonFailure({
+                                source: secondaryUrl!,
+                                message:
+                                    "Chưa phát được video gốc. Thử tải lại hoặc chỉ xem bản remake.",
+                            });
+                        throw error;
+                    }
+                }),
+            );
+            if (request !== playbackRequest.current) {
+                players.forEach((player) => {
+                    if (
+                        !playbackWanted.current ||
+                        (player !== videoRef.current && player !== comparisonRef.current)
+                    )
+                        player.pause();
+                });
+                if (bufferState.current.primary || bufferState.current.secondary) stopPlayers();
+                return;
+            }
+            playPending.current = false;
+            setStarting(false);
+            if (sourceMode) setPlaying(true);
         } catch {
             if (request !== playbackRequest.current) return;
             pauseBoth();
             setPlaybackError("Chưa phát được video. Hãy bấm Phát để thử lại.");
         }
     }
-
+    function togglePlayback() {
+        if (playing || starting || playbackWanted.current) pauseBoth();
+        else if (canPlay) void startPlayback();
+    }
+    function waitForMedia(comparison: boolean) {
+        if (!sourceMode) {
+            if (!comparison) comparisonRef.current?.pause();
+            return;
+        }
+        bufferState.current = {
+            ...bufferState.current,
+            [comparison ? "secondary" : "primary"]: true,
+        };
+        setBuffering(bufferState.current);
+        if (!playbackWanted.current) return;
+        playbackRequest.current += 1;
+        playPending.current = false;
+        stopPlayers();
+        setPlaying(false);
+        setStarting(true);
+    }
+    function mediaReady(comparison: boolean) {
+        if (!sourceMode) return;
+        bufferState.current = {
+            ...bufferState.current,
+            [comparison ? "secondary" : "primary"]: false,
+        };
+        setBuffering(bufferState.current);
+        if (
+            playbackWanted.current &&
+            !bufferState.current.primary &&
+            !bufferState.current.secondary &&
+            (videoRef.current?.readyState ?? 0) >= 2 &&
+            (comparisonRef.current?.readyState ?? 0) >= 2
+        )
+            void startPlayback(true);
+    }
     function readMetadata(video: HTMLVideoElement, comparison: boolean) {
-        const source = comparison ? compareUrl! : url;
+        const source = comparison ? secondaryUrl! : url;
         if (
             !Number.isFinite(video.duration) ||
             video.duration <= 0 ||
@@ -242,34 +434,42 @@ function PlayerSession({
             duration: video.duration,
         };
         if (comparison) {
+            if (
+                sourceMode &&
+                sourceComparison!.segments.some(
+                    (segment) => segment.sourceEnd > video.duration + 1 / 24,
+                )
+            ) {
+                reportFailure(
+                    source,
+                    true,
+                    "Phạm vi kịch bản vượt thời lượng video gốc. Thử tải lại hoặc chỉ xem bản remake.",
+                );
+                return;
+            }
             setComparisonInfo(next);
             setComparisonFailure(null);
-            video.currentTime = getComparisonPlaybackTime(
-                videoRef.current?.currentTime ?? requestedStart,
-                requestedStart,
-                Math.min(video.duration, Math.max(0, requestedComparisonStart)),
-                Math.min(
-                    video.duration,
-                    Math.max(
-                        0,
-                        compareScope === undefined
-                            ? requestedEnd
-                            : (compareScope?.end ?? video.duration),
-                    ),
-                ),
-            );
+            video.currentTime = sourceMode
+                ? comparisonTime(videoRef.current?.currentTime ?? requestedStart)
+                : getComparisonPlaybackTime(
+                      videoRef.current?.currentTime ?? requestedStart,
+                      requestedStart,
+                      Math.min(video.duration, Math.max(0, requestedComparisonStart)),
+                      Math.min(
+                          video.duration,
+                          Math.max(
+                              0,
+                              compareScope === undefined
+                                  ? requestedEnd
+                                  : (compareScope?.end ?? video.duration),
+                          ),
+                      ),
+                  );
         } else {
             setInfo(next);
             setFailure(null);
             onMetadata?.(video.duration);
         }
-    }
-
-    function reportFailure(source: string, comparison: boolean, message: string) {
-        if (comparison) setComparisonFailure({ source, message });
-        else setFailure({ source, message });
-        pauseBoth();
-        onError?.();
     }
 
     function updateTime(video: HTMLVideoElement) {
@@ -281,6 +481,10 @@ function PlayerSession({
         }
         const comparison = comparisonRef.current;
         if (!comparison || !secondaryInfo) return;
+        if (sourceMode) {
+            syncSource(time);
+            return;
+        }
         const mappedTime = comparisonTime(time);
         if (mappedTime >= Math.max(comparisonStart, comparisonEnd - 1 / 24)) {
             comparison.pause();
@@ -309,8 +513,15 @@ function PlayerSession({
     function frame(comparison: boolean) {
         const metadata = comparison ? secondaryInfo : primaryInfo;
         const error = comparison ? secondaryFailure : primaryFailure;
-        const label = comparison ? compareLabel : versionLabel;
-        const visible = !hasComparison || wideComparison || (active === "compare") === comparison;
+        const label = sourceMode
+            ? comparison
+                ? "Video gốc"
+                : "Bản remake"
+            : comparison
+              ? compareLabel
+              : versionLabel;
+        const visible =
+            sourceMode || !hasComparison || wideComparison || (active === "compare") === comparison;
         return (
             <figure className={cn("min-w-0 flex-1", !visible && "hidden")}>
                 <div
@@ -318,36 +529,64 @@ function PlayerSession({
                     style={nativeFrameStyle(metadata)}
                 >
                     <video
+                        key={comparison && sourceMode ? sourceAttempt : undefined}
                         ref={comparison ? comparisonRef : videoRef}
-                        src={comparison ? compareUrl : url}
+                        src={comparison ? secondaryUrl : url}
                         poster={comparison ? undefined : poster}
                         playsInline
                         preload="metadata"
                         muted={muted || (comparison ? active !== "compare" : active === "compare")}
                         className="h-full w-full object-contain"
-                        aria-label={`Video ${label}`}
+                        aria-label={sourceMode ? label : `Video ${label}`}
                         onLoadedMetadata={(event) => readMetadata(event.currentTarget, comparison)}
                         onError={() =>
                             reportFailure(
-                                comparison ? compareUrl! : url,
+                                comparison ? secondaryUrl! : url,
                                 comparison,
                                 "Không tải được video. Hãy kiểm tra kết nối hoặc mở lại dự án.",
                             )
                         }
-                        onPlay={comparison ? undefined : () => setPlaying(true)}
-                        onWaiting={comparison ? undefined : () => comparisonRef.current?.pause()}
+                        onPlay={comparison || sourceMode ? undefined : () => setPlaying(true)}
+                        onWaiting={() => waitForMedia(comparison)}
+                        onCanPlay={() => mediaReady(comparison)}
                         onPlaying={
                             comparison ? undefined : (event) => updateTime(event.currentTarget)
                         }
                         onPause={
-                            comparison
+                            comparison && !sourceMode
                                 ? undefined
-                                : () => {
-                                      comparisonRef.current?.pause();
-                                      setPlaying(false);
+                                : (event) => {
+                                      if (sourceMode) {
+                                          const count =
+                                              internalPauses.current.get(event.currentTarget) ?? 0;
+                                          if (count)
+                                              internalPauses.current.set(
+                                                  event.currentTarget,
+                                                  count - 1,
+                                              );
+                                          else pauseBoth();
+                                      } else {
+                                          pauseBoth();
+                                      }
                                   }
                         }
-                        onEnded={comparison ? undefined : pauseBoth}
+                        onEnded={
+                            sourceMode
+                                ? () => {
+                                      pauseBoth();
+                                      if (!comparison) seek(lastTime);
+                                  }
+                                : comparison
+                                  ? undefined
+                                  : pauseBoth
+                        }
+                        onSeeking={
+                            sourceMode && !comparison
+                                ? (event) => {
+                                      syncSource(event.currentTarget.currentTime, true);
+                                  }
+                                : undefined
+                        }
                         onTimeUpdate={
                             comparison ? undefined : (event) => updateTime(event.currentTarget)
                         }
@@ -383,6 +622,26 @@ function PlayerSession({
 
     return (
         <div ref={containerRef} className="min-w-0 space-y-4">
+            {sourceMode && (
+                <div
+                    role="group"
+                    aria-label="Chọn âm thanh để nghe"
+                    className="flex flex-wrap justify-center gap-2"
+                >
+                    {(["compare", "current"] as const).map((version) => (
+                        <Button
+                            key={version}
+                            type="button"
+                            variant={active === version ? "default" : "outline"}
+                            className="min-h-11 min-w-0 whitespace-normal px-3"
+                            aria-pressed={active === version}
+                            onClick={() => setActiveVersion(version)}
+                        >
+                            {version === "compare" ? "Nghe video gốc" : "Nghe bản remake"}
+                        </Button>
+                    ))}
+                </div>
+            )}
             {hasComparison && (
                 <div
                     className="flex flex-wrap items-center justify-center gap-2"
@@ -408,7 +667,13 @@ function PlayerSession({
                 </div>
             )}
 
-            <div className="flex items-start justify-center gap-4">
+            <div
+                className={cn(
+                    "flex items-start justify-center",
+                    sourceMode ? "gap-2 sm:gap-4" : "gap-4",
+                )}
+            >
+                {sourceMode && frame(true)}
                 {frame(false)}
                 {hasComparison && frame(true)}
             </div>
@@ -419,11 +684,11 @@ function PlayerSession({
                         type="button"
                         variant="outline"
                         className="size-11 shrink-0 px-0"
-                        disabled={!canPlay || singleFrame}
+                        disabled={(!canPlay && !playing && !starting) || singleFrame}
                         onClick={() => void togglePlayback()}
-                        aria-label={playing ? "Tạm dừng video" : "Phát video"}
+                        aria-label={playing || starting ? "Tạm dừng video" : "Phát video"}
                     >
-                        {playing ? <Pause aria-hidden /> : <Play aria-hidden />}
+                        {playing || starting ? <Pause aria-hidden /> : <Play aria-hidden />}
                     </Button>
                     <span className="min-w-0 flex-1 text-xs tabular-nums text-text-secondary">
                         {primaryInfo ? `${formatTime(safeTime)} / ${formatTime(end)}` : "— / —"}
@@ -468,6 +733,17 @@ function PlayerSession({
                         Âm thanh: {active === "compare" ? compareLabel : versionLabel}.
                     </p>
                 )}
+                {sourceMode && (
+                    <p className="text-xs text-text-tertiary">
+                        Video gốc được điều chỉnh tốc độ theo từng cảnh trong kịch bản. Phát, dừng
+                        và tua cả hai bằng thanh chung.
+                    </p>
+                )}
+                {sourceMode && (buffering.primary || buffering.secondary) && (
+                    <p role="status" className="mt-2 text-xs text-text-secondary">
+                        Đang tải khung hình. Hai video sẽ tự phát tiếp khi cùng sẵn sàng.
+                    </p>
+                )}
                 {comparisonShorter && (
                     <p className="mt-2 text-xs text-text-secondary">
                         Đoạn so sánh dài {formatTime(comparisonEnd - comparisonStart)}; phần còn lại
@@ -476,8 +752,36 @@ function PlayerSession({
                 )}
                 {secondaryFailure && (
                     <p role="alert" className="mt-2 text-sm text-destructive">
-                        {compareLabel}: {secondaryFailure}
+                        {sourceMode ? "Video gốc" : compareLabel}: {secondaryFailure}
                     </p>
+                )}
+                {sourceMode && secondaryFailure && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                pauseBoth();
+                                setComparisonInfo(null);
+                                setComparisonFailure(null);
+                                setBuffering({ primary: false, secondary: false });
+                                setSourceAttempt((value) => value + 1);
+                            }}
+                        >
+                            Tải lại video gốc
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                pauseBoth();
+                                setActiveVersion("current");
+                                setRemakeOnly(true);
+                            }}
+                        >
+                            Chỉ xem bản remake
+                        </Button>
+                    </div>
                 )}
                 {invalidScope && (
                     <p role="alert" className="text-sm text-destructive">

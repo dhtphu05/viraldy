@@ -115,7 +115,7 @@ def _assembly_segments(
             timeline.get("fps") != 24
             or type(timeline.get("fps")) is not int
             or type(timeline.get("totalFrames")) is not int
-            or timeline.get("totalFrames") not in (192, 384)
+            or timeline.get("totalFrames") not in (192, 288, 384)
             or manifest["timeline"] != timeline
             or content_hash(manifest) != assembly["manifestHash"]
         ):

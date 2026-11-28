@@ -209,6 +209,7 @@ function ActionContent(
         Boolean(intakeError) ||
         (!existingRights && (!accepted || !disclosed));
     const copy = actions[intent.action];
+    const groupedRepair = intent.action === "repair" && intent.repairScope === "provider_group";
     async function confirm() {
         if (submitLock.current || cannotConfirm || !preflight) return;
         submitLock.current = true;
@@ -282,11 +283,13 @@ function ActionContent(
                                 : copy.title}
                         </DialogTitle>
                         <DialogDescription className="leading-relaxed text-text-secondary">
-                            {intent.action === "repair" &&
-                            "repairIntent" in intent &&
-                            intent.repairIntent
-                                ? "Một lượt AI kiểm tra yêu cầu sửa với sản phẩm và ý định cảnh trước khi tạo ảnh và video. Nếu yêu cầu mâu thuẫn hoặc thiếu căn cứ, hệ thống dừng ở bước kiểm tra; phí đã phát sinh vẫn được ghi nhận. Các cảnh khác và bản đang dùng được giữ lại."
-                                : copy.description}
+                            {groupedRepair
+                                ? "AI kiểm tra yêu cầu sửa, tạo hai ảnh đầu/cuối rồi tạo lại toàn bộ clip đã chọn bằng 1 lượt Wan. Clip còn lại và bản đang dùng được giữ nguyên để bạn so sánh."
+                                : intent.action === "repair" &&
+                                    "repairIntent" in intent &&
+                                    intent.repairIntent
+                                  ? "Một lượt AI kiểm tra yêu cầu sửa với sản phẩm và ý định cảnh trước khi tạo ảnh và video. Nếu yêu cầu mâu thuẫn hoặc thiếu căn cứ, hệ thống dừng ở bước kiểm tra; phí đã phát sinh vẫn được ghi nhận. Các cảnh khác và bản đang dùng được giữ lại."
+                                  : copy.description}
                         </DialogDescription>
                     </div>
                     {intent.startsNewProject && (
@@ -518,7 +521,11 @@ function ActionContent(
                             {locked && (
                                 <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
                             )}
-                            {locked ? "Đang gửi yêu cầu…" : copy.confirm}
+                            {locked
+                                ? "Đang gửi yêu cầu…"
+                                : groupedRepair
+                                  ? `Xác nhận và tạo lại ${props.sceneLabel?.toLowerCase() ?? "clip"}`
+                                  : copy.confirm}
                         </Button>
                     </div>
                 </>

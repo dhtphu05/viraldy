@@ -229,7 +229,7 @@ def _scope(
     ):
         blockers.append(_block(
             "PROVIDER_PLAN_UPDATE_REQUIRED",
-            "Cập nhật kịch bản để dùng đầy đủ các clip theo thời lượng đã chọn.",
+            "Cập nhật kịch bản để tạo hai clip 6 giây có âm thanh cho video Wan 12 giây.",
         ))
     elif request.action == "repair":
         scene = _scene(state, request.sceneId)
@@ -253,6 +253,24 @@ def _scope(
             (unit for unit in plan.get("units", []) if unit["id"] == request.sceneId), {}
         )
         image_count = 2 if plan.get("imageModel") else 0
+        group_binding = None
+        if request.repairScope == "provider_group":
+            from .provider_group_repair import freeze_repair_group
+
+            try:
+                group_binding = freeze_repair_group(row, request.sceneId or "")
+                if request.repairIntent is not None:
+                    from .repair_intent import repair_base_scene
+
+                    for base in group_binding["baseVersions"]:
+                        member = _scene(state, base["sceneId"])
+                        if member is None:
+                            raise AppError("SMART_REMAKE_SCENE_NOT_FOUND", "Không tìm thấy cảnh.")
+                        repair_base_scene(row, member)
+            except (AppError, KeyError, ValueError, TypeError):
+                blockers.append(_block(
+                    "GROUP_REPAIR_STALE", "Clip đã thay đổi. Hãy làm mới trước khi sửa clip.",
+                ))
         scope = scope.model_copy(
             update={
                 "sceneCount": 1,
@@ -264,6 +282,12 @@ def _scope(
                     "rawDurationFrames", (scene or {}).get("rawDurationFrames", 192)
                 )
                 / 24,
+                **({
+                    "repairScope": "provider_group",
+                    "renderGroupId": group_binding["group"]["id"],
+                    "sceneCount": len(group_binding["group"]["renderUnitIds"]),
+                    "targetDuration": group_binding["group"]["rawDurationFrames"] / 24,
+                } if group_binding is not None else {}),
             }
         )
         calls = PreflightCalls(

@@ -130,8 +130,7 @@ async def create_intake(
         if len(set(product_hashes)) != len(product_hashes):
             raise AppError(
                 "SMART_REMAKE_PRODUCT_REFERENCES_INVALID",
-                "Choose distinct product images; the same image was included more than once.",
-                422,
+                "Choose distinct product images; the same image was included more than once.", 422,
             )
     request_hash = stable_hash({"request": payload.model_dump(mode="json"), "inputs": hashes})
     project_id = uuid5(
@@ -172,16 +171,10 @@ async def create_intake(
         for upload, digest in zip(additional, hashes.get("additionalProducts", []), strict=True):
             key = await media.put(prefix, upload.bytes, upload.mime_type)
             keys.append(key)
-            additional_assets.append(
-                {
-                    "id": str(uuid4()),
-                    "role": "product",
-                    "storageKey": key,
-                    "mimeType": upload.mime_type,
-                    "mediaHash": digest,
-                    "sizeBytes": len(upload.bytes),
-                }
-            )
+            additional_assets.append({
+                "id": str(uuid4()), "role": "product", "storageKey": key,
+                "mimeType": upload.mime_type, "mediaHash": digest, "sizeBytes": len(upload.bytes),
+            })
         context: dict[str, Any] = {
             "schemaVersion": 2,
             "projectName": payload.projectName,

@@ -46,6 +46,21 @@ const project = (status: "running" | "failed" = "running") =>
         },
     }) as unknown as SmartRemakeProject;
 
+it("shows exactly two six-second windows for a twelve-second Wan run", () => {
+    const value = project();
+    value.targetDuration = 12;
+    value.renderPlan!.groups = value.renderPlan!.groups!.map((group) => ({
+        ...group,
+        rawDurationFrames: 144,
+        targetDurationFrames: 144,
+    }));
+    render(createElement(RemakeGenerationProgress, { project: value }));
+    expect(screen.getByText("2 lượt dự kiến")).toBeTruthy();
+    expect(screen.getByText("0–6 giây")).toBeTruthy();
+    expect(screen.getByText("6–12 giây")).toBeTruthy();
+    expect(screen.queryByText("8–16 giây")).toBeNull();
+});
+
 it("shows two planned provider windows and real zero submissions while labeling all references as images", () => {
     render(createElement(RemakeGenerationProgress, { project: project() }));
     expect(screen.getByText("2 lượt dự kiến")).toBeTruthy();

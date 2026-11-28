@@ -8,9 +8,9 @@ import { RemakeResultNextStep } from "./remake-result-next-step";
 afterEach(cleanup);
 
 it.each([
-    ["scene", "Duyệt từng cảnh"],
-    ["compose", "Ghép bản xem trước"],
-    ["assembly_error", "Ghép bản xem trước"],
+    ["scene", "Sửa cảnh khi cần"],
+    ["compose", "Xem toàn video"],
+    ["assembly_error", "Xem toàn video"],
     ["inspect", "Kiểm tra & duyệt"],
     ["findings", "Kiểm tra & duyệt"],
     ["approve", "Kiểm tra & duyệt"],

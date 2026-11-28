@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SmartRemakeProject, SmartRemakeSceneVersion } from "@/shared/api/smart-remake";
+import type {
+    SmartRemakeAssembly,
+    SmartRemakeProject,
+    SmartRemakeSceneVersion,
+} from "@/shared/api/smart-remake";
 import { RemakeOutput, RemakeVersionReview } from "./remake-output";
 
 const version: SmartRemakeSceneVersion = {
@@ -105,48 +109,108 @@ describe("RemakeOutput", () => {
         expect(html).toContain("Clip AI · 6 giây");
         expect(html).not.toContain("Clip AI · 8 giây");
     });
-    it("keeps original generated images and prompt tools accessible on completed output", () => {
-        const completed = {
+    it("makes the matched whole preview primary and keeps scene confirmation inside Advanced", () => {
+        const value: SmartRemakeProject = {
             ...timelineProject,
-            renderPlan: {
-                fps: 24,
-                provider: "kie",
-                units: [{ id: "scene-1", sourceSceneId: "source" }],
-                groups: [{ id: "group", renderUnitIds: ["scene-1"], targetDurationFrames: 192 }],
-            },
-            generationProgress: {
-                operationId: "original-render",
-                status: "completed",
-                startedAt: "2026-11-26T10:00:00Z",
-                updatedAt: "2026-11-26T10:01:00Z",
-                groups: [
+            assemblies: {
+                activeAssemblyId: "preview",
+                records: [
                     {
-                        groupId: "group",
-                        stage: "completed",
-                        videoSubmitted: true,
-                        conditioningImages: [
-                            {
-                                renderUnitId: "scene-1",
-                                url: "/opening.png",
-                                requestHash: "a".repeat(64),
-                                frameRole: "opening",
-                            },
-                        ],
-                        kieRequest: {
-                            model: "wan/3-0-video",
-                            prompt: "EXACT_SENT_PROMPT",
-                            requestHash: "request",
-                        },
-                    },
+                        id: "preview",
+                        reviewMode: "whole_video",
+                        timeline: timelineProject.draftTimeline!,
+                        technicalCheck: { status: "passed", mediaHash: "preview" },
+                    } as SmartRemakeAssembly,
                 ],
             },
-        } as unknown as SmartRemakeProject;
+        };
         const html = renderToStaticMarkup(
-            createElement(RemakeOutput, { ...props, project: completed }),
+            createElement(RemakeOutput, { ...props, project: value, guided: true }),
         );
-        expect(html).toContain("Ảnh &amp; prompt");
-        expect(html).not.toContain("EXACT_SENT_PROMPT");
+        expect(html).toContain("Bản xem trước toàn video");
+        expect(html).toContain("Chưa duyệt xuất");
+        expect(html).toContain('src="https://example.com/whole.mp4"');
+        expect(html).not.toContain("Dùng đoạn này");
+        expect(html).not.toContain("Đã chọn");
+        expect(html).toContain("Nâng cao");
+        expect(props.onRepair).not.toHaveBeenCalled();
     });
+
+    it("labels a six-second saved raw clip without rewriting legacy clip durations", () => {
+        const value: SmartRemakeProject = {
+            ...timelineProject,
+            targetDuration: 12,
+            scenes: timelineProject.scenes.map((scene) => ({
+                ...scene,
+                rawDurationFrames: 144,
+                durationSeconds: 6,
+                versions: scene.versions.map((version) => ({ ...version, rawDurationFrames: 144 })),
+            })),
+        };
+        const html = renderToStaticMarkup(
+            createElement(RemakeOutput, { ...props, project: value }),
+        );
+        expect(html).toContain("Clip AI · 6 giây");
+        expect(html).not.toContain("Clip AI · 8 giây");
+    });
+    it.each([false, true])(
+        "keeps original generated images and prompt tools accessible on completed output (guided: %s)",
+        (guided) => {
+            const completed = {
+                ...timelineProject,
+                assemblies: {
+                    activeAssemblyId: "preview",
+                    records: [
+                        {
+                            id: "preview",
+                            reviewMode: "whole_video",
+                            timeline: timelineProject.draftTimeline!,
+                            technicalCheck: { status: "passed", mediaHash: "preview" },
+                        } as SmartRemakeAssembly,
+                    ],
+                },
+                renderPlan: {
+                    fps: 24,
+                    provider: "kie",
+                    units: [{ id: "scene-1", sourceSceneId: "source" }],
+                    groups: [
+                        { id: "group", renderUnitIds: ["scene-1"], targetDurationFrames: 192 },
+                    ],
+                },
+                generationProgress: {
+                    operationId: "original-render",
+                    status: "completed",
+                    startedAt: "2026-11-26T10:00:00Z",
+                    updatedAt: "2026-11-26T10:01:00Z",
+                    groups: [
+                        {
+                            groupId: "group",
+                            stage: "completed",
+                            videoSubmitted: true,
+                            conditioningImages: [
+                                {
+                                    renderUnitId: "scene-1",
+                                    url: "/opening.png",
+                                    requestHash: "a".repeat(64),
+                                    frameRole: "opening",
+                                },
+                            ],
+                            kieRequest: {
+                                model: "wan/3-0-video",
+                                prompt: "EXACT_SENT_PROMPT",
+                                requestHash: "request",
+                            },
+                        },
+                    ],
+                },
+            } as unknown as SmartRemakeProject;
+            const html = renderToStaticMarkup(
+                createElement(RemakeOutput, { ...props, project: completed, guided }),
+            );
+            expect(html).toContain("Ảnh &amp; prompt");
+            expect(html).not.toContain("EXACT_SENT_PROMPT");
+        },
+    );
     it.each([
         [0, "0–1.333"],
         [1 / 3, "0.333–1.667"],

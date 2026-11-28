@@ -14,6 +14,7 @@ import type {
     SmartRemakeProjectMutationResult,
     RepairIntent,
     SmartRemakeRepairReceipt,
+    SmartRemakeRepairAffectedVersion,
     SmartRemakeAnalysisProgress,
     SmartRemakeGenerationRecovery,
     SmartRemakeGenerationProgress,
@@ -174,6 +175,8 @@ export type SmartRemakeSceneVersion = {
     rawDurationFrames?: number;
     frameCount?: number;
     renderGroupId?: string;
+    mediaHash?: string;
+    providerMetadata?: Record<string, unknown>;
     suggestedInFrame?: number;
     suggestedOutFrame?: number;
     technicalCheck: {
@@ -187,6 +190,16 @@ export type SmartRemakeSceneVersion = {
 
 export type SmartRemakeProject = {
     id: string;
+    preview?: {
+        schemaVersion: 1;
+        status: "pending" | "processing" | "ready" | "failed" | "stale";
+        operationId?: string;
+        sourceRenderOperationId?: string;
+        snapshotHash?: string;
+        assemblyId?: string;
+        errorCode?: string;
+        retryable?: boolean;
+    };
     sourceAudio?: SmartRemakeSourceAudio;
     inputMediaHashes?: {
         source: string;
@@ -314,6 +327,9 @@ export type SmartRemakeOperationResult = {
     candidateVersionId?: string;
     operationId: string;
     status: "completed" | "running" | "failed";
+    repairScope?: "provider_group";
+    renderGroupId?: string;
+    affectedVersions?: SmartRemakeRepairAffectedVersion[];
 };
 
 export type SmartRemakePromptDraft = Pick<
@@ -435,6 +451,7 @@ export function repairSmartRemakeScene(
         baseVersionId: string | null;
         expectedRevision: number;
         idempotencyKey: string;
+        repairScope?: "provider_group";
     },
 ) {
     return apiPost<SmartRemakeOperationResult>(
@@ -477,7 +494,7 @@ export function saveSmartRemakeTimeline(
 export function publishSmartRemakeTimeline(
     workspaceId: string,
     projectId: string,
-    input: { expectedRevision: number; idempotencyKey: string },
+    input: { expectedRevision: number; idempotencyKey: string; reviewMode?: "whole_video" },
 ) {
     return apiPost<SmartRemakeOperationResult>(
         `/workspaces/${workspaceId}/smart-remake/projects/${projectId}/publish`,

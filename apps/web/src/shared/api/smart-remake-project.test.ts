@@ -196,3 +196,40 @@ it("sends structured repair intent without synthesized legacy prompts", async ()
     await api.repairSmartRemakeScene("workspace", "owned", "scene", input);
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(input);
 });
+
+it("keeps provider clip scope through preflight and repair without changing the scene endpoint", async () => {
+    const fetch = vi
+        .fn()
+        .mockImplementation(async () => response({ operationId: "repair", status: "running" }));
+    vi.stubGlobal("fetch", fetch);
+    const repairIntent: api.RepairIntent = {
+        schemaVersion: 1,
+        issues: ["action"],
+        instruction: "Giữ hai tay tự nhiên trong cả clip",
+    };
+    const input: api.SmartRemakePreflightRequest = {
+        action: "repair",
+        projectId: "owned",
+        expectedRevision: 7,
+        sceneId: "anchor-scene",
+        baseVersionId: "base",
+        repairScope: "provider_group",
+        repairIntent,
+    };
+    await api.getSmartRemakePreflight("workspace", input);
+    await api.repairSmartRemakeScene("workspace", "owned", "anchor-scene", {
+        baseVersionId: "base",
+        expectedRevision: 7,
+        idempotencyKey: "repair-one-clip",
+        repairScope: "provider_group",
+        repairIntent,
+    });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(input);
+    expect(fetch.mock.calls[1][0]).toContain("/scenes/anchor-scene/repairs");
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+        repairScope: "provider_group",
+        repairIntent,
+        idempotencyKey: "repair-one-clip",
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+});

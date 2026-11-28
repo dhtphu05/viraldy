@@ -1,0 +1,287 @@
+html:has(.report-demo-shell),
+body:has(.report-demo-shell),
+#root:has(.report-demo-shell) {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+}
+.report-demo-shell {
+    display: flex;
+    min-height: 100dvh;
+    background: var(--color-background);
+    color: var(--color-text-primary);
+}
+.report-demo-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 12px;
+    background: var(--color-surface);
+}
+.report-demo-sidebar > small {
+    margin: 24px 4px 4px;
+    color: var(--color-text-secondary);
+    font-size: 10px;
+}
+.report-demo-sidebar > span:not(:first-child),
+.report-demo-sidebar > a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+.report-demo-sidebar > a.report-demo-sidebar__active {
+    background: var(--color-primary-soft);
+    color: var(--color-primary-active);
+}
+.report-demo-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.report-demo-header {
+    height: 64px;
+    flex-shrink: 0;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--color-surface);
+    font-size: 13px;
+}
+.report-demo-header > span:first-child {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+.report-demo-label {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.report-demo-main {
+    flex: 1;
+    min-height: 0;
+}
+.report-demo-content {
+    width: min(100% - 64px, 1280px);
+    margin: 24px auto 48px;
+}
+.report-demo-navigation {
+    margin-bottom: 24px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+.report-demo-navigation summary {
+    cursor: pointer;
+    width: fit-content;
+    min-height: 32px;
+    padding: 8px 0;
+}
+.report-demo-navigation nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 0;
+}
+.report-demo-navigation a {
+    padding: 9px 13px;
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+.report-demo-navigation a[aria-current] {
+    background: var(--color-primary-soft);
+    color: var(--color-primary-active);
+}
+.report-demo-title {
+    margin: 24px 0 28px;
+}
+.report-demo-title > p:first-child {
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+}
+.report-demo-title h1 {
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.25;
+    margin-bottom: 12px;
+}
+.report-demo-title p {
+    color: var(--color-text-secondary);
+    font-size: 14px;
+}
+.report-demo-analysis {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+    gap: 24px;
+    align-items: start;
+}
+.report-demo-reference {
+    padding: 24px;
+    border-radius: 24px;
+    background: var(--color-surface);
+}
+.report-demo-reference video {
+    width: 100%;
+    height: 600px;
+    object-fit: contain;
+    background: #19171d;
+    border-radius: 18px;
+}
+.report-demo-reference > p {
+    padding-top: 14px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+.report-demo-analysis-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 28px;
+    border-radius: 24px;
+    background: var(--color-surface);
+    font-size: 14px;
+    line-height: 1.7;
+}
+.report-demo-analysis-copy h2 {
+    font-size: 21px;
+    font-weight: 600;
+}
+.report-demo-status {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--color-ok);
+    font-size: 12px;
+}
+.report-demo-observations {
+    display: grid;
+    gap: 16px;
+}
+.report-demo-observations article {
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: var(--color-surface-soft);
+}
+.report-demo-observations small {
+    color: var(--color-primary-active);
+    font-size: 11px;
+}
+.report-demo-export {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+    gap: 24px;
+    align-items: start;
+}
+.report-demo-export > div:last-child {
+    padding: 24px;
+    border-radius: 24px;
+    background: var(--color-surface);
+}
+.report-demo-export > div:last-child > p {
+    margin: 16px 0;
+}
+.report-demo-download {
+    display: inline-flex;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--color-primary-active);
+    color: #fff;
+    font-size: 13px;
+}
+.report-demo-export__checks {
+    display: grid;
+    gap: 14px;
+    padding: 24px 0;
+    font-size: 13px;
+    line-height: 1.7;
+}
+.report-demo-export__checks p {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+}
+.report-demo-export__checks svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+    color: var(--color-ok);
+}
+.report-demo-generated {
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+.report-demo-generated summary {
+    padding: 16px 0;
+    cursor: pointer;
+}
+.report-demo-generated > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+.report-demo-generated figure {
+    padding: 20px;
+    background: var(--color-surface);
+    border-radius: 24px;
+    text-align: center;
+}
+.report-demo-generated img {
+    height: 480px;
+    width: 100%;
+    object-fit: contain;
+    margin-bottom: 14px;
+}
+.report-demo-notice {
+    margin-top: 20px;
+    border-radius: 16px;
+    padding: 16px;
+    background: var(--color-primary-soft);
+    font-size: 13px;
+}
+.report-demo-comparison {
+    padding: 24px;
+    border-radius: 24px;
+    background: var(--color-surface);
+}
+.report-demo-comparison figure > div,
+.report-demo-export figure > div,
+.report-demo-content .remake-output-stage figure > div {
+    width: 236.25px !important;
+    height: 420px !important;
+    max-width: 100%;
+    max-height: 420px !important;
+}
+.report-demo-comparison__decision {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    padding: 24px 0 8px;
+}
+.report-demo-comparison__decision h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 10px 0;
+}
+.report-demo-comparison__decision p {
+    max-width: 560px;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.7;
+}
+.report-demo-comparison__decision > div:last-child {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+}

@@ -52,10 +52,8 @@ def _input_media_hashes(context: dict[str, Any]) -> dict[str, Any] | None:
     additional = (context.get("p0") or {}).get("additionalProductReferences") or []
     if additional:
         digests = [asset.get("mediaHash") for asset in additional]
-        if any(
-            not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
-            for value in digests
-        ):
+        if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
+               for value in digests):
             return None
         return {**result, "additionalProducts": digests}
     return result

@@ -9,6 +9,7 @@ import pytest
 
 from tests.unit.test_provider_group_planning import context
 from tests.unit.test_smart_remake_grouped_workflow import grouped  # noqa: F401
+from tests.unit.test_smart_remake_twelve_second_windows import twelve_runtime  # noqa: F401
 
 
 def row_and_repository():
@@ -295,3 +296,36 @@ async def test_preview_http_is_authorized_and_never_constructs_media_or_commits(
         assert denied.status_code == 403
         repo.project.assert_not_awaited()
     repo.session.commit.assert_not_awaited()
+
+
+async def test_twelve_second_preview_matches_two_six_second_requests_and_continuity(
+    twelve_runtime,  # noqa: F811
+):
+    from viraldy.modules.smart_remake.generation_prompt_preview import (
+        GenerationPromptPreviewRequest,
+        preview_generation_prompts,
+    )
+
+    value = twelve_runtime
+    value.row.revision = 1
+    before = copy.deepcopy(value.row.context_json)
+    preview = await preview_generation_prompts(
+        value.repair.repository,
+        value.row.workspace_id,
+        value.row.id,
+        GenerationPromptPreviewRequest(expectedRevision=1),
+    )
+    assert len(preview["groups"]) == 2
+    assert value.client.uploads == [] and value.client.submits == [] and value.images == []
+    assert value.row.context_json == before
+    await value.runner._freeze_plan(value.row, value.op)
+    actual = [
+        (await value.runner._request(value.row, value.op, 0, group))[0]
+        for group in value.row.context_json["renderPlan"]["groups"]
+    ]
+    assert value.op.result_json["windowContinuityVersion"] == "two-part-film-v1"
+    assert [request["input"]["duration"] for request in actual] == [6, 6]
+    assert all(request["input"]["audio"] is True for request in actual)
+    assert [group["prompt"] for group in preview["groups"]] == [
+        request["input"]["prompt"] for request in actual
+    ]

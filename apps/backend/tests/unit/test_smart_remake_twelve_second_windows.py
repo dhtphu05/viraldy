@@ -36,21 +36,12 @@ def twelve_second_context():
 
 def state_for(value):
     return {
-        "schemaVersion": 2,
-        "provider": "kie",
-        "targetDuration": 12,
-        **{
-            key: copy.deepcopy(value[key])
-            for key in (
-                "sourceSceneMap",
-                "renderPlan",
-                "draftTimeline",
-            )
-        },
-        "scenes": [
-            {**unit, "index": index, "versions": [], "activeVersionId": None}
-            for index, unit in enumerate(value["renderPlan"]["units"])
-        ],
+        "schemaVersion": 2, "provider": "kie", "targetDuration": 12,
+        **{key: copy.deepcopy(value[key]) for key in (
+            "sourceSceneMap", "renderPlan", "draftTimeline",
+        )},
+        "scenes": [{**unit, "index": index, "versions": [], "activeVersionId": None}
+                   for index, unit in enumerate(value["renderPlan"]["units"])],
     }
 
 
@@ -61,10 +52,8 @@ def test_twelve_seconds_keeps_every_scene_and_uses_exactly_two_six_second_window
     assert value["draftTimeline"]["totalFrames"] == 288
     assert len(plan["groups"]) == 2 and plan["audioRequired"] is True
     assert all(unit["rawDurationFrames"] == 144 for unit in plan["units"])
-    assert all(
-        group["rawDurationFrames"] == group["targetDurationFrames"] == 144
-        for group in plan["groups"]
-    )
+    assert all(group["rawDurationFrames"] == group["targetDurationFrames"] == 144
+               for group in plan["groups"])
     _validate_group_plan(plan, {unit["id"] for unit in plan["units"]})
     validate_manifest(SimpleNamespace(context_json=value, state_json=state_for(value)))
     assert freeze_provider_groups(value) == plan
@@ -72,22 +61,16 @@ def test_twelve_seconds_keeps_every_scene_and_uses_exactly_two_six_second_window
 
 def test_long_source_scene_is_split_at_six_seconds_without_dropping_source_range():
     value = build_timeline_plan(
-        target_duration=12,
-        source_frame_count=720,
-        reference_start_frame=0,
-        cut_frames=[0, 720],
-        timing_mode="fit_target",
+        target_duration=12, source_frame_count=720, reference_start_frame=0,
+        cut_frames=[0, 720], timing_mode="fit_target",
     )
     units = value["renderPlan"]["units"]
     assert [unit["targetDurationFrames"] for unit in units] == [144, 144]
     assert [(unit["sourceStartFrame"], unit["sourceEndFrame"]) for unit in units] == [
-        (0, 360),
-        (360, 720),
+        (0, 360), (360, 720),
     ]
-    assert [group["segments"][0]["outFrame"] for group in value["renderPlan"]["groups"]] == [
-        144,
-        144,
-    ]
+    assert [group["segments"][0]["outFrame"]
+            for group in value["renderPlan"]["groups"]] == [144, 144]
 
 
 @pytest.mark.parametrize("duration,calls", [(8, 1), (16, 2)])
@@ -103,13 +86,8 @@ def test_legacy_durations_keep_eight_second_frozen_windows(duration, calls):
 def test_twelve_seconds_is_not_accepted_for_legacy_veo(monkeypatch):
     monkeypatch.setenv("SMART_REMAKE_KIE_VIDEO_MODEL", "veo3_lite")
     with pytest.raises(Exception) as error:
-        build_timeline_plan(
-            target_duration=12,
-            source_frame_count=288,
-            reference_start_frame=0,
-            cut_frames=[0, 144, 288],
-            timing_mode="fit_target",
-        )
+        build_timeline_plan(target_duration=12, source_frame_count=288, reference_start_frame=0,
+                            cut_frames=[0, 144, 288], timing_mode="fit_target")
     assert error.value.code == "SMART_REMAKE_VIDEO_DURATION_INVALID"
 
 
@@ -119,9 +97,7 @@ def test_twelve_second_preflight_reserves_two_calls_and_four_bookends():
     row = SimpleNamespace(id=uuid4(), revision=1, state_json=state_for(value), context_json=value)
     result = calculate_preflight(
         PreflightRequest(action="render", projectId=str(row.id), expectedRevision=1),
-        mode="live",
-        bounds={},
-        row=row,
+        mode="live", bounds={}, row=row,
     )
     assert result.calls.video == 2 and result.calls.image == 4
     assert not any(block.code == "PROVIDER_PLAN_UPDATE_REQUIRED" for block in result.blockers)
@@ -130,13 +106,8 @@ def test_twelve_second_preflight_reserves_two_calls_and_four_bookends():
 @pytest.mark.asyncio
 async def test_new_twelve_second_intake_requires_sound():
     row = await create_intake(
-        MemoryRepository(),
-        MemoryMedia(),
-        uuid4(),
-        uuid4(),
-        intake_payload(targetDuration=12),
-        source_upload(),
-        image_upload(),
+        MemoryRepository(), MemoryMedia(), uuid4(), uuid4(), intake_payload(targetDuration=12),
+        source_upload(), image_upload(),
     )
     assert row.context_json["audioRequired"] is True
     assert row.state_json["targetDuration"] == 12
@@ -148,9 +119,7 @@ def twelve_runtime(grouped, monkeypatch):  # noqa: F811
 
     monkeypatch.setattr(kie_workflow, "require_generation_policy", AsyncMock())
     monkeypatch.setattr(
-        kie_workflow,
-        "reserve_generation_attempt",
-        AsyncMock(return_value=(None, True)),
+        kie_workflow, "reserve_generation_attempt", AsyncMock(return_value=(None, True)),
     )
     monkeypatch.setattr(kie_workflow, "settle_generation_attempt", AsyncMock())
     value = twelve_second_context()
@@ -176,7 +145,7 @@ async def test_frozen_twelve_second_workflow_submits_two_six_second_requests_wit
     assert all(request["input_data"]["audio"] is True for request in value.client.submits)
     assert len(value.images) == 4
     assert value.op.result_json["windowContinuityVersion"] == "two-part-film-v1"
-    assert "conditioningPolicy" not in value.op.result_json
+    assert value.op.result_json["conditioningPolicy"] == "source-frame-authority-v1"
 
 
 @pytest.mark.asyncio
@@ -193,8 +162,7 @@ async def test_old_partially_prepared_twelve_second_operation_keeps_its_prompt_p
 @pytest.mark.asyncio
 @pytest.mark.parametrize("changed", ["audio", "duration"])
 async def test_changed_audio_or_duration_reconciles_old_task_without_second_submit(
-    twelve_runtime,
-    changed,
+    twelve_runtime, changed,
 ):
     value = twelve_runtime
     value.client.fail_download = True
@@ -223,14 +191,8 @@ def test_technical_check_uses_six_seconds_and_requires_audio(monkeypatch):
 
     monkeypatch.setattr(repair_service, "technical_check", technical)
     repair_service._new_version(
-        b"video",
-        "private/clip",
-        {"prompt": "p", "imagePrompt": "i", "videoPrompt": "v"},
-        None,
-        {},
-        source="generated",
-        audio_required=True,
-        expected_duration=6,
+        b"video", "private/clip", {"prompt": "p", "imagePrompt": "i", "videoPrompt": "v"},
+        None, {}, source="generated", audio_required=True, expected_duration=6,
     )
     assert captured == {"expected_duration": 6, "audio_required": True}
 
@@ -253,20 +215,12 @@ async def test_legacy_browser_audio_false_cannot_turn_off_new_twelve_second_soun
         opening["sourceMediaHash"] = row.context_json["sourceMediaHash"]
     row.state_json = {**state_for(value), "revision": 1}
     install_expectations(
-        row.context_json,
-        state=row.state_json,
-        source_bytes=b"owned reference video",
+        row.context_json, state=row.state_json, source_bytes=b"owned reference video",
         product_bytes=b"owned seller product",
     )
     await timeline_service.enqueue_timeline_render(
-        object(),
-        SimpleNamespace(ai_mode="live", openai_api_key="fixture-token"),
-        row.workspace_id,
-        row.id,
-        1,
-        "initial",
-        actor_id=row.actor_id,
-        audio_required=False,
+        object(), SimpleNamespace(ai_mode="live", openai_api_key="fixture-token"),
+        row.workspace_id, row.id, 1, "initial", actor_id=row.actor_id, audio_required=False,
     )
     assert row.context_json["audioRequired"] is True
 
@@ -298,6 +252,7 @@ async def test_twelve_second_review_preview_matches_fresh_submission(twelve_runt
         request["input"]["prompt"] for request in actual
     ]
     assert [request["input"]["duration"] for request in actual] == [6, 6]
+
 
 
 async def test_new_default_wan_compile_retains_twelve_second_plan_and_sound(monkeypatch):

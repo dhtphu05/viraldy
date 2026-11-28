@@ -39,6 +39,7 @@ class RepairSceneRequest(RepairApiModel):
     imagePrompt: str | None = Field(default=None, min_length=1, max_length=12000)
     videoPrompt: str | None = Field(default=None, min_length=1, max_length=12000)
     repairIntent: RepairIntent | None = None
+    repairScope: Literal["provider_group"] | None = None
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
@@ -54,6 +55,8 @@ class RepairSceneRequest(RepairApiModel):
     @model_serializer(mode="wrap")
     def compatible_payload(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         payload = cast(dict[str, Any], handler(self))
+        if self.repairScope is None:
+            payload.pop("repairScope", None)
         # Persisted legacy hashes include baseVersionId=None but no repairIntent.
         # Do not globally exclude None, which would alter idempotency on replay.
         if self.repairIntent is None:
@@ -88,3 +91,11 @@ class SaveTimelineRequest(RepairApiModel):
 class PublishTimelineRequest(RepairApiModel):
     expectedRevision: int = Field(ge=1)
     idempotencyKey: str = Field(min_length=1, max_length=200)
+    reviewMode: Literal["whole_video"] | None = None
+
+    @model_serializer(mode="wrap")
+    def compatible_preview_mode(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = cast(dict[str, Any], handler(self))
+        if self.reviewMode is None:
+            payload.pop("reviewMode", None)
+        return payload

@@ -17,6 +17,7 @@ export interface RemakeRepairFormProps {
     projectId: string;
     scene: Scene;
     sceneLabel?: string;
+    clip?: { index: number; durationSeconds: number };
     active?: SmartRemakeSceneVersion;
     busy: boolean;
     onRepair(intent: RepairIntent): Promise<void>;
@@ -90,12 +91,24 @@ export function RemakeRepairForm(props: RemakeRepairFormProps) {
             }}
         >
             <div>
-                <h3 className="font-medium text-text-primary">Bạn muốn sửa điều gì?</h3>
+                <h3 className="font-medium text-text-primary">
+                    {props.clip
+                        ? `Bạn muốn sửa Clip ${props.clip.index} ở điểm nào?`
+                        : "Bạn muốn sửa điều gì?"}
+                </h3>
                 <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                    AI sẽ tạo lại clip{" "}
-                    {scene.rawDurationFrames ? scene.rawDurationFrames / 24 : scene.durationSeconds}{" "}
-                    giây của {props.sceneLabel?.toLowerCase() ?? `cảnh ${scene.index + 1}`}. Các
-                    clip khác được giữ nguyên.
+                    {props.clip ? (
+                        `AI sẽ tạo lại toàn bộ Clip ${props.clip.index} (${props.clip.durationSeconds} giây). Các clip khác được giữ nguyên.`
+                    ) : (
+                        <>
+                            AI sẽ tạo lại clip{" "}
+                            {scene.rawDurationFrames
+                                ? scene.rawDurationFrames / 24
+                                : scene.durationSeconds}{" "}
+                            giây của {props.sceneLabel?.toLowerCase() ?? `cảnh ${scene.index + 1}`}.
+                            Các clip khác được giữ nguyên.
+                        </>
+                    )}
                 </p>
             </div>
             <div className="flex flex-wrap gap-2" aria-label="Gợi ý yêu cầu sửa">
@@ -157,34 +170,39 @@ export function RemakeRepairForm(props: RemakeRepairFormProps) {
                     không cần viết prompt.
                 </p>
             </div>
-            <details>
-                <summary className="min-h-11 cursor-pointer rounded-lg py-3 text-sm font-medium text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    Nâng cao · Prompt tự động
-                </summary>
-                <div className="space-y-4 pt-2">
-                    {(
-                        [
-                            ["videoPrompt", "Prompt tạo video"],
-                            ["imagePrompt", "Prompt tạo ảnh"],
-                            ["prompt", "Prompt tổng hợp"],
-                        ] as const
-                    ).map(([field, label]) => (
-                        <div key={field} className="space-y-2">
-                            <label htmlFor={`${id}-${field}`} className="text-sm text-text-primary">
-                                {label}
-                            </label>
-                            <Textarea
-                                id={`${id}-${field}`}
-                                value={draft.advancedEdits?.[field] ?? base[field]}
-                                maxLength={12000}
-                                onChange={(event) => updateAdvanced(field, event.target.value)}
-                                disabled={busy}
-                                className={cn(fieldClass, "min-h-28")}
-                            />
-                        </div>
-                    ))}
-                </div>
-            </details>
+            {!props.clip && (
+                <details>
+                    <summary className="min-h-11 cursor-pointer rounded-lg py-3 text-sm font-medium text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        Nâng cao · Prompt tự động
+                    </summary>
+                    <div className="space-y-4 pt-2">
+                        {(
+                            [
+                                ["videoPrompt", "Prompt tạo video"],
+                                ["imagePrompt", "Prompt tạo ảnh"],
+                                ["prompt", "Prompt tổng hợp"],
+                            ] as const
+                        ).map(([field, label]) => (
+                            <div key={field} className="space-y-2">
+                                <label
+                                    htmlFor={`${id}-${field}`}
+                                    className="text-sm text-text-primary"
+                                >
+                                    {label}
+                                </label>
+                                <Textarea
+                                    id={`${id}-${field}`}
+                                    value={draft.advancedEdits?.[field] ?? base[field]}
+                                    maxLength={12000}
+                                    onChange={(event) => updateAdvanced(field, event.target.value)}
+                                    disabled={busy}
+                                    className={cn(fieldClass, "min-h-28")}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </details>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <p role="status" className="text-xs text-text-secondary">
                     {props.saveStatus ??

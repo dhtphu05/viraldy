@@ -6,6 +6,7 @@ import type {
     SmartRemakeRequirements,
     SmartRemakeRights,
     RepairIntent,
+    SmartRemakeRepairAffectedVersion,
 } from "@/shared/api/smart-remake";
 import { getRemakeBudgetError } from "./remake-intake";
 
@@ -14,7 +15,15 @@ export type RemakeActionSnapshot = {
     rights: SmartRemakeRights;
     budget: SmartRemakeBudgetPolicy;
 };
-export type RemakeRepairCandidate = { projectId: string; sceneId: string; versionId: string };
+export type RemakeRepairCandidate = {
+    projectId: string;
+    sceneId: string;
+    versionId: string;
+    operationId?: string;
+    repairScope?: "provider_group";
+    renderGroupId?: string;
+    affectedVersions?: SmartRemakeRepairAffectedVersion[];
+};
 type IntentIdentity = { fingerprint: string; startsNewProject?: boolean };
 export type RemakeActionIntent = IntentIdentity &
     (
@@ -25,12 +34,14 @@ export type RemakeActionIntent = IntentIdentity &
               baseVersionId: string | null;
               draft?: SmartRemakePromptDraft;
               repairIntent?: RepairIntent;
+              repairScope?: "provider_group";
           }
         | { action: "inspect"; subject: SmartRemakeInspectSubject }
     );
 export type RemakeActionArgs = {
     sceneId?: string;
     repairIntent?: RepairIntent;
+    repairScope?: "provider_group";
     draft?: SmartRemakePromptDraft;
     subject?: SmartRemakeInspectSubject;
 };

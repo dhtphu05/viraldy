@@ -36,6 +36,7 @@ import { Route as TiktokScorerScoreIdRouteImport } from './routes/tiktok-scorer.
 import { Route as PoliciesMediaRightsRouteImport } from './routes/policies.media-rights'
 import { Route as PerformanceCampaignIdRouteImport } from './routes/performance.$campaignId'
 import { Route as InsightsSlugRouteImport } from './routes/insights.$slug'
+import { Route as DemoSmartRemakeRouteImport } from './routes/demo.smart-remake'
 import { Route as CreativeLibraryCreativeIdRouteImport } from './routes/creative-library.$creativeId'
 import { Route as CreativeDirectionsAdaptationIdRouteImport } from './routes/creative-directions.$adaptationId'
 import { Route as CampaignsNewRouteImport } from './routes/campaigns.new'
@@ -184,6 +185,11 @@ const InsightsSlugRoute = InsightsSlugRouteImport.update({
   path: '/insights/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoSmartRemakeRoute = DemoSmartRemakeRouteImport.update({
+  id: '/demo/smart-remake',
+  path: '/demo/smart-remake',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CreativeLibraryCreativeIdRoute =
   CreativeLibraryCreativeIdRouteImport.update({
     id: '/$creativeId',
@@ -270,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-directions/$adaptationId': typeof CreativeDirectionsAdaptationIdRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
+  '/demo/smart-remake': typeof DemoSmartRemakeRoute
   '/insights/$slug': typeof InsightsSlugRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
   '/policies/media-rights': typeof PoliciesMediaRightsRoute
@@ -306,6 +313,7 @@ export interface FileRoutesByTo {
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-directions/$adaptationId': typeof CreativeDirectionsAdaptationIdRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
+  '/demo/smart-remake': typeof DemoSmartRemakeRoute
   '/insights/$slug': typeof InsightsSlugRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
   '/policies/media-rights': typeof PoliciesMediaRightsRoute
@@ -348,6 +356,7 @@ export interface FileRoutesById {
   '/campaigns/new': typeof CampaignsNewRoute
   '/creative-directions/$adaptationId': typeof CreativeDirectionsAdaptationIdRoute
   '/creative-library/$creativeId': typeof CreativeLibraryCreativeIdRoute
+  '/demo/smart-remake': typeof DemoSmartRemakeRoute
   '/insights/$slug': typeof InsightsSlugRoute
   '/performance/$campaignId': typeof PerformanceCampaignIdRoute
   '/policies/media-rights': typeof PoliciesMediaRightsRoute
@@ -391,6 +400,7 @@ export interface FileRouteTypes {
     | '/campaigns/new'
     | '/creative-directions/$adaptationId'
     | '/creative-library/$creativeId'
+    | '/demo/smart-remake'
     | '/insights/$slug'
     | '/performance/$campaignId'
     | '/policies/media-rights'
@@ -427,6 +437,7 @@ export interface FileRouteTypes {
     | '/campaigns/new'
     | '/creative-directions/$adaptationId'
     | '/creative-library/$creativeId'
+    | '/demo/smart-remake'
     | '/insights/$slug'
     | '/performance/$campaignId'
     | '/policies/media-rights'
@@ -468,6 +479,7 @@ export interface FileRouteTypes {
     | '/campaigns/new'
     | '/creative-directions/$adaptationId'
     | '/creative-library/$creativeId'
+    | '/demo/smart-remake'
     | '/insights/$slug'
     | '/performance/$campaignId'
     | '/policies/media-rights'
@@ -507,6 +519,7 @@ export interface RootRouteChildren {
   UgcReviewRoute: typeof UgcReviewRouteWithChildren
   BatchReviewsBatchIdRoute: typeof BatchReviewsBatchIdRoute
   CreativeDirectionsAdaptationIdRoute: typeof CreativeDirectionsAdaptationIdRoute
+  DemoSmartRemakeRoute: typeof DemoSmartRemakeRoute
   InsightsSlugRoute: typeof InsightsSlugRoute
   PoliciesMediaRightsRoute: typeof PoliciesMediaRightsRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -708,6 +721,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InsightsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/smart-remake': {
+      id: '/demo/smart-remake'
+      path: '/demo/smart-remake'
+      fullPath: '/demo/smart-remake'
+      preLoaderRoute: typeof DemoSmartRemakeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/creative-library/$creativeId': {
       id: '/creative-library/$creativeId'
       path: '/$creativeId'
@@ -900,6 +920,7 @@ const rootRouteChildren: RootRouteChildren = {
   UgcReviewRoute: UgcReviewRouteWithChildren,
   BatchReviewsBatchIdRoute: BatchReviewsBatchIdRoute,
   CreativeDirectionsAdaptationIdRoute: CreativeDirectionsAdaptationIdRoute,
+  DemoSmartRemakeRoute: DemoSmartRemakeRoute,
   InsightsSlugRoute: InsightsSlugRoute,
   PoliciesMediaRightsRoute: PoliciesMediaRightsRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,

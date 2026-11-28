@@ -77,6 +77,9 @@ async def compile_smart_remake_route(
     render_group_breaks: Annotated[str | None, Form(alias="renderGroupBreaks")] = None,
     expected_revision: Annotated[int | None, Form(alias="expectedRevision", ge=1)] = None,
     idempotency_key: Annotated[str | None, Form(alias="idempotencyKey", max_length=200)] = None,
+    additional_product_images: Annotated[
+        list[UploadFile] | None, File(alias="additionalProductImages", max_length=13)
+    ] = None,
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.ANALYSIS_RUN, current_user, db)
     if settings.ai_mode.strip().lower() not in {"fixture", "mock"} and timeline_mode != "reference":
@@ -97,6 +100,8 @@ async def compile_smart_remake_route(
         reference_video=reference_video,
         product_image=product_image,
     )
+    if additional_product_images:
+        values["additional_product_images"] = additional_product_images
     if timeline_mode is not None:
         if timeline_mode != "reference":
             raise AppError("SMART_REMAKE_TIMELINE_INVALID", "Timeline mode is not supported.")
