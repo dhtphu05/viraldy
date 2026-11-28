@@ -88,7 +88,7 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "SMART_REMAKE_TIMELINE_CUTS_INVALID":
             return "Mốc cắt cần tăng dần và phủ đủ đoạn mẫu. Chỉnh lại các mốc rồi thử nhé.";
         case "SMART_REMAKE_TIMELINE_PROVIDER_REQUIRED":
-            return "Timeline cần kết nối KIE Veo để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
+            return "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
         case "SMART_REMAKE_RENDER_GROUPS_INVALID":
             return "Nhóm cảnh chưa hợp lệ. Mỗi nhóm cần gồm các cảnh liền nhau và tối đa 8 giây; cập nhật lại kịch bản nhé.";
         case "OPENAI_IMAGE_NOT_CONFIGURED":
@@ -347,7 +347,7 @@ export async function renderSmartRemakeVideo(
         throw new Error("Kịch bản chưa được lưu đầy đủ. Cập nhật kịch bản trước khi tạo nhé.");
     if (isTimeline && provider !== "kie" && provider !== "fixture")
         throw new Error(
-            "Timeline cần kết nối KIE Veo để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.",
+            "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.",
         );
     const setupError = getRemakeGenerationSetupError(input.compileResult, health);
     if (setupError) throw new Error(setupError);

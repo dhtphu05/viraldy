@@ -7,8 +7,8 @@ from typing import Any
 
 from viraldy.shared.errors.base import AppError
 
-from .engine.kie_adapter import build_kie_group_request, validate_kie_video_input
 from .engine.video_directions import video_requirements
+from .engine.video_requests import build_group_request, validate_video_input
 from .generation_expectations import validate_generation_expectations
 
 
@@ -64,7 +64,10 @@ def freeze_provider_groups(context: dict[str, Any]) -> dict[str, Any]:
     suffix = video_requirements(prompt_context)
     for group in plan["groups"]:
         identities = group["renderUnitIds"]
-        request = build_kie_group_request(
+        request = build_group_request(
+            model=plan.get("videoModel", "veo3_lite"),
+            resolution=plan.get("videoResolution") or "720P",
+            audio=bool(context.get("audioRequired")),
             scenes=[{**units[identity], **scenes[identity]} for identity in identities],
             segments=group["segments"],
             reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
@@ -73,5 +76,5 @@ def freeze_provider_groups(context: dict[str, Any]) -> dict[str, Any]:
             reference_analysis=snapshot["sourceContext"],
         )
         request["input"]["prompt"] += suffix
-        validate_kie_video_input(request["input"])
+        validate_video_input(request["model"], request["input"])
     return plan

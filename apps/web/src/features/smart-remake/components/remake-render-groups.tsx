@@ -29,6 +29,11 @@ export function RemakeRenderGroups({
             : getRenderGroups(plan);
     const logicalIds = [...new Set(plan.units.map((unit) => unit.sourceSceneId))];
     const fragmented = logicalIds.length !== plan.units.length;
+    const videoResolution =
+        plan.videoResolution ??
+        (plan.videoModel === "wan/3-0-video" || plan.videoModel === "veo3_lite"
+            ? "720P"
+            : undefined);
     const imageModelLabel =
         plan.imageModel === "gpt-image-2.6-sunburst"
             ? "GPT Image Sunburst · OpenAI"
@@ -90,10 +95,15 @@ export function RemakeRenderGroups({
                     />
                     <div className="min-w-0">
                         <p className="text-sm font-medium">
-                            {plan.videoModel === "veo3_lite" ? "Veo 3.1 Lite · KIE" : "Veo · KIE"}
+                            {plan.videoModel === "wan/3-0-video"
+                                ? "Wan 3.0 · KIE"
+                                : plan.videoModel === "veo3_lite"
+                                  ? "Veo 3.1 Lite · KIE"
+                                  : "KIE"}
                         </p>
                         <p className="mt-1 text-xs text-text-secondary">
-                            Clip dọc 9:16 · 8 giây mỗi lượt
+                            Clip dọc 9:16{videoResolution ? ` · ${videoResolution}` : ""} · 8 giây
+                            mỗi lượt
                         </p>
                     </div>
                 </div>

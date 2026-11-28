@@ -14,7 +14,7 @@ from .generation_expectations import (
     validate_generation_expectations,
 )
 from .project_policy import stable_hash
-from .provider_execution import validated_execution_evidence
+from .provider_execution import safe_provider_identifier, validated_execution_evidence
 
 IMAGE_REJECTION_CODES = frozenset({
     "OPENAI_IMAGE_AUTH_FAILED", "OPENAI_IMAGE_PERMISSION_DENIED",
@@ -73,7 +73,7 @@ def is_known_video_rejection(attempt: Any) -> bool:
         getattr(attempt, "status", None) != "failed"
         or getattr(attempt, "stage", None) != "video"
         or getattr(attempt, "provider", None) != "kie"
-        or getattr(attempt, "model", None) != "veo-3-1"
+        or getattr(attempt, "model", None) not in {"veo-3-1", "wan/3-0-video"}
         or getattr(attempt, "purpose", None) not in {"initial", "repair"}
         or not isinstance(code, str) or code not in VIDEO_REJECTION_CODES
         or (error.get("errorCode") is not None and error["errorCode"] != code)
@@ -96,11 +96,78 @@ def is_known_video_rejection(attempt: Any) -> bool:
     return proof is not None and proof["operation"] == "kie.tasks.create"
 
 
+def is_terminal_failed_video_response(attempt: Any) -> bool:
+    """A verified terminal task observation settles control without settling its bill."""
+    receipt = getattr(attempt, "receipt_json", None)
+    error = getattr(attempt, "error_json", None)
+    task_id = getattr(attempt, "provider_task_id", None)
+    if (
+        getattr(attempt, "status", None) != "failed"
+        or getattr(attempt, "stage", None) != "video"
+        or getattr(attempt, "provider", None) != "kie"
+        or getattr(attempt, "model", None) not in {"veo-3-1", "wan/3-0-video"}
+        or not safe_provider_identifier(task_id)
+        or not isinstance(receipt, dict)
+        or (error is not None and not isinstance(error, dict))
+    ):
+        return False
+    error = error or {}
+    if (
+        receipt.get("providerTaskId") != task_id
+        or receipt.get("errorCode") != "KIE_TASK_FAILED"
+        or error.get("errorCode", "KIE_TASK_FAILED") != "KIE_TASK_FAILED"
+        or error.get("providerTaskId", task_id) != task_id
+        or receipt.get("requestOutcome") not in (None, "failed")
+        or ("httpStatus" in receipt and (
+            type(receipt["httpStatus"]) is not int or receipt["httpStatus"] != 200
+        ))
+    ):
+        return False
+    # Keep the submission witness intact when a later read adds terminal evidence.
+    evidence = receipt.get("terminalExecutionEvidence", receipt.get("executionEvidence"))
+    proof = validated_execution_evidence({
+        "id": str(attempt.id), "requestHash": attempt.request_hash,
+        "provider": attempt.provider, "model": attempt.model,
+        "providerTaskId": task_id, "receipt": {"executionEvidence": evidence},
+    })
+    return (
+        proof is not None and proof["operation"] == "kie.tasks.get"
+        and proof.get("taskId") == task_id
+    )
+
+
+def _is_unknown_image_transport(attempt: Any) -> bool:
+    """A lost synchronous image response has no response witness to reconcile."""
+    from .engine.openai_images import SUPPORTED_IMAGE_MODELS
+
+    metadata = getattr(attempt, "metadata_json", None)
+    receipt = {"errorCode": "OPENAI_IMAGE_SUBMISSION_UNRESOLVED"}
+    submitted = getattr(attempt, "submitted_at", None)
+    if (
+        getattr(attempt, "stage", None) != "image"
+        or getattr(attempt, "provider", None) != "openai"
+        or getattr(attempt, "model", None) not in SUPPORTED_IMAGE_MODELS
+        or getattr(attempt, "purpose", None) not in {"initial", "repair"}
+        or getattr(attempt, "actual_usd", None) is not None
+        or getattr(attempt, "receipt_json", None) != receipt
+        or getattr(attempt, "error_json", None) != receipt
+        or not isinstance(metadata, dict)
+        or not isinstance(submitted, datetime) or submitted.utcoffset() != UTC.utcoffset(None)
+    ):
+        return False
+    slot = metadata.get("slot")
+    return (
+        isinstance(slot, str) and re.fullmatch(r"image:(0|[1-9][0-9]*)(:ending)?", slot) is not None
+        and getattr(attempt, "idempotency_key", None) == f"{metadata.get('operationId')}:{slot}"
+    )
+
+
 def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
     """Validate one server consent against this unchanged unknown provider receipt."""
     metadata = getattr(attempt, "metadata_json", None)
     receipt = getattr(attempt, "receipt_json", None)
     usage = getattr(attempt, "usage_json", None)
+    image_transport = _is_unknown_image_transport(attempt)
     if (
         not isinstance(metadata, dict)
         or not isinstance(authorization, dict) or not isinstance(receipt, dict)
@@ -111,9 +178,11 @@ def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
         or type(authorization.get("schemaVersion")) is not int
         or authorization["schemaVersion"] != 1
         or getattr(attempt, "status", None) != "unknown"
-        or getattr(attempt, "stage", None) != "video"
-        or getattr(attempt, "provider", None) != "kie"
-        or getattr(attempt, "model", None) != "veo-3-1"
+        or not (image_transport or (
+            getattr(attempt, "stage", None) == "video"
+            and getattr(attempt, "provider", None) == "kie"
+            and getattr(attempt, "model", None) in {"veo-3-1", "wan/3-0-video"}
+        ))
         or getattr(attempt, "provider_task_id", None) not in (None, "")
         or (usage is not None and (not isinstance(usage, dict) or usage))
         or not isinstance(authorization.get("reason"), str)
@@ -140,6 +209,9 @@ def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
         or authorization["receiptHash"] != stable_hash(receipt)
     ):
         return False
+    if image_transport:
+        # Explicit consent settles permission for one replacement, not the outcome/bill.
+        return bool(confirmed >= attempt.submitted_at)
     proof = validated_execution_evidence({
         "id": str(attempt.id), "requestHash": attempt.request_hash,
         "provider": attempt.provider, "model": attempt.model,
@@ -234,6 +306,8 @@ def attempt_needs_reconciliation(attempt: Any) -> bool:
         getattr(attempt, "stage", None) == "analysis"
         and getattr(attempt, "purpose", None) == "loading_summary"
     ) or is_known_image_rejection(attempt) or is_known_video_rejection(attempt) or (
+        is_terminal_failed_video_response(attempt)
+    ) or (
         is_authorized_unconfirmed_replacement(attempt)
     ) or (
         is_completed_analysis_response(attempt)

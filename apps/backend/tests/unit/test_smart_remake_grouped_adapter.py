@@ -108,7 +108,7 @@ def test_health_exposes_provider_readiness_without_credentials(monkeypatch):
     settings = SimpleNamespace(ai_mode="live", openai_api_key=SecretStr("openai-test-secret"))
     result = health_payload(settings)
     assert result["openaiImagesConfigured"] is True
-    assert result["kieVideoModel"] == "veo3_lite"
+    assert result["kieVideoModel"] == "wan/3-0-video"
     assert result["openaiImageModel"] == "gpt-image-2.6-sunburst"
     assert "secret" not in str(result)
 

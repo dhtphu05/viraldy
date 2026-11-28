@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from viraldy.shared.errors.base import AppError
 
+from .engine.config import get_kie_video_model, get_kie_video_resolution
 from .timeline_schemas import DraftTimeline, RenderPlan, SourceSceneMap
 
 
@@ -103,6 +104,8 @@ def build_timeline_plan(
             "SMART_REMAKE_RENDER_GROUPS_INVALID",
             "Image quality must be low, medium, high, xhigh or max.",
         )
+    video_model = get_kie_video_model()
+    video_resolution = get_kie_video_resolution(video_model)
     return {
         "sourceSceneMap": SourceSceneMap.model_validate(
             {
@@ -140,7 +143,8 @@ def build_timeline_plan(
                     if timing_mode == "fit_target"
                     else {}
                 ),
-                "videoModel": "veo3_lite",
+                "videoModel": video_model,
+                **({"videoResolution": video_resolution} if video_model == "wan/3-0-video" else {}),
                 "imageModel": "gpt-image-2.6-sunburst",
                 "imageQuality": image_quality,
                 "imageComplexity": "high",

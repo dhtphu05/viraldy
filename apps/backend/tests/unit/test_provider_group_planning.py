@@ -21,7 +21,8 @@ from viraldy.modules.smart_remake.timeline_planner import build_timeline_plan
 from viraldy.shared.errors.base import AppError
 
 
-def context(*, count=12, prompt_length=0, character=False, target_duration=8):
+def context(*, count=12, prompt_length=0, character=False, target_duration=8,
+            video_model="veo3_lite"):
     plan = build_timeline_plan(
         target_duration=target_duration,
         source_frame_count=count * 48,
@@ -29,6 +30,9 @@ def context(*, count=12, prompt_length=0, character=False, target_duration=8):
         cut_frames=list(range(0, count * 48 + 1, 48)),
         timing_mode="fit_target",
     )
+    plan["renderPlan"]["videoModel"] = video_model
+    if video_model == "veo3_lite":
+        plan["renderPlan"].pop("videoResolution", None)
     value = {
         **plan,
         "characterKey": "character" if character else None,
@@ -167,7 +171,7 @@ def test_planner_validates_two_composed_frames_for_every_provider_window(
     from viraldy.modules.smart_remake import provider_group_planning
 
     value = context(count=scene_count, character=character, target_duration=16)
-    original = provider_group_planning.build_kie_group_request
+    original = provider_group_planning.build_group_request
     references = []
 
     def capture(**kwargs):
@@ -175,6 +179,6 @@ def test_planner_validates_two_composed_frames_for_every_provider_window(
         assert len(kwargs["reference_image_urls"]) == 2
         return original(**kwargs)
 
-    monkeypatch.setattr(provider_group_planning, "build_kie_group_request", capture)
+    monkeypatch.setattr(provider_group_planning, "build_group_request", capture)
     plan = freeze_provider_groups(value)
     assert len(plan["groups"]) == len(references) == 2

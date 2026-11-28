@@ -14,6 +14,8 @@ from .engine import compile_smart_remake, render_smart_remake
 from .engine.config import (
     get_flowkit_url,
     get_kie_api_key,
+    get_kie_video_model,
+    get_kie_video_resolution,
     get_max_product_image_bytes,
     get_max_reference_video_bytes,
     get_unifically_api_key,
@@ -39,12 +41,14 @@ def feature_enabled(settings: Settings) -> bool:
 
 def health_payload(settings: Settings) -> dict[str, Any]:
     fixture = settings.ai_mode.strip().lower() in {"fixture", "mock"}
+    video_model = get_kie_video_model()
     return {
         "enabled": feature_enabled(settings),
         "mode": "fixture" if fixture else "live",
         "providers": ["fixture"] if fixture else ["kie", "unifically", "flowkit"],
         "kieConfigured": bool(get_kie_api_key()),
-        "kieVideoModel": "veo3_lite",
+        "kieVideoModel": video_model,
+        "kieVideoResolution": get_kie_video_resolution(video_model),
         "openaiImagesConfigured": bool(getattr(settings, "openai_api_key", None)),
         "openaiImageModel": "gpt-image-2.6-sunburst",
         "flowkitUrlSet": bool(get_flowkit_url()),

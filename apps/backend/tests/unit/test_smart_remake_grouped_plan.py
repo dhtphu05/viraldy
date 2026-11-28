@@ -51,7 +51,7 @@ def test_forced_group_break_and_frozen_provider_image_configuration():
     plan = plan_for((2, 6), render_group_breaks=[1], image_quality="medium")["renderPlan"]
     assert len(plan["groups"]) == 2
     assert (plan["videoModel"], plan["imageModel"], plan["imageQuality"], plan["imageSize"]) == (
-        "veo3_lite",
+        "wan/3-0-video",
         "gpt-image-2.6-sunburst",
         "medium",
         "720x1280",
@@ -185,6 +185,7 @@ def test_legacy_saved_v2_without_groups_remains_valid():
         for field in (
             "groups",
             "videoModel",
+            "videoResolution",
             "imageModel",
             "imageQuality",
             "imageComplexity",

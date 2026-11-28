@@ -178,6 +178,7 @@ async def test_current_product_only_plan_does_not_require_openai(enqueue_runtime
             "groups",
             "renderGroupBreaks",
             "videoModel",
+            "videoResolution",
             "imageModel",
             "imageQuality",
             "imageComplexity",
