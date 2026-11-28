@@ -12,6 +12,7 @@ from uuid import uuid4
 from starlette.concurrency import run_in_threadpool
 
 from viraldy.platform.storage.ports import StoragePort
+from viraldy.platform.storage.s3 import R2_OBJECT_MARKER
 
 from .engine.media_binaries import ffmpeg_path
 from .engine.media_probe import probe_media_bytes
@@ -97,7 +98,12 @@ class RepairMediaStore:
         self.storage = storage
 
     async def put(self, prefix: str, data: bytes, mime_type: str) -> str:
-        key = f"{prefix}/{uuid4().hex}"
+        separator = (
+            R2_OBJECT_MARKER
+            if getattr(self.storage, "smart_remake_r2_enabled", False) is True
+            else "/"
+        )
+        key = f"{prefix}{separator}{uuid4().hex}"
         with tempfile.TemporaryDirectory(prefix="smart-remake-store-") as tmp:
             path = Path(tmp) / "media"
             path.write_bytes(data)

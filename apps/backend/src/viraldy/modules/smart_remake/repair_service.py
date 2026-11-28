@@ -250,6 +250,11 @@ class RepairService:
 
             return cast(dict[str, Any], stopped(without_storage_keys(state)))
         state["productImageUrl"] = await self.media.url(row.context_json["productKey"])
+        additional = (row.context_json.get("p0") or {}).get("additionalProductReferences") or []
+        if additional:
+            state["additionalProductImageUrls"] = [
+                await self.media.url(asset["storageKey"]) for asset in additional
+            ]
         if row.context_json.get("characterKey"):
             state["characterImageUrl"] = await self.media.url(row.context_json["characterKey"])
         if state.get("schemaVersion") == 2:

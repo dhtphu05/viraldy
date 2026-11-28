@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, cast
 
 from starlette.concurrency import run_in_threadpool
 
@@ -13,6 +14,7 @@ from viraldy.platform.storage.ports import StoragePort
 from viraldy.shared.errors.base import AppError
 
 from .repair_media import now_iso
+from .staged_upload_retention import staged_key_for_project
 
 
 def _owned(key: Any, prefix: str) -> TypeGuard[str]:
@@ -34,6 +36,10 @@ def _snapshot_keys(state: dict[str, Any], context: dict[str, Any]) -> list[Any]:
     keys += list(context.get("sourceThumbnailKeys", {}).values())
     keys += [v.get("storageKey") for s in state.get("scenes", []) for v in s.get("versions", [])]
     keys += [v.get("storageKey") for v in context.get("imageAssets", {}).values()]
+    keys += [
+        asset.get("storageKey")
+        for asset in (context.get("p0") or {}).get("additionalProductReferences", [])
+    ]
     return keys
 
 
@@ -70,6 +76,25 @@ def deletion_inventory(
                 "keyHash": hashlib.sha256(key.encode()).hexdigest(),
                 "status": "pending" if owned else "retained_unowned",
                 **({"storageKey": key} if owned else {}),
+            }
+        )
+    known = {item["keyHash"] for item in result}
+    for reference in p0.get("stagedUploads", []):
+        staged_key = staged_key_for_project(reference, owned_prefix)
+        raw_key = reference.get("storageKey", "") if isinstance(reference, dict) else ""
+        key_hash = hashlib.sha256(str(raw_key).encode()).hexdigest()
+        if key_hash in known:
+            continue
+        known.add(key_hash)
+        result.append(
+            {
+                "keyHash": key_hash,
+                "status": "pending" if staged_key else "retained_unowned",
+                **(
+                    {"storageKey": staged_key, "stagedUpload": copy.deepcopy(reference)}
+                    if staged_key
+                    else {}
+                ),
             }
         )
     return result
@@ -115,16 +140,33 @@ async def delete_inventory(
         report["reason"] = "running_jobs" if running_jobs else "evidence_retention"
         return report
     for item in objects:
-        if item["status"] != "pending":
+        if item["status"] not in {"pending", "pending_upload_expiry"}:
             continue
         key = item.get("storageKey")
-        if not _owned(key, owned_prefix):
+        staged = item.get("stagedUpload")
+        staged_key = staged_key_for_project(staged, owned_prefix) if staged is not None else None
+        if (staged is not None and (staged_key is None or staged_key != key)) or (
+            staged is None and not _owned(key, owned_prefix)
+        ):
             item.pop("storageKey", None)
+            item.pop("stagedUpload", None)
             item["status"] = "retained_unowned"
             continue
+        key = cast(str, key)
         if key in shared_keys:
             item["status"] = "retained_shared"
             continue
+        if staged is not None:
+            try:
+                expiry = datetime.fromisoformat(staged["uploadExpiresAt"])
+                if expiry.tzinfo is None:
+                    raise ValueError("An upload expiry requires a timezone.")
+            except (KeyError, TypeError, ValueError):
+                item["status"] = "retained_upload_expiry_unknown"
+                continue
+            if expiry > datetime.fromisoformat(now_iso()):
+                item.update(status="pending_upload_expiry", retryAfter=expiry.isoformat())
+                continue
         try:
             await run_in_threadpool(storage.delete_object, key)
             exists = await run_in_threadpool(storage.object_exists, key)

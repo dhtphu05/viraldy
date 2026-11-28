@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "./smart-remake";
+import * as intakeUploads from "./smart-remake-uploads";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+});
 const response = (data: unknown) => Response.json({ data, meta: { requestId: "fixture" } });
 
 describe("Smart Remake owned project boundaries", () => {
@@ -23,6 +27,10 @@ describe("Smart Remake owned project boundaries", () => {
         const metadata = { idempotencyKey: "intake-1", targetDuration: 8 };
         const source = new File(["source"], "source.mp4", { type: "video/mp4" });
         const product = new File(["product"], "product.png", { type: "image/png" });
+        vi.spyOn(intakeUploads, "uploadSmartRemakeInputs").mockResolvedValue({
+            sourceAssetVersionId: "source-version",
+            productAssetVersionId: "product-version",
+        });
         await expect(
             api.createSmartRemakeProject("workspace", {
                 metadata: metadata as api.SmartRemakeIntakeMetadata,
@@ -32,13 +40,13 @@ describe("Smart Remake owned project boundaries", () => {
         ).resolves.toEqual({ project });
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(fetch.mock.calls[0][0]).toBe(
-            "/api/backend/workspaces/workspace/smart-remake/projects",
+            "/api/backend/workspaces/workspace/smart-remake/projects/from-assets",
         );
-        const body = fetch.mock.calls[0][1].body as FormData;
-        expect(JSON.parse(String(body.get("metadata")))).toEqual(metadata);
-        expect(body.get("referenceVideo")).toBe(source);
-        expect(body.get("productImage")).toBe(product);
-        expect(body.has("characterImage")).toBe(false);
+        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+            metadata,
+            sourceAssetVersionId: "source-version",
+            productAssetVersionId: "product-version",
+        });
     });
 
     it("compiles the owned intake and revision without replacing retained media", async () => {

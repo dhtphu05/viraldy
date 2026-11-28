@@ -1,4 +1,5 @@
 import { apiGet, apiPatch, apiPost, apiPostForm, type ApiRequestOptions } from "./client";
+import { uploadSmartRemakeInputs } from "./smart-remake-uploads";
 import type {
     SmartRemakeRequirements,
     SmartRemakeRights,
@@ -184,7 +185,12 @@ export type SmartRemakeSceneVersion = {
 export type SmartRemakeProject = {
     id: string;
     sourceAudio?: SmartRemakeSourceAudio;
-    inputMediaHashes?: { source: string; product: string; character?: string | null } | null;
+    inputMediaHashes?: {
+        source: string;
+        product: string;
+        character?: string | null;
+        additionalProducts?: string[];
+    } | null;
     expectationsVersion?: 1 | null;
     expectationsHash?: string | null;
     revision: number;
@@ -259,6 +265,7 @@ export type SmartRemakeProject = {
     finalVideoUrl: string;
     downloadUrl?: string;
     productImageUrl?: string;
+    additionalProductImageUrls?: string[];
     targetDuration: 8 | 16;
     provider: "unifically" | "flowkit" | "kie";
     analysisProgress?: SmartRemakeAnalysisProgress;
@@ -475,23 +482,23 @@ export function publishSmartRemakeTimeline(
     );
 }
 
-export function createSmartRemakeProject(
+export async function createSmartRemakeProject(
     workspaceId: string,
     input: {
         metadata: SmartRemakeIntakeMetadata;
         referenceVideo: File;
         productImage: File;
+        additionalProductImages?: File[];
         characterImage?: File;
     },
+    options: ApiRequestOptions = {},
 ) {
-    const body = new FormData();
-    body.set("metadata", JSON.stringify(input.metadata));
-    body.set("referenceVideo", input.referenceVideo);
-    body.set("productImage", input.productImage);
-    if (input.characterImage) body.set("characterImage", input.characterImage);
-    return apiPostForm<{ project: SmartRemakeProject }>(
-        `/workspaces/${workspaceId}/smart-remake/projects`,
-        body,
+    const assets = await uploadSmartRemakeInputs(workspaceId, input, options.signal);
+    options.signal?.throwIfAborted();
+    return apiPost<{ project: SmartRemakeProject }>(
+        `/workspaces/${workspaceId}/smart-remake/projects/from-assets`,
+        { metadata: input.metadata, ...assets },
+        options,
     );
 }
 
