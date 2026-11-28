@@ -49,6 +49,8 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
         or result.get("kind") != "render"
         or operation.status not in {"running", "completed", "failed"}
         or context.get("p0", {}).get("status") in {"suspended", "deleted"}
+        or (context.get("p0", {}).get("deletion") or {}).get("status")
+        not in {None, "cancelled"}
         or not isinstance(plan, dict)
         or not plan.get("groups")
         or result.get("renderPlanHash") != _hash(plan)
@@ -300,6 +302,7 @@ def _group(
         stage = "preparing_image"
     report_id = _report_id(row, operation, checks, images)
     image_error = next((code for image in images if (code := _code(image.get("errorCode")))), None)
+    request = _public_kie_request(row, operation, task, submitted)
     return {
         "groupId": group["id"],
         "stage": stage,
@@ -307,7 +310,50 @@ def _group(
         **public_provider_error_fields(task),
         **({"inspectionReportId": report_id} if report_id else {}),
         **({"errorCode": image_error} if stage == "blocked" and image_error else {}),
+        **({"kieRequest": request} if request else {}),
     }
+
+
+def _public_kie_request(
+    row: Any, operation: Any, task: dict[str, Any], submitted: bool | None
+) -> dict[str, str] | None:
+    snapshot = task.get("videoRequest")
+    if (
+        submitted is not True or not isinstance(snapshot, dict)
+        or set(snapshot) != {"model", "input"}
+    ):
+        return None
+    model, data = snapshot["model"], snapshot["input"]
+    allowed = {
+        "prompt", "model", "generation_type", "aspect_ratio", "duration", "resolution",
+        "enable_translation", "audio",
+    }
+    if (
+        not isinstance(model, str)
+        or model != task.get("requestModel", model)
+        or not isinstance(data, dict)
+        or set(data) - allowed
+        or not isinstance(data.get("prompt"), str)
+        or not 0 < len(data["prompt"]) <= (20000 if model == "wan/3-0-video" else 60000)
+    ):
+        return None
+    references = task.get("imageReferences")
+    if not isinstance(references, list) or any(not isinstance(item, dict) for item in references):
+        return None
+    binding = {
+        **snapshot,
+        "productHash": row.context_json.get("productMediaHash"),
+        "characterHash": row.context_json.get("characterMediaHash"),
+        "imageHashes": [item.get("mediaHash") for item in references],
+        "expectationsHash": operation.result_json["expectationsHash"],
+        **(
+            {"apiContract": task["apiContract"]}
+            if isinstance(task.get("apiContract"), str) else {}
+        ),
+    }
+    if _hash(binding) != task.get("requestHash"):
+        return None
+    return {"model": model, "prompt": data["prompt"], "requestHash": task["requestHash"]}
 
 
 def _failure_groups(
@@ -408,7 +454,7 @@ def _image_key(row: Any, operation: Any, image: dict[str, Any]) -> str | None:
         or not _frame_matches(image, scene)
         or not isinstance(key, str)
         or not key.startswith(prefix)
-        or re.fullmatch(r"[a-f0-9]{32}", key[len(prefix) :]) is None
+        or re.fullmatch(r"(?:__r2__/)?[a-f0-9]{32}", key[len(prefix) :]) is None
     ):
         return None
     return key
@@ -429,7 +475,7 @@ def _video_key(
     if (
         not isinstance(key, str)
         or not key.startswith(prefix)
-        or re.fullmatch(r"[a-f0-9]{32}", key[len(prefix) :]) is None
+        or re.fullmatch(r"(?:__r2__/)?[a-f0-9]{32}", key[len(prefix) :]) is None
         or not isinstance(digest, str)
         or re.fullmatch(r"[a-f0-9]{64}", digest) is None
         or type(frame_count) is not int
@@ -479,7 +525,11 @@ async def present_generation_progress(
         for image in _images(row, operation, group):
             if key := _image_key(row, operation, image):
                 if url := await _preview_url(media, key):
-                    images.append({"renderUnitId": image["renderUnitId"], "url": url})
+                    images.append({
+                        "renderUnitId": image["renderUnitId"], "url": url,
+                        "requestHash": image["requestHash"],
+                        **({"frameRole": image["frameRole"]} if image.get("frameRole") else {}),
+                    })
         video_url = None
         if key := _video_key(row, operation, group, public["videoSubmitted"]):
             video_url = await _preview_url(media, key)

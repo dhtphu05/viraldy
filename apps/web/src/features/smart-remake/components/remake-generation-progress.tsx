@@ -2,13 +2,7 @@ import { Check, Clock3, Film, Image, Layers3, Loader2, RefreshCw, ShieldAlert } 
 import type { SmartRemakeProject } from "@/shared/api/smart-remake";
 import { ApiError } from "@/shared/api/errors";
 import { Button } from "@/shared/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogTitle,
-    DialogTrigger,
-} from "@/shared/ui/dialog";
+import { RemakeGeneratedImage, RemakeKiePrompt } from "./remake-generated-media";
 import {
     generationStageLabels,
     getRemakeGenerationProgress,
@@ -17,6 +11,7 @@ import { getRemakeErrorMessage } from "../lib/smart-remake-render";
 import "./remake-generation-progress.css";
 
 export interface RemakeGenerationProgressProps {
+    workspaceId?: string;
     project: SmartRemakeProject;
     sourceUrl?: string | null;
     productUrl?: string | null;
@@ -30,6 +25,7 @@ const seconds = (value: number) => Number(value.toFixed(3)).toLocaleString("vi-V
 const clock = (value: number) => `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
 
 export function RemakeGenerationProgress({
+    workspaceId,
     project,
     sourceUrl,
     productUrl,
@@ -178,11 +174,15 @@ export function RemakeGenerationProgress({
                     const imageGrid = (
                         <div className="remake-generation-progress__image-grid">
                             {group.conditioningImages.map((reference, index) => (
-                                <ConditioningImage
-                                    key={reference.renderUnitId}
-                                    url={reference.url}
+                                <RemakeGeneratedImage
+                                    key={`${reference.requestHash ?? reference.renderUnitId}:${reference.frameRole ?? index}`}
+                                    workspaceId={workspaceId}
+                                    projectId={project.id}
+                                    operationId={project.generationProgress?.operationId ?? ""}
+                                    image={reference}
                                     sceneIndex={reference.sourceSceneIndex}
                                     ordinal={index + 1}
+                                    onRefresh={onCheckStatus}
                                 />
                             ))}
                         </div>
@@ -351,6 +351,10 @@ export function RemakeGenerationProgress({
                                         {imageGrid}
                                     </details>
                                 )}
+                                <RemakeKiePrompt
+                                    request={group.kieRequest}
+                                    videoSubmitted={group.videoSubmitted}
+                                />
                                 {group.stage === "blocked" &&
                                     group.inspectionReportId &&
                                     onViewInspection && (
@@ -397,46 +401,5 @@ export function RemakeGenerationProgress({
                 )}
             </footer>
         </section>
-    );
-}
-
-function ConditioningImage({
-    url,
-    sceneIndex,
-    ordinal,
-}: {
-    url: string;
-    sceneIndex?: number;
-    ordinal: number;
-}) {
-    const label = sceneIndex ? `cảnh ${sceneIndex}` : "clip";
-    return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <button
-                    type="button"
-                    className="remake-generation-progress__image"
-                    aria-label={`Phóng to ảnh tham chiếu ${ordinal} · ${label}`}
-                >
-                    <img src={url} alt={`Ảnh tham chiếu đã tạo cho ${label}`} />
-                    <span>
-                        Ảnh {ordinal} · {label}
-                    </span>
-                </button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl rounded-3xl">
-                <DialogTitle>
-                    Ảnh tham chiếu {ordinal} · {label}
-                </DialogTitle>
-                <DialogDescription>
-                    Ảnh đã được tạo để chuẩn bị video; đây chưa phải clip đầu ra.
-                </DialogDescription>
-                <img
-                    className="max-h-[65dvh] w-full object-contain"
-                    src={url}
-                    alt={`Ảnh tham chiếu ${label} phóng to`}
-                />
-            </DialogContent>
-        </Dialog>
     );
 }

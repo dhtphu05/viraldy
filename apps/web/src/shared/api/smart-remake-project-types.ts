@@ -350,6 +350,19 @@ export type SmartRemakeProviderError = {
     providerMessage?: string;
 };
 
+export type SmartRemakeConditioningImage = {
+    renderUnitId: string;
+    url: string;
+    requestHash?: string;
+    frameRole?: "opening" | "ending";
+};
+
+export type SmartRemakeKieRequest = {
+    model: string;
+    prompt: string;
+    requestHash: string;
+};
+
 export type SmartRemakeGenerationProgress = {
     operationId: string;
     status: "running" | "completed" | "failed";
@@ -360,7 +373,8 @@ export type SmartRemakeGenerationProgress = {
         stage: SmartRemakeGenerationStage;
         videoSubmitted: boolean | null;
         conditioningImageUrl?: string;
-        conditioningImages?: Array<{ renderUnitId: string; url: string }>;
+        conditioningImages?: SmartRemakeConditioningImage[];
+        kieRequest?: SmartRemakeKieRequest;
         videoUrl?: string;
         errorCode?: string;
         providerError?: SmartRemakeProviderError;

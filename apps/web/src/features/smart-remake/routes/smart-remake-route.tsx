@@ -861,6 +861,7 @@ function SmartRemakeStudio({
                             )}
                             {generationProgressVisible && studio.project && (
                                 <RemakeGenerationProgress
+                                    workspaceId={workspaceId}
                                     project={studio.project}
                                     busy={controlsLocked}
                                     onCheckStatus={() => void studio.refreshProject()}

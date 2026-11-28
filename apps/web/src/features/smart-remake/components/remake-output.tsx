@@ -18,6 +18,8 @@ import { RemakeProcessingVisual } from "./remake-processing-visual";
 import { RemakeImagePreview } from "./remake-image-preview";
 import { RemakeClipThumbnail } from "./remake-clip-thumbnail";
 import { RemakeEmptyOutput } from "./remake-empty-output";
+import { RemakeGeneratedMedia } from "./remake-generated-media";
+import { getRemakeGenerationProgress } from "../lib/remake-generation-progress";
 import { getTimelinePublishError } from "../lib/remake-timeline";
 import { getTimelinePreviewScope } from "../lib/remake-preview";
 import { getRemakeSceneLabel } from "../lib/remake-scene-label";
@@ -124,6 +126,12 @@ function OutputSession(props: RemakeOutputProps) {
         project?.renderPlan?.units.some((unit) => (unit.fragmentCount ?? 1) > 1),
     );
     const active = scene?.versions.find((version) => version.id === scene.activeVersionId);
+    const generation = getRemakeGenerationProgress(project);
+    const selectedGroupId = scene
+        ? project?.renderPlan?.groups?.find((group) => group.renderUnitIds.includes(scene.id))?.id
+        : null;
+    const generatedMediaGroups =
+        generation?.groups.filter((group) => !scene || group.id === selectedGroupId) ?? [];
     const usableBase = Boolean(active?.videoUrl && active.technicalCheck.status === "passed");
     useEffect(() => setTrimPreview(undefined), [scene?.id, active?.id]);
     const candidate = scene?.versions.find((version) => version.id === candidateId);
@@ -238,6 +246,7 @@ function OutputSession(props: RemakeOutputProps) {
             ) : null;
         return (
             <RemakeEmptyOutput
+                workspaceId={props.workspaceId}
                 project={project}
                 guided={props.guided}
                 busy={processing}
@@ -804,6 +813,16 @@ function OutputSession(props: RemakeOutputProps) {
                             />
                         )}
                         <div className="remake-output-side-panels">
+                            {project?.generationProgress && generatedMediaGroups.length > 0 && (
+                                <RemakeGeneratedMedia
+                                    key={`${project.id}:${project.generationProgress.operationId}:${scene?.id ?? "whole"}`}
+                                    workspaceId={props.workspaceId}
+                                    projectId={project.id}
+                                    operationId={project.generationProgress.operationId}
+                                    groups={generatedMediaGroups}
+                                    onRefresh={props.onRefresh}
+                                />
+                            )}
                             {productImage && (
                                 <div className="remake-output-reference flex items-center gap-4">
                                     <div className="remake-output-reference__image">

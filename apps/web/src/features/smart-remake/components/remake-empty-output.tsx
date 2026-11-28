@@ -5,6 +5,7 @@ import { RemakeGenerationProgress } from "./remake-generation-progress";
 import { getRemakeGenerationProgress } from "../lib/remake-generation-progress";
 
 interface Props {
+    workspaceId?: string;
     project: SmartRemakeProject;
     guided?: boolean;
     busy: boolean;
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function RemakeEmptyOutput({
+    workspaceId,
     project,
     guided,
     busy,
@@ -26,6 +28,7 @@ export function RemakeEmptyOutput({
     if (!recoveryPresented && getRemakeGenerationProgress(project))
         return (
             <RemakeGenerationProgress
+                workspaceId={workspaceId}
                 project={project}
                 busy={busy}
                 onCheckStatus={onRefresh}

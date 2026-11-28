@@ -431,7 +431,8 @@ async def test_owned_conditioning_thumbnail_is_presigned_without_reads_or_privat
         row, op, workspace_id=row.workspace_id, attempts=[], media=media
     )
     assert value["groups"][0]["conditioningImageUrl"] == "https://owned.test/image"
-    assert "storageKey" not in json.dumps(value) and "requestHash" not in json.dumps(value)
+    assert "storageKey" not in json.dumps(value) and "expectationsHash" not in json.dumps(value)
+    assert value["groups"][0]["conditioningImages"][0]["requestHash"] == asset["requestHash"]
     media.url.assert_awaited_once_with(asset["storageKey"])
     media.read.assert_not_awaited()
 
@@ -458,6 +459,7 @@ async def test_every_finished_conditioning_image_is_visible_before_remaining_wor
         {
             "renderUnitId": first["renderUnitId"],
             "url": "https://owned.test/" + first["storageKey"][-32:],
+            "requestHash": first["requestHash"],
         }
     ]
     assert progress["groups"][0]["stage"] == "preparing_image"

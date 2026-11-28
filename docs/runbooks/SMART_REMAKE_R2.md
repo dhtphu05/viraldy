@@ -74,6 +74,21 @@ objects after expiry. Missing or invalid expiry stays partial for review.
 Generic asset metadata rows remain after object deletion to avoid deleting later
 asset revisions. These rows do not retain the removed media bytes.
 
+## Generated images and KIE prompts
+
+Generated opening and ending images remain available in generation progress and
+the completed clip's **Ảnh & prompt** dialog. Each download requests a fresh signed
+attachment URL through `/projects/{projectId}/generation/{operationId}/images/{requestHash}/download`.
+The API checks workspace read access and the retained image's exact project,
+operation, expectations and storage binding before signing; it does not proxy bytes.
+
+Update both the API and worker when deploying this change. New KIE submissions
+save their final prompt and URL-free request fields before dispatch. The UI shows
+the saved prompt only when its fingerprint matches verified submission evidence.
+Historical tasks without this snapshot explicitly report that the prompt was not
+saved. After Scene Fix, the dialog identifies these as original-generation assets,
+not the repaired version's inputs.
+
 References: [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/),
 [R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/),
 [S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/).

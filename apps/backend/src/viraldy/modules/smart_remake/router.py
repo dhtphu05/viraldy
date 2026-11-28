@@ -431,6 +431,7 @@ async def check_smart_remake_scene(
 # Keep lifecycle declarations under the same workspace authentication boundary.
 from .asset_intake_router import router as asset_intake_router  # noqa: E402
 from .asset_upload_router import router as asset_upload_router  # noqa: E402
+from .generation_media_router import router as generation_media_router  # noqa: E402
 from .intake_router import router as intake_router  # noqa: E402
 from .lifecycle_router import router as lifecycle_router  # noqa: E402
 from .preflight_router import router as preflight_router  # noqa: E402
@@ -439,6 +440,7 @@ from .repair_receipts import router as repair_receipts_router  # noqa: E402
 
 router.include_router(asset_intake_router)
 router.include_router(asset_upload_router)
+router.include_router(generation_media_router)
 router.include_router(intake_router)
 router.include_router(lifecycle_router)
 router.include_router(preflight_router)

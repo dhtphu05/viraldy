@@ -363,7 +363,15 @@ class RepairService:
             from .analysis_progress import public_analysis_progress
 
             progress_operation = operation or latest
-            if progress_operation and progress_operation.result_json.get("kind") == "render":
+            render_operation = progress_operation
+            if (
+                progress_operation
+                and progress_operation.result_json.get("kind")
+                in {"timeline", "compose", "accept", "approval", "export", "inspection", "repair"}
+                and callable(getattr(self.repository, "latest_render_operation", None))
+            ):
+                render_operation = await self.repository.latest_render_operation(project_id)
+            if render_operation and render_operation.result_json.get("kind") == "render":
                 from .generation_progress import present_generation_progress
 
                 if generation_attempts is None and getattr(
@@ -380,7 +388,7 @@ class RepairService:
                         )
                     ))
                 generation = await present_generation_progress(
-                    row, progress_operation, workspace_id=self.workspace_id,
+                    row, render_operation, workspace_id=self.workspace_id,
                     attempts=generation_attempts, media=self.media,
                 )
                 if generation is not None:

@@ -43,6 +43,7 @@ export function getRemakeGenerationProgress(project: SmartRemakeProject | null) 
             stage: state?.stage ?? ("unknown" as SmartRemakeGenerationStage),
             videoSubmitted: state?.videoSubmitted ?? null,
             conditioningImageUrl: state?.conditioningImageUrl,
+            kieRequest: state?.videoSubmitted === true ? state.kieRequest : undefined,
             conditioningImages: (state?.conditioningImages ?? [])
                 .filter((image) => group.renderUnitIds.includes(image.renderUnitId))
                 .map((image) => {

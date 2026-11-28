@@ -363,6 +363,9 @@
 .remake-generation-progress__poster[data-kind="video"] {
     height: 320px;
 }
+.remake-generation-progress__poster[data-kind="images"] {
+    height: 320px;
+}
 .remake-generation-progress__retained-images {
     margin-top: 10px;
     border-top: 1px solid var(--control-border, #ececf0);

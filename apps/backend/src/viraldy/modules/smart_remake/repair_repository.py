@@ -155,6 +155,22 @@ class RepairRepository:
             )
         ).scalar_one_or_none()
 
+    async def latest_render_operation(self, project_id: UUID) -> SmartRemakeOperationModel | None:
+        return (
+            await self.session.execute(
+                select(SmartRemakeOperationModel)
+                .where(
+                    SmartRemakeOperationModel.project_id == project_id,
+                    SmartRemakeOperationModel.result_json["kind"].astext == "render",
+                )
+                .order_by(
+                    SmartRemakeOperationModel.created_at.desc(), SmartRemakeOperationModel.id.desc()
+                )
+                .limit(1)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+
     async def attach_processing_job(
         self, operation: SmartRemakeOperationModel, job_id: UUID
     ) -> None:

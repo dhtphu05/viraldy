@@ -85,6 +85,48 @@ describe("RemakeOutput", () => {
             ],
         },
     };
+    it("keeps original generated images and prompt tools accessible on completed output", () => {
+        const completed = {
+            ...timelineProject,
+            renderPlan: {
+                fps: 24,
+                provider: "kie",
+                units: [{ id: "scene-1", sourceSceneId: "source" }],
+                groups: [{ id: "group", renderUnitIds: ["scene-1"], targetDurationFrames: 192 }],
+            },
+            generationProgress: {
+                operationId: "original-render",
+                status: "completed",
+                startedAt: "2026-11-26T10:00:00Z",
+                updatedAt: "2026-11-26T10:01:00Z",
+                groups: [
+                    {
+                        groupId: "group",
+                        stage: "completed",
+                        videoSubmitted: true,
+                        conditioningImages: [
+                            {
+                                renderUnitId: "scene-1",
+                                url: "/opening.png",
+                                requestHash: "a".repeat(64),
+                                frameRole: "opening",
+                            },
+                        ],
+                        kieRequest: {
+                            model: "wan/3-0-video",
+                            prompt: "EXACT_SENT_PROMPT",
+                            requestHash: "request",
+                        },
+                    },
+                ],
+            },
+        } as unknown as SmartRemakeProject;
+        const html = renderToStaticMarkup(
+            createElement(RemakeOutput, { ...props, project: completed }),
+        );
+        expect(html).toContain("Ảnh &amp; prompt");
+        expect(html).not.toContain("EXACT_SENT_PROMPT");
+    });
     it.each([
         [0, "0–1.333"],
         [1 / 3, "0.333–1.667"],

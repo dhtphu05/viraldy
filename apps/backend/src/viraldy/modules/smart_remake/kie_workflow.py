@@ -585,6 +585,11 @@ class KieWorkflow:
                     "The existing paid intent requires reconciliation; no request was repeated.",
                     409,
                 )
+            snapshot = {
+                "model": request["model"],
+                "input": {name: copy.deepcopy(value) for name, value in request["input"].items()
+                          if name not in {"image_urls", "first_frame_url", "last_frame_url"}},
+            } if created else task.get("videoRequest")
             task = {
                 **({"attemptId": str(attempt.id)} if attempt else {}),
                 **({"taskId": attempt.provider_task_id} if not created else {}),
@@ -592,6 +597,7 @@ class KieWorkflow:
                 "requestHash": request_hash,
                 "model": request["input"].get("model", request["model"]),
                 "requestModel": request["model"],
+                **({"videoRequest": snapshot} if snapshot else {}),
                 **wire_binding,
                 "imageReferences": references,
                 "generationExpectations": copy.deepcopy(

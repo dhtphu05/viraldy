@@ -70,6 +70,41 @@ export const generationProject = () =>
     }) as unknown as SmartRemakeProject;
 
 describe("provider window generation progress", () => {
+    it("keeps both bookends from one render unit and only presents verified sent prompts", () => {
+        const project = generationProject();
+        const sent = {
+            model: "wan/3-0-video",
+            prompt: "Final exact prompt",
+            requestHash: "request",
+        };
+        project.generationProgress!.groups[0] = {
+            ...project.generationProgress!.groups[0],
+            videoSubmitted: true,
+            kieRequest: sent,
+            conditioningImages: [
+                {
+                    renderUnitId: "unit-a",
+                    frameRole: "opening",
+                    requestHash: "first",
+                    url: "/first.png",
+                },
+                {
+                    renderUnitId: "unit-a",
+                    frameRole: "ending",
+                    requestHash: "last",
+                    url: "/last.png",
+                },
+            ],
+        };
+        project.generationProgress!.groups[1].kieRequest = { ...sent, prompt: "Unsent" };
+        const progress = getRemakeGenerationProgress(project)!;
+        expect(progress.groups[0].conditioningImages.map((image) => image.frameRole)).toEqual([
+            "opening",
+            "ending",
+        ]);
+        expect(progress.groups[0].kieRequest).toEqual(sent);
+        expect(progress.groups[1].kieRequest).toBeUndefined();
+    });
     it("counts planned groups separately from source scenes/fragments and submitted video calls", () => {
         const progress = getRemakeGenerationProgress(generationProject())!;
         expect(progress.plannedCount).toBe(2);
