@@ -96,11 +96,38 @@ def is_known_video_rejection(attempt: Any) -> bool:
     return proof is not None and proof["operation"] == "kie.tasks.create"
 
 
+def _is_unknown_image_transport(attempt: Any) -> bool:
+    """A lost synchronous image response has no response witness to reconcile."""
+    from .engine.openai_images import SUPPORTED_IMAGE_MODELS
+
+    metadata = getattr(attempt, "metadata_json", None)
+    receipt = {"errorCode": "OPENAI_IMAGE_SUBMISSION_UNRESOLVED"}
+    submitted = getattr(attempt, "submitted_at", None)
+    if (
+        getattr(attempt, "stage", None) != "image"
+        or getattr(attempt, "provider", None) != "openai"
+        or getattr(attempt, "model", None) not in SUPPORTED_IMAGE_MODELS
+        or getattr(attempt, "purpose", None) not in {"initial", "repair"}
+        or getattr(attempt, "actual_usd", None) is not None
+        or getattr(attempt, "receipt_json", None) != receipt
+        or getattr(attempt, "error_json", None) != receipt
+        or not isinstance(metadata, dict)
+        or not isinstance(submitted, datetime) or submitted.utcoffset() != UTC.utcoffset(None)
+    ):
+        return False
+    slot = metadata.get("slot")
+    return (
+        isinstance(slot, str) and re.fullmatch(r"image:(0|[1-9][0-9]*)(:ending)?", slot) is not None
+        and getattr(attempt, "idempotency_key", None) == f"{metadata.get('operationId')}:{slot}"
+    )
+
+
 def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
     """Validate one server consent against this unchanged unknown provider receipt."""
     metadata = getattr(attempt, "metadata_json", None)
     receipt = getattr(attempt, "receipt_json", None)
     usage = getattr(attempt, "usage_json", None)
+    image_transport = _is_unknown_image_transport(attempt)
     if (
         not isinstance(metadata, dict)
         or not isinstance(authorization, dict) or not isinstance(receipt, dict)
@@ -111,9 +138,11 @@ def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
         or type(authorization.get("schemaVersion")) is not int
         or authorization["schemaVersion"] != 1
         or getattr(attempt, "status", None) != "unknown"
-        or getattr(attempt, "stage", None) != "video"
-        or getattr(attempt, "provider", None) != "kie"
-        or getattr(attempt, "model", None) != "veo-3-1"
+        or not (image_transport or (
+            getattr(attempt, "stage", None) == "video"
+            and getattr(attempt, "provider", None) == "kie"
+            and getattr(attempt, "model", None) == "veo-3-1"
+        ))
         or getattr(attempt, "provider_task_id", None) not in (None, "")
         or (usage is not None and (not isinstance(usage, dict) or usage))
         or not isinstance(authorization.get("reason"), str)
@@ -140,6 +169,9 @@ def _is_authorized_replacement_record(attempt: Any, authorization: Any) -> bool:
         or authorization["receiptHash"] != stable_hash(receipt)
     ):
         return False
+    if image_transport:
+        # Explicit consent settles permission for one replacement, not the outcome/bill.
+        return bool(confirmed >= attempt.submitted_at)
     proof = validated_execution_evidence({
         "id": str(attempt.id), "requestHash": attempt.request_hash,
         "provider": attempt.provider, "model": attempt.model,

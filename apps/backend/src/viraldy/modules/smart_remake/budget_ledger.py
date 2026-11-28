@@ -164,12 +164,53 @@ async def initialize_budget(
     return normalized
 
 
+def _authorized_image_slot(
+    previous: Attempt, owned: dict[str, Any], slot: str, request_hash: str | None,
+    purpose: str | None,
+) -> bool:
+    if (
+        slot != previous.metadata_json.get("slot") or request_hash != previous.request_hash
+        or purpose != previous.purpose
+    ):
+        return False
+    if owned.get("kind") == "repair":
+        index = owned.get("sceneIndex")
+        return (
+            previous.purpose == "repair" and type(index) is int and index >= 0
+            and slot in {f"image:{index}", f"image:{index}:ending"}
+        )
+    if owned.get("kind") != "render" or previous.purpose != "initial":
+        return False
+    plan = owned.get("renderPlan") or {}
+    units, groups = plan.get("units"), plan.get("groups")
+    if not isinstance(units, list) or not isinstance(groups, list):
+        return False
+    positions = {unit.get("id"): index for index, unit in enumerate(units)
+                 if isinstance(unit, dict) and isinstance(unit.get("id"), str)}
+    if len(positions) != len(units):
+        return False
+    for group in groups:
+        ids = group.get("renderUnitIds") if isinstance(group, dict) else None
+        if not isinstance(ids, list) or not ids or any(
+            not isinstance(unit_id, str) or unit_id not in positions for unit_id in ids
+        ):
+            return False
+        if slot in {f"image:{positions[ids[0]]}", f"image:{positions[ids[-1]]}:ending"}:
+            return True
+    return False
+
+
 async def _authorized_replacement_collision(
     session: AsyncSession, workspace_id: UUID, project_id: UUID, previous: Attempt,
     *, actor_id: UUID | None, idempotency_key: str, metadata: dict[str, Any] | None,
+    request_hash: str | None = None,
+    purpose: str | None = None,
 ) -> bool:
     replacement_keys = authorized_unconfirmed_replacement_keys(previous)
-    if not replacement_keys or actor_id != previous.actor_id:
+    if (
+        not replacement_keys or actor_id != previous.actor_id
+        or previous.project_id != project_id or previous.workspace_id != workspace_id
+    ):
         return False
     incoming = metadata or {}
     try:
@@ -198,6 +239,8 @@ async def _authorized_replacement_collision(
     )
     if not isinstance(owned, dict):
         return False
+    if previous.stage == "image":
+        return _authorized_image_slot(previous, owned, slot, request_hash, purpose)
     if owned.get("kind") == "repair":
         return slot == previous.metadata_json.get("slot") == f"video:{owned.get('sceneIndex')}"
     if owned.get("kind") != "render" or not slot.startswith("video:group:"):
@@ -324,7 +367,8 @@ async def reserve_attempt(
     for previous in uncertain:
         if not await _authorized_replacement_collision(
             session, workspace_id, project_id, previous, actor_id=actor_id,
-            idempotency_key=idempotency_key, metadata=metadata,
+            idempotency_key=idempotency_key, metadata=metadata, request_hash=request_hash,
+            purpose=purpose,
         ):
             await session.rollback()
             raise ConflictError(
