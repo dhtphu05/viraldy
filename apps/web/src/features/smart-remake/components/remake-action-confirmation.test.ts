@@ -41,6 +41,44 @@ const snapshot = () => ({
 });
 
 describe("action confirmation details and recovery", () => {
+    it("confirms one complete six-second provider clip with its two bookend images", () => {
+        render(
+            createElement(RemakeActionConfirmation, {
+                ...props(),
+                intent: {
+                    action: "repair",
+                    fingerprint: "repair-clip-2",
+                    sceneId: "anchor",
+                    baseVersionId: "base",
+                    repairScope: "provider_group",
+                    repairIntent: {
+                        schemaVersion: 1,
+                        issues: ["action"],
+                        instruction: "Giữ hai tay tự nhiên",
+                    },
+                },
+                sceneLabel: "Clip 2",
+                preflight: {
+                    ...preflight,
+                    action: "repair",
+                    scope: {
+                        targetDuration: 6,
+                        sceneCount: 12,
+                        groupCount: 1,
+                        imageCount: 2,
+                        repairScope: "provider_group",
+                        renderGroupId: "second",
+                    },
+                    calls: { analysis: 1, image: 2, video: 1, inspection: 0, total: 4 },
+                },
+            }),
+        );
+        expect(screen.getByRole("heading", { name: "Tạo lại clip 2?" })).toBeTruthy();
+        expect(screen.getByText("Clip tạo lại 6 giây")).toBeTruthy();
+        expect(screen.getByText(/hai ảnh đầu\/cuối.*1 lượt Wan/)).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Xác nhận và tạo lại clip 2" })).toBeTruthy();
+        expect(screen.queryByText(/Xác nhận và tạo lại cảnh/)).toBeNull();
+    });
     it("uses the logical scene and fragment label when confirming a repair", () => {
         render(
             createElement(RemakeActionConfirmation, {

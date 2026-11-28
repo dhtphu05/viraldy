@@ -16,6 +16,7 @@ from uuid import uuid4
 import httpx
 
 from viraldy.modules.product_import.security import Resolver, validate_public_http_url
+from viraldy.modules.smart_remake.provider_errors import sanitize_provider_error
 from viraldy.modules.smart_remake.provider_execution import (
     ProviderExecutionEvidence,
     observe_response,
@@ -25,8 +26,10 @@ from viraldy.shared.errors.base import AppError
 
 from .config import get_kie_api_key
 from .errors import SmartRemakeError, SmartRemakeValidationError
-from .kie_adapter import KIE_MODEL, public_media_url, validate_kie_video_input
+from .kie_adapter import KIE_MODEL, public_media_url
 from .schemas import UploadedMedia
+from .video_requests import canonical_video_model, validate_video_input
+from .wan_video_adapter import WAN_VIDEO_MODEL
 
 API_ORIGIN = "https://api.kie.ai"
 UPLOAD_ORIGIN = "https://kieai.redpandaai.co"
@@ -40,9 +43,12 @@ _STATES = {
     "success": "completed",
     "fail": "failed",
 }
+_NATIVE_STATES = {0: "generating", 1: "success", 2: "fail", 3: "fail"}
 
 
 class KieClient:
+    api_contract = "kie-unified-v1"
+
     def __init__(
         self,
         *,
@@ -115,15 +121,15 @@ class KieClient:
     ) -> dict[str, Any]:
         self.last_execution_evidence: ProviderExecutionEvidence | None = None
         self.last_request_id: str | None = None
-        if model != KIE_MODEL:
-            raise SmartRemakeValidationError("KIE model must be veo-3-1.", "KIE_VALIDATION_FAILED")
-        await asyncio.to_thread(validate_kie_video_input, input_data)
+        model = canonical_video_model(model)
+        await asyncio.to_thread(validate_video_input, model, input_data)
         try:
             data = await self._json(
                 "POST",
                 "/api/v1/jobs/createTask",
                 body={"model": model, "input": input_data},
                 code="KIE_TASK_CREATE_FAILED",
+                model=model,
             )
         except SmartRemakeError as exc:
             if exc.code in {"KIE_UNAVAILABLE", "KIE_INVALID_RESPONSE", "KIE_SERVER_ERROR"}:
@@ -138,30 +144,28 @@ class KieClient:
             })
         return {"task_id": task_id.strip(), "status": "queued"}
 
-    async def get_task(self, task_id: str) -> dict[str, Any]:
+    async def get_task(self, task_id: str, *, model: str = KIE_MODEL) -> dict[str, Any]:
         self.last_execution_evidence = None
         self.last_request_id = None
+        model = canonical_video_model(model)
         if not isinstance(task_id, str) or not task_id.strip() or len(task_id) > 256:
             raise SmartRemakeValidationError(
                 "A valid KIE task ID is required.", "KIE_VALIDATION_FAILED"
             )
-        data = await self._json(
-            "GET",
-            "/api/v1/jobs/recordInfo",
-            params={"taskId": task_id},
-            code="KIE_TASK_STATUS_FAILED",
-        )
+        data = await self._task_data(task_id, model=model)
         state = data.get("state")
         if (
             data.get("taskId") != task_id
             or not isinstance(state, str)
             or state not in _STATES
-            or data.get("model", KIE_MODEL) != KIE_MODEL
+            or data.get("model", KIE_MODEL if model == KIE_MODEL else None) != model
         ):
             raise SmartRemakeError("KIE returned an unknown task response.", "KIE_INVALID_RESPONSE")
         result: dict[str, Any] = {"task_id": task_id, "status": _STATES[state]}
         receipt = {
-            name: value for name in ("credits", "consumeCredits", "costCredits", "billedUsd")
+            name: value for name in (
+                "credits", "consumeCredits", "creditsConsumed", "costCredits", "billedUsd",
+            )
             if (value := data.get(name)) is not None and _numeric_receipt(value)
         }
         if receipt:
@@ -174,11 +178,47 @@ class KieClient:
             url = _result_url(data)
             result["output"] = {"video_url": await asyncio.to_thread(public_media_url, url)}
         elif state == "fail":
-            message = data.get("failMsg")
-            result["error_message"] = (
-                message[:500] if isinstance(message, str) else "KIE generation failed."
-            )
+            error = sanitize_provider_error({
+                "providerCode": data.get("failCode"), "providerMessage": data.get("failMsg"),
+            }, secrets=(self.api_key,))
+            result["providerError"] = error
+            result["error_message"] = error.get("providerMessage", "KIE generation failed.")
         return result
+
+    async def _task_data(self, task_id: str, *, model: str = KIE_MODEL) -> dict[str, Any]:
+        if model == WAN_VIDEO_MODEL:
+            return await self._json(
+                "GET", "/api/v1/jobs/recordInfo", params={"taskId": task_id},
+                code="KIE_TASK_STATUS_FAILED", model=model,
+            )
+        try:
+            data = await self._json(
+                "GET", "/api/v1/veo/record-info", params={"taskId": task_id},
+                code="KIE_TASK_STATUS_FAILED",
+            )
+        except SmartRemakeError as exc:
+            if not _unified_lookup_allowed(exc):
+                raise
+        else:
+            flag = data.get("successFlag")
+            if type(flag) is int and flag in _NATIVE_STATES:
+                if data.get("taskId") != task_id or data.get("model", KIE_MODEL) not in {
+                    KIE_MODEL, "veo3_lite",
+                }:
+                    raise SmartRemakeError(
+                        "KIE returned an unknown task response.", "KIE_INVALID_RESPONSE"
+                    )
+                return {
+                    **data, "state": _NATIVE_STATES[flag], "model": KIE_MODEL,
+                    "failMsg": data.get("errorMessage"),
+                    "failCode": data.get("errorCode"),
+                }
+        # Old task IDs may belong to the unified API. This compatibility lookup
+        # is read-only; a missing receipt never causes another paid submission.
+        return await self._json(
+            "GET", "/api/v1/jobs/recordInfo", params={"taskId": task_id},
+            code="KIE_TASK_STATUS_FAILED",
+        )
 
     async def _json(
         self,
@@ -188,6 +228,7 @@ class KieClient:
         code: str,
         body: dict[str, Any] | None = None,
         params: dict[str, str] | None = None,
+        model: str = KIE_MODEL,
     ) -> dict[str, Any]:
         async with self._client() as client:
             try:
@@ -204,13 +245,23 @@ class KieClient:
             self.last_execution_evidence = observe_response(
                 response,
                 provider="kie",
-                model=body["model"] if body is not None else KIE_MODEL,
+                model=model,
                 operation="kie.tasks.create" if method == "POST" else "kie.tasks.get",
                 owned_transport=self.http_client is None,
             )
             request_id = response.headers.get("x-request-id")
             self.last_request_id = request_id if safe_provider_identifier(request_id) else None
-            return _response_data(response, code)
+            try:
+                return _response_data(response, code)
+            except SmartRemakeError as exc:
+                if method == "GET" and response.status_code in {401, 402, 403, 429}:
+                    # A gateway may return HTML. Its auth/rate status still
+                    # forbids a second lookup even when no JSON was readable.
+                    raise SmartRemakeError(
+                        str(exc), exc.code,
+                        {**(exc.details or {}), "status": response.status_code},
+                    ) from exc
+                raise
 
     async def download_file(self, url: str) -> bytes:
         current_url = url
@@ -262,6 +313,20 @@ class KieClient:
 _PHYSICAL_KIE_CLIENT = KieClient
 _PHYSICAL_KIE_CREATE_TASK = KieClient.create_task
 _PHYSICAL_KIE_GET_TASK = KieClient.get_task
+
+
+def _unified_lookup_allowed(error: SmartRemakeError) -> bool:
+    details = error.details if isinstance(error.details, dict) else {}
+    if details.get("status") in {401, 402, 403, 429}:
+        return False
+    if error.code == "KIE_INVALID_RESPONSE":
+        return True
+    if details.get("providerCode") == 404:
+        return True
+    return details.get("providerCode") == 422 and bool(re.search(
+        r"\b(?:not found|does not exist|not exist)\b",
+        str(details.get("providerMessage", "")), re.IGNORECASE,
+    ))
 
 
 def _numeric_receipt(value: Any) -> bool:
@@ -336,13 +401,17 @@ def _provider_error_details(
         authorization = response.request.headers.get("authorization", "")
     except RuntimeError:
         authorization = ""
-    if authorization:
-        for secret in (authorization, authorization.removeprefix("Bearer ")):
-            if secret:
-                message = message.replace(secret, "[REDACTED]")
-    message = re.sub(r"https?://\S+", "[URL]", message, flags=re.IGNORECASE)
-    message = re.sub(r"\bBearer\s+\S+", "[REDACTED]", message, flags=re.IGNORECASE)
-    details["providerMessage"] = " ".join(message.split())[:500]
+    prompt = ""
+    try:
+        request_body = json.loads(response.request.content)
+        if isinstance(request_body, dict):
+            prompt = (request_body.get("input") or {}).get("prompt", "")
+    except (RuntimeError, ValueError, TypeError, AttributeError):
+        pass
+    error = sanitize_provider_error({"providerMessage": message}, secrets=(
+        authorization, authorization.removeprefix("Bearer "), prompt,
+    ))
+    details.update(error)
     return details
 
 

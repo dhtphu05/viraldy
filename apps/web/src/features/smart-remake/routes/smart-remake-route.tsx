@@ -25,6 +25,7 @@ import { RemakeProcessing } from "../components/remake-processing";
 import { getRemakeSceneLabel } from "../lib/remake-scene-label";
 import {
     getRemakeResultNextAction,
+    getCurrentRemakeAssembly,
     type RemakeResultNextAction,
 } from "../lib/remake-result-next-action";
 import { RemakeProjectInputs } from "../components/remake-project-inputs";
@@ -35,7 +36,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/
 import { resolveInspectionEvidence, type InspectionSeekTarget } from "../lib/remake-inspection";
 import type { SmartRemakeInspectionEvidence } from "@/shared/api/smart-remake";
 import { useRemakeStudio } from "../lib/use-remake-studio";
-import { getRenderTaskCount } from "../lib/remake-groups";
+import { getRenderGroups, getRenderTaskCount } from "../lib/remake-groups";
 import { normalizeRemakeRequirements } from "../lib/remake-intake";
 import { getRemakeErrorMessage, getRemakeProviderGroupingError } from "../lib/smart-remake-render";
 import { getRemakeAnalysisRecovery } from "../lib/remake-analysis-recovery";
@@ -172,6 +173,14 @@ function SmartRemakeStudio({
     const actionSceneIndex = actionSceneId
         ? (studio.project?.scenes.findIndex((scene) => scene.id === actionSceneId) ?? -1)
         : -1;
+    const actionClipIndex =
+        studio.pendingAction?.action === "repair" &&
+        studio.pendingAction.repairScope === "provider_group" &&
+        studio.project?.renderPlan
+            ? getRenderGroups(studio.project.renderPlan).findIndex((group) =>
+                  group.renderUnitIds.includes(actionSceneId ?? ""),
+              )
+            : -1;
     const actionVersionId =
         studio.pendingAction?.action === "inspect" && studio.pendingAction.subject.kind === "scene"
             ? studio.pendingAction.subject.versionId
@@ -289,6 +298,7 @@ function SmartRemakeStudio({
         needsPlanUpdate || studio.sourcePlanDirty || studio.localMediaNeedsAnalysis;
     const nextAction = getRemakeResultNextAction({
         project: studio.project,
+        reviewMode: "whole_video",
         needsPlanUpdate: Boolean(
             updateBeforeRender ||
             (studio.project?.requirements &&
@@ -307,6 +317,7 @@ function SmartRemakeStudio({
     const generationProgressVisible = Boolean(
         step === "result" &&
         !generationRecoveryVisible &&
+        !getCurrentRemakeAssembly(studio.project) &&
         videoProgress &&
         (studio.project?.generationProgress ||
             studio.project?.pendingOperation?.kind === "render" ||
@@ -377,7 +388,7 @@ function SmartRemakeStudio({
                     studio.navigateOutput(action.sceneId, action.view ?? "watch", action.versionId);
                 break;
             case "compose":
-                void studio.publish();
+                void studio.publish({ reviewMode: "whole_video" });
                 break;
             case "inspect":
                 if (action.assemblyId)
@@ -735,6 +746,7 @@ function SmartRemakeStudio({
                                 sourceUrl={studio.sourceUrl}
                                 sourceName={studio.video?.name ?? null}
                                 productUrls={studio.productUrls}
+                                productUploadError={studio.productUploadError}
                                 primaryIndex={studio.primaryIndex}
                                 onPrimaryChange={studio.onPrimaryChange}
                                 onVideo={studio.onVideo}
@@ -816,6 +828,15 @@ function SmartRemakeStudio({
                                 </div>
                             )}
                             <RemakeStoryboard
+                                workspaceId={workspaceId}
+                                projectRevision={
+                                    studio.project?.revision ?? studio.compiled.revision
+                                }
+                                sceneDrafts={studio.sceneDrafts}
+                                requirements={normalizeRemakeRequirements(studio.requirements)}
+                                promptPreviewStale={Boolean(
+                                    needsPlanUpdate || studio.localMediaNeedsAnalysis,
+                                )}
                                 compileResult={previewCompile ?? studio.compiled}
                                 referenceUrl={studio.sourceUrl}
                                 productUrl={studio.productUrls[studio.primaryIndex]}
@@ -892,6 +913,21 @@ function SmartRemakeStudio({
                                         });
                                         return null;
                                     }}
+                                    onRepairGroup={async (groupId, repairIntent) => {
+                                        const group =
+                                            studio.project?.renderPlan &&
+                                            getRenderGroups(studio.project.renderPlan).find(
+                                                (item) => item.id === groupId,
+                                            );
+                                        const sceneId = group?.renderUnitIds[0];
+                                        if (!sceneId) return null;
+                                        await studio.requestAction("repair", {
+                                            sceneId,
+                                            repairIntent,
+                                            repairScope: "provider_group",
+                                        });
+                                        return null;
+                                    }}
                                     guided
                                     generationRecoveryVisible={generationRecoveryVisible}
                                     repairCandidate={studio.unreadRepairCandidate}
@@ -906,7 +942,7 @@ function SmartRemakeStudio({
                                     onRefresh={() => void studio.refreshProject()}
                                     onViewGenerationInspection={viewGenerationInspection}
                                     onTimelineSave={studio.saveTimeline}
-                                    onPublish={studio.publish}
+                                    onPublish={() => studio.publish({ reviewMode: "whole_video" })}
                                     savingTimeline={studio.busy === "timeline"}
                                     publishing={
                                         studio.busy === "compose" ||
@@ -1053,13 +1089,15 @@ function SmartRemakeStudio({
                                 : undefined
                         }
                         sceneLabel={
-                            studio.project && actionSceneId
-                                ? getRemakeSceneLabel(
-                                      studio.project,
-                                      actionSceneId,
-                                      actionSceneIndex,
-                                  )
-                                : undefined
+                            actionClipIndex >= 0
+                                ? `Clip ${actionClipIndex + 1}`
+                                : studio.project && actionSceneId
+                                  ? getRemakeSceneLabel(
+                                        studio.project,
+                                        actionSceneId,
+                                        actionSceneIndex,
+                                    )
+                                  : undefined
                         }
                         versionNumber={actionVersionIndex >= 0 ? actionVersionIndex + 1 : undefined}
                         onConfirm={studio.confirmAction}

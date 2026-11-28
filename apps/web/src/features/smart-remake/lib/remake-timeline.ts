@@ -15,7 +15,7 @@ export function secondsToFrames(seconds: number): number {
 export function getSourceExcerptError(
     sourceDuration: number | null,
     startFrame: number,
-    targetSeconds: 8 | 16,
+    targetSeconds: 8 | 12 | 16,
 ): string | null {
     if (sourceDuration === null || !Number.isFinite(sourceDuration) || sourceDuration <= 0)
         return "Đang đọc độ dài video mẫu…";
@@ -43,7 +43,10 @@ export function validateSourceCuts(cuts: number[], totalFrames: number): string 
     return null;
 }
 
-export function getTimelinePublishError(project: SmartRemakeProject | null): string | null {
+export function getTimelinePublishError(
+    project: SmartRemakeProject | null,
+    reviewMode?: "whole_video",
+): string | null {
     if (project?.schemaVersion !== 2 || !project.draftTimeline)
         return "Chưa có bản nháp timeline để ghép.";
     if (project.pendingOperation)
@@ -57,7 +60,8 @@ export function getTimelinePublishError(project: SmartRemakeProject | null): str
         const version = scene?.versions.find((value) => value.id === item.versionId);
         if (!version || version.technicalCheck.status !== "passed")
             return "Chờ đủ clip đã kiểm tra trước khi ghép nhé.";
-        if (!item.reviewed) return "Duyệt đoạn sẽ dùng của từng cảnh trước khi ghép nhé.";
+        if (!item.reviewed && reviewMode !== "whole_video")
+            return "Duyệt đoạn sẽ dùng của từng cảnh trước khi ghép nhé.";
         const rawFrames =
             version.frameCount ??
             version.technicalCheck.frameCount ??

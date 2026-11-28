@@ -29,6 +29,75 @@ function plan(): SmartRemakeRenderPlan {
 }
 
 describe("desktop render group plan", () => {
+    it("shows the saved twelve-second Wan plan as exactly two six-second clips", () => {
+        const base = plan();
+        const value: SmartRemakeRenderPlan = {
+            ...base,
+            videoModel: "wan/3-0-video",
+            videoResolution: "480P",
+            audioRequired: true,
+            groupingPolicy: "fixed_provider_windows",
+            units: base.units.map((unit) => ({
+                ...unit,
+                rawDurationFrames: 144,
+                targetDurationFrames: 72,
+            })),
+            groups: base.groups!.map((group) => ({
+                ...group,
+                rawDurationFrames: 144,
+                targetDurationFrames: 144,
+                segments: group.renderUnitIds.map((renderUnitId, index) => ({
+                    renderUnitId,
+                    inFrame: index * 72,
+                    outFrame: (index + 1) * 72,
+                })),
+            })),
+        };
+        const html = renderToStaticMarkup(
+            createElement(RemakeRenderGroups, { plan: value, breaks: [], disabled: false }),
+        );
+        expect(html).toContain("Video hoàn chỉnh 12 giây");
+        expect(html).toContain("KIE tạo 2 clip 6 giây");
+        expect(html).toContain("480P · 6 giây mỗi lượt · Có âm thanh");
+        expect(html).not.toContain("8 giây");
+    });
+
+    it.each([
+        ["wan/3-0-video", "480P", "480P"],
+        ["wan/3-0-video", undefined, "720P"],
+        ["veo3_lite", undefined, "720P"],
+    ] as const)(
+        "keeps %s video resolution %s distinct from its image reference size",
+        (videoModel, videoResolution, label) => {
+            const html = renderToStaticMarkup(
+                createElement(RemakeRenderGroups, {
+                    plan: { ...plan(), videoModel, videoResolution },
+                    breaks: [],
+                    disabled: false,
+                }),
+            );
+            expect(html).toContain(`Clip dọc 9:16 · ${label} · 8 giây mỗi lượt`);
+            expect(html).not.toContain("Có âm thanh");
+            expect(html).toContain("720 × 1280");
+            expect(html).toContain("4 cảnh · 2 lượt tạo video");
+        },
+    );
+    it.each([
+        ["wan/3-0-video", "Wan 3.0 · KIE"],
+        ["another-model", "KIE"],
+    ])("shows the saved %s model without relabeling it as Veo", (videoModel, label) => {
+        const html = renderToStaticMarkup(
+            createElement(RemakeRenderGroups, {
+                plan: { ...plan(), videoModel },
+                breaks: [],
+                disabled: false,
+            }),
+        );
+        expect(html).toContain(`>${label}</p>`);
+        expect(html).not.toContain("Veo");
+        expect(html).toContain("4 cảnh · 2 lượt tạo video");
+        expect(html).toContain("Video hoàn chỉnh 16 giây");
+    });
     it("does not count provider fragments as extra analyzed scenes", () => {
         const base = plan();
         const fragmented = {

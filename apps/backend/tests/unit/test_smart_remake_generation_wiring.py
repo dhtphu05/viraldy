@@ -41,7 +41,8 @@ def test_final_kie_payload_cleans_source_identity_in_every_scene_field(group):
     if group:
         request = build_kie_group_request(scenes=[scene],
             segments=[{"inFrame": 0, "outFrame": 192}],
-            reference_image_urls=["https://8.8.8.8/product.png"], **params)
+            reference_image_urls=["https://8.8.8.8/opening.png", "https://8.8.8.8/ending.png"],
+            **params)
     else:
         request = build_kie_video_request(scene=scene,
             product_image_url="https://8.8.8.8/product.png", **params)

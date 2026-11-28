@@ -36,6 +36,40 @@ function mount(overrides: Partial<Parameters<typeof RemakeTrimTools>[0]> = {}) {
 }
 
 describe("visible clip trim track", () => {
+    it("keeps a grouped version's suggested offset on the first save", async () => {
+        const { onSave } = mount({
+            item: { ...item, versionId: null, inFrame: 40, outFrame: 112 },
+            suggestedInFrame: 40,
+        });
+        expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("40");
+        fireEvent.click(screen.getByRole("button", { name: "Dùng đoạn này" }));
+        await waitFor(() =>
+            expect(onSave).toHaveBeenCalledWith([
+                {
+                    renderUnitId: "unit",
+                    versionId: "version",
+                    inFrame: 40,
+                    outFrame: 112,
+                    reviewed: true,
+                },
+            ]),
+        );
+    });
+
+    it("prioritizes a saved trim and uses a replacement's own suggestion for a different version", () => {
+        const saved = mount({
+            item: { ...item, inFrame: 40, outFrame: 112 },
+            suggestedInFrame: 24,
+        });
+        expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("40");
+        saved.unmount();
+        mount({
+            item: { ...item, versionId: "old", inFrame: 40, outFrame: 112 },
+            suggestedInFrame: 0,
+        });
+        expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("0");
+    });
+
     it("offers the chosen segment before optional precision controls", () => {
         const { onPreview, onSave } = mount();
         const precision = screen.getByText("Tinh chỉnh đoạn cắt").closest("details");
@@ -133,6 +167,15 @@ describe("visible clip trim track", () => {
         expect(
             (screen.getByRole("button", { name: "Dùng đoạn này" }) as HTMLButtonElement).disabled,
         ).toBe(false);
+    });
+
+    it("labels a planned six-second clip while still waiting for measured metadata", () => {
+        mount({ rawFrameCount: null, plannedFrameCount: 144 });
+        expect(screen.getByText("Clip AI · 6 giây")).toBeTruthy();
+        expect((screen.getByRole("slider") as HTMLInputElement).disabled).toBe(true);
+        expect(
+            (screen.getByRole("button", { name: "Dùng đoạn này" }) as HTMLButtonElement).disabled,
+        ).toBe(true);
     });
 
     it.each([{ busy: true }, { rawFrameCount: null }, { rawFrameCount: 48 }])(

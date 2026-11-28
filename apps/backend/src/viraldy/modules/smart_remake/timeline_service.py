@@ -22,7 +22,6 @@ from .assembly_snapshots import (
     content_hash,
     record_assembly,
 )
-from .engine.prompt_sanitizer import validate_sanitized_compiler_prompts
 from .generation_expectations import (
     build_generation_expectations,
     expectations_hash,
@@ -46,7 +45,7 @@ from .timeline_retention import (
     _release_reads,
     _remember_media,
 )
-from .timeline_schemas import RenderPlan
+from .timeline_schemas import RenderPlan, provider_window_frames
 
 
 def _validate_group_plan(plan: dict[str, Any], used_ids: set[str]) -> None:
@@ -54,17 +53,22 @@ def _validate_group_plan(plan: dict[str, Any], used_ids: set[str]) -> None:
     if "groups" not in plan:
         if plan.get("groupingPolicy") == "fixed_provider_windows" or any(
             plan.get(key)
-            for key in ("videoModel", "imageModel", "imageQuality", "imageComplexity", "imageSize")
+            for key in (
+                "videoModel", "videoResolution", "imageModel", "imageQuality",
+                "imageComplexity", "imageSize",
+            )
         ):
             raise ValueError("Provider configuration requires saved render groups.")
         return
     if (
-        plan.get("videoModel") != "veo3_lite"
+        plan.get("videoModel") not in {"veo3_lite", "wan/3-0-video"}
         or plan.get("imageModel") not in {"gpt-image-2.6-sunburst", "gpt-image-2.6-flare"}
         or plan.get("imageQuality") not in {"low", "medium", "high", "xhigh", "max"}
         or plan.get("imageSize") != "720x1280"
     ):
         raise ValueError("The grouped provider configuration is incomplete.")
+    if plan["videoModel"] == "veo3_lite" and (plan.get("videoResolution") or "720P") != "720P":
+        raise ValueError("The saved Veo contract requires 720P resolution.")
     if (plan["imageModel"] == "gpt-image-2.6-sunburst" or "imageComplexity" in plan) and plan.get(
         "imageComplexity"
     ) not in {"low", "medium", "high"}:
@@ -81,14 +85,17 @@ def _validate_group_plan(plan: dict[str, Any], used_ids: set[str]) -> None:
     fixed = plan.get("groupingPolicy") == "fixed_provider_windows"
     if fixed:
         total_frames = sum(unit["targetDurationFrames"] for unit in plan["units"])
+        raw_frames = provider_window_frames(plan)
         if (
             plan.get("renderGroupBreaks")
-            or total_frames not in (192, 384)
-            or len(groups) != total_frames // 192
-            or any(group["targetDurationFrames"] != 192 for group in groups)
+            or total_frames not in (192, 288, 384)
+            or (raw_frames == 144 and plan.get("audioRequired") is not True)
+            or len(groups) != total_frames // raw_frames
+            or any(group["targetDurationFrames"] != raw_frames
+                   or group["rawDurationFrames"] != raw_frames for group in groups)
         ):
             raise ValueError(
-                "A fixed provider plan needs exactly one complete eight-second window per call."
+                "Each provider call must match one complete saved video window."
             )
     boundaries, cursor = [], 0
     for group in groups[:-1]:
@@ -127,8 +134,9 @@ def validate_manifest(row: Any) -> None:
         ) from exc
 
 
-def _ready(timeline: dict[str, Any]) -> None:
-    if any(not item.get("versionId") or not item.get("reviewed") for item in timeline["items"]):
+def _ready(timeline: dict[str, Any], *, require_reviewed: bool = True) -> None:
+    if any(not item.get("versionId") or (require_reviewed and not item.get("reviewed"))
+           for item in timeline["items"]):
         raise AppError(
             "SMART_REMAKE_TIMELINE_UNREVIEWED",
             "Choose and confirm a clip range for every scene before assembling.",
@@ -306,11 +314,17 @@ async def enqueue_publish(
             validate_manifest(row)
             _revision(row.state_json, request.expectedRevision)
             timeline = copy.deepcopy(row.state_json["draftTimeline"])
-            _ready(timeline)
+            _ready(timeline, require_reviewed=request.reviewMode != "whole_video")
             manifest = []
             for item in timeline["items"]:
                 await validate_selection_media(service, row.state_json, item)
                 version = _version(_scene(row.state_json, item["renderUnitId"]), item["versionId"])
+                if request.reviewMode == "whole_video" and _scene(
+                    row.state_json, item["renderUnitId"]
+                )["activeVersionId"] != version["id"]:
+                    raise AppError(
+                        "SMART_REMAKE_CANDIDATE_NOT_ACCEPTED", "Accept a candidate before preview.",
+                    )
                 manifest.append(
                     {
                         "versionId": version["id"],
@@ -326,11 +340,25 @@ async def enqueue_publish(
                 if row.context_json.get("p0")
                 else None
             )
+            if request.reviewMode == "whole_video" and row.context_json.get("p0"):
+                from .project_preview import preview_snapshot_hash, update_project_preview
+
+                previous = row.context_json["p0"].get("preview", {})
+                update_project_preview(
+                    row, schemaVersion=1, status="processing", operationId=str(operation.id),
+                    snapshotHash=preview_snapshot_hash(row), requestKey=request.idempotencyKey,
+                    revision=request.expectedRevision, assemblyId=None, errorCode=None,
+                    sourceRenderOperationId=(
+                        previous.get("sourceRenderOperationId")
+                        if previous.get("requestKey") == request.idempotencyKey else None
+                    ),
+                )
             await service.repository.finish(
                 operation,
                 "running",
                 {
                     "kind": "compose",
+                    **({"reviewMode": request.reviewMode} if request.reviewMode else {}),
                     "actorId": str(actor_id) if actor_id else None,
                     "constraintsHash": constraints_hash(row.context_json),
                     "policyHash": policy_hash(row.context_json),
@@ -442,42 +470,14 @@ async def enqueue_timeline_render(
                 assert_project_policy(row, purpose="generation")
             context, state = copy.deepcopy(row.context_json), copy.deepcopy(row.state_json)
             if prompt_drafts is not None:
-                if len(prompt_drafts) != len(state["scenes"]):
-                    raise AppError(
-                        "SMART_REMAKE_TIMELINE_INVALID", "The saved scene order cannot change."
-                    )
-                for index, draft in enumerate(prompt_drafts):
-                    compiled = context["sceneMap"]["scenes"][index]
-                    prompts = {
-                        name: draft[name] for name in ("prompt", "imagePrompt", "videoPrompt")
-                    }
-                    if any(
-                        not isinstance(value, str) or not value.strip() or len(value) > 12000
-                        for value in prompts.values()
-                    ):
-                        raise AppError(
-                            "SMART_REMAKE_PROMPT_INVALID", "Every scene needs valid prompts."
-                        )
-                    validate_sanitized_compiler_prompts(
-                        prompt=prompts["prompt"],
-                        image_prompt=prompts["imagePrompt"],
-                        video_prompt=prompts["videoPrompt"],
-                        analysis=context["referenceAnalysis"] or {},
-                        product_lock=context["productLock"],
-                        timeline=compiled.get("shotPlan") or {},
-                    )
-                    if all(compiled[field] == prompts[field] for field in prompts):
-                        continue
-                    for field in prompts:
-                        compiled[f"original{field[0].upper()}{field[1:]}"] = compiled[field]
-                    compiled.update(prompts)
-                    compiled["promptEdited"] = True
-                    state["scenes"][index].update(prompts)
-                    state["renderPlan"]["units"][index].update(prompts)
-                    context["renderPlan"]["units"][index].update(prompts)
+                from .scene_prompt_drafts import apply_scene_prompt_drafts
+
+                context, state = apply_scene_prompt_drafts(context, state, prompt_drafts)
             if project_name is not None:
                 context["projectName"] = project_name[:200]
-            if audio_required is not None:
+            if context["renderPlan"].get("audioRequired") is True:
+                context["audioRequired"] = True
+            elif audio_required is not None:
                 context["audioRequired"] = audio_required
             expectations = build_generation_expectations(context)
             context.update(
@@ -541,10 +541,16 @@ async def retain_timeline_clip(
         None,
         metadata,
         source="generated",
-        audio_required=row.context_json["audioRequired"],
+        audio_required=bool(row.context_json["renderPlan"].get(
+            "audioRequired", row.context_json["audioRequired"],
+        )),
+        expected_duration=row.context_json["renderPlan"]["units"][index]["rawDurationFrames"] // 24,
     )
     info = await run_in_threadpool(probe_timeline_media, data)
-    version.update(rawDurationFrames=192, frameCount=info["frameCount"])
+    version.update(
+        rawDurationFrames=row.context_json["renderPlan"]["units"][index]["rawDurationFrames"],
+        frameCount=info["frameCount"],
+    )
     state = copy.deepcopy(before)
     scene, item = state["scenes"][index], state["draftTimeline"]["items"][index]
     scene["versions"] = [*scene["versions"], version]
@@ -633,9 +639,14 @@ async def retain_timeline_group_clip(
             None,
             {**metadata, **bounds},
             source="generated",
-            audio_required=current.context_json["audioRequired"],
+            audio_required=bool(current.context_json["renderPlan"].get(
+                "audioRequired", current.context_json["audioRequired"],
+            )),
+            expected_duration=group["rawDurationFrames"] // 24,
         )
-        version.update(rawDurationFrames=192, frameCount=info["frameCount"], **bounds)
+        version.update(
+            rawDurationFrames=group["rawDurationFrames"], frameCount=info["frameCount"], **bounds,
+        )
         item = items[scene["id"]]
         selection = {**item, "inFrame": segment["inFrame"], "outFrame": segment["outFrame"]}
         if segment["outFrame"] > info["frameCount"]:
@@ -670,6 +681,11 @@ async def accept_timeline_version(
     version: dict[str, Any],
 ) -> None:
     _assert_in_use(row)
+    if version.get("providerMetadata", {}).get("repairScope") == "provider_group":
+        from .provider_group_repair import accept_group_repair
+
+        await accept_group_repair(service, row, state, operation, version)
+        return
     item = next(
         item for item in state["draftTimeline"]["items"] if item["renderUnitId"] == scene["id"]
     )
@@ -711,7 +727,10 @@ class TimelineWorkflow:
                     raise AppError(
                         "SMART_REMAKE_REVISION_CONFLICT", "The reviewed timeline changed."
                     )
-                _ready(timeline)
+                _ready(
+                    timeline,
+                    require_reviewed=operation.result_json.get("reviewMode") != "whole_video",
+                )
                 manifest = operation.result_json.get("mediaManifest", [])
                 if len(manifest) != len(timeline["items"]):
                     raise AppError(
@@ -772,8 +791,16 @@ class TimelineWorkflow:
                         actor_id=operation.result_json["actorId"],
                         operation_id=str(operation.id),
                         context=context,
+                        review_mode=operation.result_json.get("reviewMode"),
                     )
                     current.context_json = context
+                    if operation.result_json.get("reviewMode") == "whole_video":
+                        from .project_preview import update_project_preview
+
+                        update_project_preview(
+                            current, status="ready", errorCode=None,
+                            assemblyId=context["p0"]["assemblies"]["activeAssemblyId"],
+                        )
                 self.ensure_active()
                 await repo.complete(current, state, operation, operation.result_json)
                 return {"status": "completed", "project_id": str(project_id)}
@@ -782,6 +809,17 @@ class TimelineWorkflow:
                     "JOB_ATTEMPT_SUPERSEDED",
                     "JOB_ATTEMPT_NOT_CLAIMED",
                 }:
+                    if operation.result_json.get("reviewMode") == "whole_video":
+                        from .project_preview import update_project_preview
+
+                        current = await repo.project(service.workspace_id, project_id, lock=True)
+                        if (current.context_json.get("p0") or {}).get("preview", {}).get(
+                            "operationId"
+                        ) == str(operation.id):
+                            update_project_preview(
+                                current, status="failed",
+                                errorCode=getattr(exc, "code", "SMART_REMAKE_COMPOSE_FAILED"),
+                            )
                     await repo.finish(
                         operation,
                         "failed",

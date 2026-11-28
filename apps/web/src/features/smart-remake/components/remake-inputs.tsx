@@ -26,8 +26,8 @@ export interface RemakeInputsProps {
     onLinkSubmit: () => void;
     isLinkLoading: boolean;
     linkedTitle?: string;
-    duration: 8 | 16;
-    onDuration: (duration: 8 | 16) => void;
+    duration: 8 | 12 | 16;
+    onDuration: (duration: 8 | 12 | 16) => void;
     language: string;
     onLanguage: (value: string) => void;
     description: string;
@@ -44,6 +44,7 @@ export interface RemakeInputsProps {
     sourceCutFrames?: number[];
     onSourceCutFramesChange?: (cuts: number[]) => void;
     validationErrors?: { video?: string; product?: string };
+    productUploadError?: string | null;
 }
 
 const fieldClass =
@@ -66,6 +67,7 @@ export function RemakeInputs(props: RemakeInputsProps) {
     );
     const busy = props.disabled || props.isLinkLoading;
     const primaryUrl = props.productUrls[props.primaryIndex] ?? props.productUrls[0];
+    const productError = props.productUploadError ?? props.validationErrors?.product;
     const ratio = videoMetadata.url === props.sourceUrl ? videoMetadata.ratio : 9 / 16;
     const videoStatus = videoPreview?.url === props.sourceUrl ? videoPreview.status : "loading";
     const measuredSourceDuration =
@@ -311,9 +313,7 @@ export function RemakeInputs(props: RemakeInputsProps) {
                     data-interactive={!busy}
                     data-dragging={dragging === "image"}
                     aria-labelledby={`${id}-product-title`}
-                    aria-describedby={
-                        props.validationErrors?.product ? `${id}-product-error` : undefined
-                    }
+                    aria-describedby={productError ? `${id}-product-error` : undefined}
                     className={cn(
                         "remake-input-card min-w-0 rounded-3xl bg-surface p-5 shadow-[0_8px_32px_rgb(0_0_0/0.035)] transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none",
                         dragging === "image" && "bg-primary-soft ring-2 ring-primary/40",
@@ -336,13 +336,13 @@ export function RemakeInputs(props: RemakeInputsProps) {
                             {props.isSample ? "Minh họa" : primaryUrl ? "Ảnh chính" : "Chưa chọn"}
                         </span>
                     </div>
-                    {props.validationErrors?.product && (
+                    {productError && (
                         <p
                             id={`${id}-product-error`}
                             role="alert"
                             className="mb-3 text-sm text-destructive"
                         >
-                            {props.validationErrors.product}
+                            {productError}
                         </p>
                     )}
                     <div
@@ -375,7 +375,7 @@ export function RemakeInputs(props: RemakeInputsProps) {
                                     sản phẩm bạn đang bán.
                                 </p>
                                 <p className="text-xs text-text-tertiary">
-                                    JPG, PNG hoặc WebP · Tối đa 10 MB/ảnh
+                                    JPG, PNG hoặc WebP · Tối đa 14 ảnh, 10 MB/ảnh
                                 </p>
                             </div>
                         )}
@@ -383,8 +383,8 @@ export function RemakeInputs(props: RemakeInputsProps) {
                     <p className="mt-3 min-h-5 truncate text-xs text-text-secondary">
                         {props.linkedTitle ||
                             (primaryUrl
-                                ? "AI dùng ảnh chính này làm tham chiếu."
-                                : "Có thể thêm nhiều ảnh và chọn một ảnh chính.")}
+                                ? "AI dùng tất cả ảnh để hiểu chi tiết sản phẩm; ưu tiên ảnh chính."
+                                : "Thêm tối đa 14 ảnh nhiều góc và chọn một ảnh chính.")}
                     </p>
                     <input
                         ref={imageInput}
@@ -393,10 +393,8 @@ export function RemakeInputs(props: RemakeInputsProps) {
                         multiple
                         className="hidden"
                         aria-label="Chọn ảnh sản phẩm"
-                        aria-invalid={Boolean(props.validationErrors?.product)}
-                        aria-describedby={
-                            props.validationErrors?.product ? `${id}-product-error` : undefined
-                        }
+                        aria-invalid={Boolean(productError)}
+                        aria-describedby={productError ? `${id}-product-error` : undefined}
                         disabled={busy}
                         onChange={(event) => {
                             props.onImages(Array.from(event.currentTarget.files ?? []));
@@ -409,9 +407,7 @@ export function RemakeInputs(props: RemakeInputsProps) {
                         className={cn(quietButton, "mt-3 w-full")}
                         disabled={busy}
                         onClick={() => imageInput.current?.click()}
-                        aria-describedby={
-                            props.validationErrors?.product ? `${id}-product-error` : undefined
-                        }
+                        aria-describedby={productError ? `${id}-product-error` : undefined}
                     >
                         <Plus aria-hidden="true" />
                         Thêm ảnh sản phẩm
@@ -510,27 +506,16 @@ export function RemakeInputs(props: RemakeInputsProps) {
                         <legend className="mb-2 text-sm font-medium text-text-primary">
                             Thời lượng video đầu ra
                         </legend>
-                        <div className="flex gap-2">
-                            {([8, 16] as const).map((duration) => (
-                                <Button
-                                    key={duration}
-                                    type="button"
-                                    variant="ghost"
-                                    className={cn(
-                                        quietButton,
-                                        "flex-1",
-                                        props.duration === duration &&
-                                            "bg-primary-soft text-primary hover:bg-primary-soft",
-                                    )}
-                                    aria-pressed={props.duration === duration}
-                                    onClick={() => props.onDuration(duration)}
-                                >
-                                    {duration} giây
-                                </Button>
-                            ))}
+                        <div className="rounded-xl bg-primary-soft px-4 py-3 text-sm font-medium text-primary">
+                            {props.duration} giây
                         </div>
                         <p className="text-xs text-text-secondary">
-                            Video dọc 9:16 · Phân bổ lại thời lượng cho đủ các cảnh
+                            {props.duration === 12
+                                ? "2 clip × 6 giây · Có âm thanh · Video dọc 9:16"
+                                : "Thời lượng dự án đã lưu · Video dọc 9:16"}
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                            Phân bổ lại thời lượng cho đủ các cảnh từ video mẫu
                         </p>
                     </fieldset>
                     <div className="space-y-2">

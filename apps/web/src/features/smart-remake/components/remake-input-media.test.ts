@@ -37,6 +37,19 @@ function inputProps(): RemakeInputsProps {
 }
 
 describe("source video preview feedback", () => {
+    it("explains all product angles and shows upload errors beside the product field", () => {
+        const props = {
+            ...inputProps(),
+            productUrls: ["/front.png", "/back.png"],
+            productUploadError: "Tối đa 14 ảnh sản phẩm. Xóa bớt ảnh rồi thử lại nhé.",
+        };
+        render(createElement(RemakeInputs, props));
+        expect(screen.getByText(/AI dùng tất cả ảnh/)).toBeTruthy();
+        const input = screen.getByLabelText("Chọn ảnh sản phẩm");
+        expect(input.getAttribute("aria-invalid")).toBe("true");
+        expect(screen.getByText(props.productUploadError)).toBeTruthy();
+    });
+
     it("preserves native playback and metadata callbacks while ending the loader", () => {
         const props = inputProps();
         render(createElement(RemakeInputs, props));

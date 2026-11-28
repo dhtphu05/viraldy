@@ -58,7 +58,7 @@ def test_adapter_builds_native_kie_request_and_preserves_product_shots_and_edits
     data = payload["input"]
     assert payload["model"] == "veo-3-1"
     assert data["model"] == "veo3_lite"
-    assert data["generation_type"] == "REFERENCE_2_VIDEO"
+    assert data["generation_type"] == "FIRST_AND_LAST_FRAMES_2_VIDEO"
     assert data["aspect_ratio"] == "9:16" and data["duration"] == 8
     assert data["image_urls"] == [IMAGE_URL]
     assert data["resolution"] == "720p" and data["enable_translation"] is False

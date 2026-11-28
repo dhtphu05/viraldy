@@ -23,7 +23,7 @@ _OPERATIONS = {
     ),
     "openai.images.edit": ("openai", "api.openai.com", "POST", r"/v1/images/edits"),
     "kie.tasks.create": ("kie", "api.kie.ai", "POST", r"/api/v1/jobs/createTask"),
-    "kie.tasks.get": ("kie", "api.kie.ai", "GET", r"/api/v1/jobs/recordInfo"),
+    "kie.tasks.get": ("kie", "api.kie.ai", "GET", r"/api/v1/(?:jobs/recordInfo|veo/record-info)"),
 }
 _SEAL = object()
 _HASH = re.compile(r"[a-f0-9]{64}")

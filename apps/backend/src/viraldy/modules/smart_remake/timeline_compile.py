@@ -27,7 +27,7 @@ from .engine.gemini_client import HttpGeminiClient, SmartRemakeGeminiClient
 from .engine.media_binaries import ffmpeg_path, ffprobe_path
 from .engine.media_probe import probe_media_bytes
 from .engine.media_validation import assert_product_image, assert_reference_video
-from .engine.product_lock_generator import generate_product_lock
+from .engine.product_lock_generator import generate_product_lock, prepare_product_analysis_images
 from .engine.prompt_sanitizer import (
     sanitize_generation_scene,
     sanitize_reference_product_text,
@@ -47,6 +47,7 @@ from .generation_expectations import (
     validate_product_lock,
 )
 from .models import SmartRemakeProjectModel
+from .product_references import MAX_PRODUCT_REFERENCE_IMAGES
 from .repair_media import RepairMediaStore
 from .repair_repository import RepairRepository
 from .service import _duration, _error, _read_product_link_image, feature_enabled, read_media
@@ -292,7 +293,7 @@ def _compile_scene(
         })
     shot_plan = {
         "targetDuration": duration,
-        "rawDurationFrames": 192,
+        "rawDurationFrames": unit.get("rawDurationFrames", 192),
         "targetDurationFrames": unit["targetDurationFrames"],
         "shotCount": len(shots),
         "shots": shots,
@@ -355,7 +356,7 @@ def _compile_scene(
         "sourceSegment": segment,
         "shotPlan": shot_plan,
         "targetDurationFrames": unit["targetDurationFrames"],
-        "rawDurationFrames": 192,
+        "rawDurationFrames": unit.get("rawDurationFrames", 192),
     }, analysis, product_lock)
 
 
@@ -518,6 +519,7 @@ async def initialize_timeline_project(
     existing_project: SmartRemakeProjectModel | None = None,
     expected_revision: int | None = None,
     compile_operation_id: UUID | None = None,
+    additional_products: list[UploadedMedia] | None = None,
 ) -> SmartRemakeProjectModel:
     project_id = existing_project.id if existing_project is not None else uuid4()
     original_revision = (
@@ -532,6 +534,9 @@ async def initialize_timeline_project(
             for unit in compile_result["renderPlan"]["units"]
         ]
     opening_frames = await run_in_threadpool(source_opening_bindings, source, binding_scenes)
+    additional_assets = copy.deepcopy(
+        (existing_project.context_json.get("p0") or {}).get("additionalProductReferences", [])
+    ) if existing_project is not None else []
     try:
         source_key = (
             existing_project.context_json["sourceKey"] if existing_project is not None
@@ -541,6 +546,15 @@ async def initialize_timeline_project(
             existing_project.context_json["productKey"] if existing_project is not None
             else await media.put(prefix, product.bytes, product.mime_type)
         )
+        if existing_project is None:
+            for upload in additional_products or []:
+                key = await media.put(prefix, upload.bytes, upload.mime_type)
+                additional_assets.append({
+                    "id": str(uuid4()), "role": "product", "storageKey": key,
+                    "mimeType": upload.mime_type,
+                    "mediaHash": hashlib.sha256(upload.bytes).hexdigest(),
+                    "sizeBytes": len(upload.bytes),
+                })
         for scene, data in zip(
             compile_result["sourceSceneMap"]["scenes"], thumbnails or [], strict=False
         ):
@@ -595,7 +609,7 @@ async def initialize_timeline_project(
         "sceneMap": result["sceneMap"],
         "productLock": result["productLock"],
         "referenceAnalysis": result["referenceAnalysis"],
-        "audioRequired": False,
+        "audioRequired": bool(result["renderPlan"].get("audioRequired", False)),
         "projectName": previous.get("projectName", "Smart Remake"),
         "textOverlays": [],
         "sourceSceneMap": result["sourceSceneMap"],
@@ -604,6 +618,8 @@ async def initialize_timeline_project(
     }
     if image_assets:
         context["imageAssets"] = copy.deepcopy(image_assets)
+    if additional_assets:
+        context.setdefault("p0", {})["additionalProductReferences"] = additional_assets
     context["generationExpectations"] = build_generation_expectations(context)
     context["expectationsHash"] = expectations_hash(context["generationExpectations"])
     if result["sourceSceneMap"].get("timingMode") == "fit_target":
@@ -634,7 +650,7 @@ async def initialize_timeline_project(
                 "index": index,
                 "startSecond": result["draftTimeline"]["items"][index]["targetStartFrame"] / 24,
                 "durationSeconds": unit["targetDurationFrames"] / 24,
-                "rawDurationFrames": 192,
+                "rawDurationFrames": unit["rawDurationFrames"],
                 "activeVersionId": None,
                 "versions": [],
                 **{key: unit[key] for key in ("prompt", "imagePrompt", "videoPrompt")},
@@ -711,6 +727,7 @@ async def compile_timeline_request(
     idempotency_key: str | None = None,
     actor_id: UUID | None = None,
     analysis_scope: str = "excerpt",
+    additional_product_images: list[UploadFile] | None = None,
 ) -> dict[str, Any]:
     if not feature_enabled(settings):
         raise AppError("SMART_REMAKE_DISABLED", "Smart Remake is disabled.", 503)
@@ -719,6 +736,10 @@ async def compile_timeline_request(
     if analysis_scope not in {"excerpt", "full_source"}:
         raise AppError("SMART_REMAKE_SOURCE_RANGE_INVALID", "Unsupported source analysis scope.")
     full_source = analysis_scope == "full_source"
+    if len(additional_product_images or []) >= MAX_PRODUCT_REFERENCE_IMAGES:
+        raise AppError(
+            "SMART_REMAKE_PRODUCT_REFERENCES_INVALID", "Use at most fourteen product images.", 422
+        )
     if full_source and reference_start_frame != 0:
         raise AppError(
             "SMART_REMAKE_SOURCE_RANGE_INVALID", "Full-source analysis must start at frame zero."
@@ -730,6 +751,10 @@ async def compile_timeline_request(
     duration = _duration(target_duration)
     reference = await read_media(reference_video, "video/mp4")
     product = await read_media(product_image, "image/png")
+    additional = [
+        value for upload in additional_product_images or []
+        if (value := await read_media(upload, "image/png")) is not None
+    ]
     owned = (
         await RepairRepository(session).project(workspace_id, project_id)
         if project_id is not None
@@ -798,6 +823,21 @@ async def compile_timeline_request(
         product = UploadedMedia(bytes=linked.bytes, mime_type=linked.mime_type)
         product_title = product_title or linked.title
         product_description = product_description or linked.description
+    if owned is not None and (owned.context_json.get("p0") or {}).get(
+        "additionalProductReferences"
+    ):
+        from .product_references import read_product_references
+
+        retained = await read_product_references(
+            owned.context_json, RepairMediaStore(S3StorageAdapter(settings))
+        )
+        if additional_product_images is not None and [
+            hashlib.sha256(value.bytes).hexdigest() for value in additional
+        ] != [hashlib.sha256(value.bytes).hexdigest() for value in retained[1:]]:
+            raise AppError("SMART_REMAKE_INPUT_CHANGED", "Use the retained product views.", 409)
+        additional = retained[1:]
+    elif owned is not None and additional:
+        raise AppError("SMART_REMAKE_INPUT_CHANGED", "Create an intake for new product views.", 409)
     if reference is None or product is None:
         raise AppError(
             "SMART_REMAKE_MEDIA_REQUIRED", "Reference video and product image are required."
@@ -847,6 +887,18 @@ async def compile_timeline_request(
                 )
         assert_reference_video(reference)
         assert_product_image(product)
+        analysis_images = [product, *additional]
+        if additional:
+            from .product_references import validate_product_reference_image
+
+            for image in [product, *additional]:
+                validate_product_reference_image(image)
+            hashes = [hashlib.sha256(image.bytes).hexdigest() for image in [product, *additional]]
+            if len(hashes) != len(set(hashes)):
+                raise AppError(
+                    "SMART_REMAKE_PRODUCT_REFERENCES_INVALID", "Choose distinct product views.", 422
+                )
+            analysis_images = prepare_product_analysis_images(analysis_images)
         info = await run_in_threadpool(probe_media_bytes, reference.bytes)
         if not info.get("hasVideo") or not info.get("durationSeconds"):
             raise AppError("SMART_REMAKE_SOURCE_INVALID", "The source video could not be measured.")
@@ -1008,7 +1060,8 @@ async def compile_timeline_request(
             source_scenes=plan["sourceSceneMap"]["scenes"],
         )
         lock = await generate_product_lock(
-            product_image=product,
+            product_image=analysis_images[0],
+            **({"additional_product_images": analysis_images[1:]} if additional else {}),
             metadata=ProductMetadata(title=product_title, description=product_description),
             prompt=prompt,
             description=description,
@@ -1068,6 +1121,7 @@ async def compile_timeline_request(
             compile_result=result,
             source=reference,
             product=product,
+            **({"additional_products": additional} if additional else {}),
             source_probe=info,
             thumbnails=thumbnails,
             image_assets=(

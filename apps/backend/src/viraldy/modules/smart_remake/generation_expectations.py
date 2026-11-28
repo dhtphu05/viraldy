@@ -5,9 +5,17 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
 from viraldy.shared.errors.base import AppError
 
@@ -97,8 +105,20 @@ class GenerationExpectations(FrozenExpectation):
     requirements: dict[str, Any]
     requirementsHash: str = Field(pattern=HASH_PATTERN)
     references: dict[Literal["source", "product", "character"], ReferenceExpectation]
+    productReferenceHashes: list[Annotated[str, Field(pattern=HASH_PATTERN)]] | None = Field(
+        default=None, min_length=2, max_length=14
+    )
     sourceContext: dict[str, Any]
     scenes: list[SceneExpectation] = Field(min_length=1)
+
+    @model_serializer(mode="wrap")
+    def omit_single_product_manifest(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if self.productReferenceHashes is None:
+            value.pop("productReferenceHashes", None)
+        return value
 
     @model_validator(mode="after")
     def bindings(self) -> Self:
@@ -110,6 +130,11 @@ class GenerationExpectations(FrozenExpectation):
             raise ValueError("Private locator keys do not belong in generation expectations.")
         if not {"source", "product"} <= self.references.keys():
             raise ValueError("Source and product references are required.")
+        if self.productReferenceHashes is not None and (
+            self.productReferenceHashes[0] != self.references["product"].mediaHash
+            or len(set(self.productReferenceHashes)) != len(self.productReferenceHashes)
+        ):
+            raise ValueError("Product views must be distinct and start with the primary image.")
         if len({scene.renderUnitId for scene in self.scenes}) != len(self.scenes):
             raise ValueError("Render unit IDs must be unique.")
         previous_ranges: dict[str, SourceRangeExpectation] = {}
@@ -295,6 +320,14 @@ def build_generation_expectations(
         "sourceContext": _safe_json(source_context),
         "scenes": canonical,
     }
+    additional = p0.get("additionalProductReferences") or []
+    if not isinstance(additional, list):
+        raise _required()
+    if additional:
+        value["productReferenceHashes"] = [
+            references["product"]["mediaHash"],
+            *(asset.get("mediaHash") if isinstance(asset, dict) else None for asset in additional),
+        ]
     validate_generation_payload(value, analysis, product_lock)
     return validate_generation_expectations(value)
 

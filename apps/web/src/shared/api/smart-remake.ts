@@ -1,4 +1,5 @@
 import { apiGet, apiPatch, apiPost, apiPostForm, type ApiRequestOptions } from "./client";
+import { uploadSmartRemakeInputs } from "./smart-remake-uploads";
 import type {
     SmartRemakeRequirements,
     SmartRemakeRights,
@@ -13,9 +14,11 @@ import type {
     SmartRemakeProjectMutationResult,
     RepairIntent,
     SmartRemakeRepairReceipt,
+    SmartRemakeRepairAffectedVersion,
     SmartRemakeAnalysisProgress,
     SmartRemakeGenerationRecovery,
     SmartRemakeGenerationProgress,
+    SmartRemakeProviderError,
     SmartRemakeSourceAudio,
 } from "./smart-remake-project-types";
 export type * from "./smart-remake-project-types";
@@ -29,6 +32,7 @@ export type SmartRemakeHealth = {
     kieConfigured?: boolean;
     openaiImagesConfigured?: boolean;
     kieVideoModel?: string;
+    kieVideoResolution?: "480P" | "720P" | "1080P";
     openaiImageModel?: string;
     limits: { referenceVideoBytes: number; productImageBytes: number };
 };
@@ -67,6 +71,8 @@ export type SmartRemakeRenderPlan = {
     groups?: SmartRemakeRenderGroup[];
     renderGroupBreaks?: number[];
     videoModel?: string;
+    videoResolution?: "480P" | "720P" | "1080P";
+    audioRequired?: boolean;
     imageModel?: string;
     imageQuality?: "low" | "medium" | "high" | "xhigh" | "max";
     imageComplexity?: "low" | "medium" | "high";
@@ -123,12 +129,12 @@ export type SmartRemakeCompileResult = {
     draftTimeline?: SmartRemakeTimeline;
     mode: "smart_remake" | "montage";
     renderSubmitted: false;
-    inputSummary: { targetDuration: 8 | 16; aspectRatio: "9:16"; language: string | null };
+    inputSummary: { targetDuration: 8 | 12 | 16; aspectRatio: "9:16"; language: string | null };
     referenceAnalysis: Record<string, unknown>;
     analyzeOutput: Record<string, unknown>;
     productLock: Record<string, unknown>;
     sceneMap: {
-        targetDuration: 8 | 16;
+        targetDuration: 8 | 12 | 16;
         sceneCount: number;
         scenes: Array<Record<string, unknown>>;
     };
@@ -144,7 +150,7 @@ export type SmartRemakeRenderResult = {
     mode: "smart_remake";
     provider: string;
     finalVideoUrl: string;
-    targetDuration: 8 | 16;
+    targetDuration: 8 | 12 | 16;
     sceneCount: number;
     renderSubmitted: boolean;
     status: "completed" | "submitted" | "running";
@@ -169,6 +175,8 @@ export type SmartRemakeSceneVersion = {
     rawDurationFrames?: number;
     frameCount?: number;
     renderGroupId?: string;
+    mediaHash?: string;
+    providerMetadata?: Record<string, unknown>;
     suggestedInFrame?: number;
     suggestedOutFrame?: number;
     technicalCheck: {
@@ -182,8 +190,23 @@ export type SmartRemakeSceneVersion = {
 
 export type SmartRemakeProject = {
     id: string;
+    preview?: {
+        schemaVersion: 1;
+        status: "pending" | "processing" | "ready" | "failed" | "stale";
+        operationId?: string;
+        sourceRenderOperationId?: string;
+        snapshotHash?: string;
+        assemblyId?: string;
+        errorCode?: string;
+        retryable?: boolean;
+    };
     sourceAudio?: SmartRemakeSourceAudio;
-    inputMediaHashes?: { source: string; product: string; character?: string | null } | null;
+    inputMediaHashes?: {
+        source: string;
+        product: string;
+        character?: string | null;
+        additionalProducts?: string[];
+    } | null;
     expectationsVersion?: 1 | null;
     expectationsHash?: string | null;
     revision: number;
@@ -258,7 +281,8 @@ export type SmartRemakeProject = {
     finalVideoUrl: string;
     downloadUrl?: string;
     productImageUrl?: string;
-    targetDuration: 8 | 16;
+    additionalProductImageUrls?: string[];
+    targetDuration: 8 | 12 | 16;
     provider: "unifically" | "flowkit" | "kie";
     analysisProgress?: SmartRemakeAnalysisProgress;
     generationRecovery?: SmartRemakeGenerationRecovery;
@@ -268,6 +292,8 @@ export type SmartRemakeProject = {
         status: "running";
         needsReconciliation: boolean;
         errorCode?: string | null;
+        providerError?: SmartRemakeProviderError;
+        providerTaskId?: string;
         kind?: string;
         stage?: string;
         progress?: { stage: string; completed?: number; total?: number };
@@ -276,6 +302,8 @@ export type SmartRemakeProject = {
         id: string;
         status: "failed" | "completed";
         errorCode?: string | null;
+        providerError?: SmartRemakeProviderError;
+        providerTaskId?: string;
         kind?: string;
         needsReconciliation?: boolean;
     };
@@ -299,6 +327,9 @@ export type SmartRemakeOperationResult = {
     candidateVersionId?: string;
     operationId: string;
     status: "completed" | "running" | "failed";
+    repairScope?: "provider_group";
+    renderGroupId?: string;
+    affectedVersions?: SmartRemakeRepairAffectedVersion[];
 };
 
 export type SmartRemakePromptDraft = Pick<
@@ -313,7 +344,7 @@ export function getSmartRemakeHealth(workspaceId: string) {
 export function compileSmartRemake(
     workspaceId: string,
     input: {
-        targetDuration: 8 | 16;
+        targetDuration: 8 | 12 | 16;
         language: string;
         prompt: string;
         description: string;
@@ -420,6 +451,7 @@ export function repairSmartRemakeScene(
         baseVersionId: string | null;
         expectedRevision: number;
         idempotencyKey: string;
+        repairScope?: "provider_group";
     },
 ) {
     return apiPost<SmartRemakeOperationResult>(
@@ -462,7 +494,7 @@ export function saveSmartRemakeTimeline(
 export function publishSmartRemakeTimeline(
     workspaceId: string,
     projectId: string,
-    input: { expectedRevision: number; idempotencyKey: string },
+    input: { expectedRevision: number; idempotencyKey: string; reviewMode?: "whole_video" },
 ) {
     return apiPost<SmartRemakeOperationResult>(
         `/workspaces/${workspaceId}/smart-remake/projects/${projectId}/publish`,
@@ -470,23 +502,23 @@ export function publishSmartRemakeTimeline(
     );
 }
 
-export function createSmartRemakeProject(
+export async function createSmartRemakeProject(
     workspaceId: string,
     input: {
         metadata: SmartRemakeIntakeMetadata;
         referenceVideo: File;
         productImage: File;
+        additionalProductImages?: File[];
         characterImage?: File;
     },
+    options: ApiRequestOptions = {},
 ) {
-    const body = new FormData();
-    body.set("metadata", JSON.stringify(input.metadata));
-    body.set("referenceVideo", input.referenceVideo);
-    body.set("productImage", input.productImage);
-    if (input.characterImage) body.set("characterImage", input.characterImage);
-    return apiPostForm<{ project: SmartRemakeProject }>(
-        `/workspaces/${workspaceId}/smart-remake/projects`,
-        body,
+    const assets = await uploadSmartRemakeInputs(workspaceId, input, options.signal);
+    options.signal?.throwIfAborted();
+    return apiPost<{ project: SmartRemakeProject }>(
+        `/workspaces/${workspaceId}/smart-remake/projects/from-assets`,
+        { metadata: input.metadata, ...assets },
+        options,
     );
 }
 

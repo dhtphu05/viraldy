@@ -32,8 +32,17 @@ def constraints_hash(context: dict[str, Any]) -> str:
             "assets": {
                 role: asset.get("mediaHash") for role, asset in p0.get("assets", {}).items()
             },
+            **(
+                {"additionalProductReferences": [
+                    asset.get("mediaHash") for asset in p0["additionalProductReferences"]
+                ]}
+                if p0.get("additionalProductReferences") else {}
+            ),
             "targetDuration": p0.get("targetDuration"),
-            "referencePolicy": "product-and-character-max-three-v1",
+            "referencePolicy": (
+                "product-views-and-character-v1"
+                if p0.get("additionalProductReferences") else "product-and-character-max-three-v1"
+            ),
             "expectationsHash": context.get("expectationsHash"),
             "expectationsVersion": (context.get("generationExpectations") or {}).get("version"),
             "generationFacts": {

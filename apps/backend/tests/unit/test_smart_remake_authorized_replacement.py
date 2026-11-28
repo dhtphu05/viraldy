@@ -146,7 +146,11 @@ async def test_write_boundary_requires_the_exact_owned_replacement_operation(sto
     parameters = query.params.values()
     authorization = attempt.metadata_json["replacementAuthorization"]
     assert stored.project.id in parameters and stored.workspace in parameters
-    assert authorization["replacementKey"] in parameters
+    assert any(
+        value == authorization["replacementKey"]
+        or isinstance(value, list) and authorization["replacementKey"] in value
+        for value in parameters
+    )
     assert str(attempt.actor_id) in parameters and incoming.operation_id in parameters
 
 

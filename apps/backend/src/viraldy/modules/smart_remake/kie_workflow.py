@@ -8,7 +8,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,13 +23,14 @@ from viraldy.platform.storage.s3 import S3StorageAdapter
 from viraldy.shared.errors.base import AppError, ConflictError
 
 from .engine.config import get_kie_poll_interval_seconds, get_kie_poll_timeout_seconds
-from .engine.kie_adapter import build_kie_video_request, validate_kie_video_input
+from .engine.errors import SmartRemakeError
 from .engine.kie_client import KieClient
 from .engine.prompt_sanitizer import (
-    validate_generation_payload,
     validate_sanitized_compiler_prompts,
 )
 from .engine.schemas import RenderSmartRemakeInput, UploadedMedia
+from .engine.wan_video_adapter import WAN_VIDEO_MODEL
+from .engine.window_continuity import WINDOW_CONTINUITY_VERSION, build_window_context
 from .generation_budget import (
     character_reference,
     generation_execution_receipt,
@@ -37,7 +38,6 @@ from .generation_budget import (
     recover_generation_task,
     require_generation_policy,
     reserve_generation_attempt,
-    saved_requirements_prompt,
     settle_generation_attempt,
 )
 from .generation_expectations import (
@@ -47,6 +47,8 @@ from .generation_expectations import (
     require_generation_expectations,
     validate_generation_expectations,
 )
+from .provider_errors import sanitize_provider_error
+from .provider_group_request import conditioned_group_request
 from .repair_media import RepairMediaStore
 from .repair_repository import RepairRepository
 from .repair_schemas import RepairSceneRequest
@@ -217,6 +219,22 @@ async def enqueue_kie_repair(
                     "Cảnh chưa có video để sửa. Hãy tạo video trước.", 409,
                 )
             _version(scene, base_id)
+            group_directions: dict[str, Any] = {}
+            if request.repairScope == "provider_group":
+                from .provider_group_repair import freeze_repair_group
+                from .repair_intent import repair_base_scene
+
+                if request.repairIntent is None:
+                    raise AppError("SMART_REMAKE_GROUP_REPAIR_INTENT_REQUIRED",
+                                   "Mô tả phần muốn sửa trong clip thay vì nhập prompt.", 422)
+                repair_group = freeze_repair_group(row, str(scene_id))
+                group_directions = {
+                    "repairGroup": repair_group,
+                    "repairScope": "provider_group",
+                    "renderGroupId": repair_group["group"]["id"],
+                    "repairBaseScenes": [repair_base_scene(row, _scene(row.state_json, member))
+                                         for member in repair_group["group"]["renderUnitIds"]],
+                }
             if request.repairIntent is not None:
                 from .repair_intent import NORMALIZER_VERSION, repair_base_scene
 
@@ -255,6 +273,7 @@ async def enqueue_kie_repair(
                     "sceneIndex": scene["index"],
                     "request": payload,
                     **directions,
+                    **group_directions,
                     "tasks": {},
                     **(
                         {"renderPlan": copy.deepcopy(plan), "renderPlanHash": _fingerprint(plan)}
@@ -329,8 +348,12 @@ class KieWorkflow:
                 )
         require_generation_expectations(row.context_json)
         scenes = None
-        if operation.result_json.get("compiledScene"):
-            scenes = copy.deepcopy(row.context_json["sceneMap"]["scenes"])
+        if operation.result_json.get("repairGroup"):
+            from .provider_group_repair import group_repair_generation_scenes
+
+            scenes = group_repair_generation_scenes(row, operation.result_json)
+        elif operation.result_json.get("compiledScene"):
+            scenes = list(copy.deepcopy(row.context_json["sceneMap"]["scenes"]))
             scenes[operation.result_json["sceneIndex"]] = operation.result_json["compiledScene"]
         snapshot = build_generation_expectations(row.context_json, scenes=scenes)
         frozen = operation.result_json.get("generationExpectations")
@@ -347,6 +370,19 @@ class KieWorkflow:
                 raise ConflictError(
                     "SMART_REMAKE_RENDER_PLAN_CHANGED", "The saved render plan changed."
                 )
+        fresh_policies: dict[str, str] = {}
+        if (
+            not operation.result_json.get("images") and not operation.result_json.get("tasks")
+            and not operation.result_json.get("windowContinuityVersion")
+            and not operation.result_json.get("conditioningPolicy")
+            and current.get("videoModel") == WAN_VIDEO_MODEL
+            and len(current.get("groups") or []) == 2
+            and all(group.get("rawDurationFrames") == 144 for group in current["groups"])
+        ):
+            fresh_policies = {
+                "windowContinuityVersion": WINDOW_CONTINUITY_VERSION,
+                "conditioningPolicy": "source-frame-authority-v1",
+            }
         if frozen is None or current.get("groups") or current.get("imageModel"):
             await self._save(
                 operation,
@@ -356,6 +392,7 @@ class KieWorkflow:
                     "renderPlanHash": _fingerprint(current),
                     "generationExpectations": snapshot,
                     "expectationsHash": expectations_hash(snapshot),
+                    **fresh_policies,
                 },
             )
         return dict(current)
@@ -378,8 +415,16 @@ class KieWorkflow:
             await self._save(operation, {**operation.result_json, "referencePreparation": "direct"})
         snapshot_hash = expectations_hash(snapshot)
         override_scenes = None
-        if operation.result_json.get("compiledScene"):
-            override_scenes = copy.deepcopy(row.context_json["sceneMap"]["scenes"])
+        if operation.result_json.get("repairGroup"):
+            from .provider_group_repair import validate_repair_group
+
+            validate_repair_group(row, operation.result_json["repairGroup"])
+        if operation.result_json.get("repairGroup"):
+            from .provider_group_repair import group_repair_generation_scenes
+
+            override_scenes = group_repair_generation_scenes(row, operation.result_json)
+        elif operation.result_json.get("compiledScene"):
+            override_scenes = list(copy.deepcopy(row.context_json["sceneMap"]["scenes"]))
             override_scenes[operation.result_json["sceneIndex"]] = (
                 operation.result_json["compiledScene"]
             )
@@ -391,6 +436,28 @@ class KieWorkflow:
             )
         character = await character_reference(self.repair, row)
         plan = operation.result_json.get("renderPlan") or row.context_json.get("renderPlan") or {}
+        current_plan = row.context_json.get("renderPlan") or {}
+        if (
+            plan.get("videoModel"), plan.get("videoResolution") or "720P",
+            plan.get("audioRequired"),
+            [(group["rawDurationFrames"], group["targetDurationFrames"])
+             for group in plan.get("groups") or []],
+        ) != (
+            current_plan.get("videoModel"), current_plan.get("videoResolution") or "720P",
+            current_plan.get("audioRequired"),
+            [(group["rawDurationFrames"], group["targetDurationFrames"])
+             for group in current_plan.get("groups") or []],
+        ):
+            raise ConflictError(
+                "SMART_REMAKE_RENDER_PLAN_CHANGED",
+                "Reconcile submitted tasks before changing the saved video settings or duration.",
+            )
+        if not plan.get("imageModel"):
+            raise AppError(
+                "SMART_REMAKE_CONDITIONING_REQUIRED",
+                "Update the script to prepare composed opening and final images before video.",
+                409,
+            )
         compiled = row.context_json["sceneMap"]["scenes"]
         indices = [index]
         if group is not None:
@@ -406,104 +473,68 @@ class KieWorkflow:
                 ) if key in compiled[position]},
                 **copy.deepcopy(scene),
             })
-        prompt_context = {
-            **row.context_json,
-            "p0": {**row.context_json.get("p0", {}),
-                   "requirements": snapshot.get("requirements", {})},
-        }
-        request: dict[str, Any] | None = None
-        requirements_prompt = (
-            f"\n\nGENERATION EXPECTATIONS HASH: {snapshot_hash}"
-            + saved_requirements_prompt(prompt_context)
+        segments = (
+            group["segments"]
+            if group is not None
+            else [
+                {
+                    "renderUnitId": plan["units"][index]["id"],
+                    "inFrame": 0,
+                    "outFrame": plan["units"][index]["targetDurationFrames"],
+                }
+            ]
         )
-        if group is not None or plan.get("imageModel") or character:
-            from .engine.kie_adapter import build_kie_group_request
-
-            segments = (
-                group["segments"]
-                if group is not None
-                else [
-                    {
-                        "renderUnitId": plan["units"][index]["id"],
-                        "inFrame": 0,
-                        "outFrame": plan["units"][index]["targetDurationFrames"],
-                    }
-                ]
-            )
-            image_offsets = [0] if character else list(dict.fromkeys([0, len(indices) - 1]))
-            reference_count = (
-                1 + bool(character) + (len(image_offsets) if plan.get("imageModel") else 0)
-            )
-            # Validate the combined prompt before paid image edits. These public
-            # literal placeholders are never fetched, uploaded or sent to KIE.
-            request = await asyncio.to_thread(
-                build_kie_group_request,
-                scenes=scenes,
-                segments=segments,
-                reference_image_urls=[
-                    f"https://1.1.1.1/reference-{offset}.png" for offset in range(reference_count)
-                ],
-                **({"has_character_reference": True} if character else {}),
-                product_lock=snapshot["productLock"],
-                reference_analysis=snapshot.get("sourceContext", {}),
-            )
-            if requirements_prompt:
-                request["input"]["prompt"] += requirements_prompt
-                await asyncio.to_thread(validate_kie_video_input, request["input"])
-            validate_generation_payload(
-                request["input"]["prompt"], row.context_json.get("referenceAnalysis", {}),
-                snapshot["productLock"],
-            )
-        else:
-            request = await asyncio.to_thread(
-                build_kie_video_request, scene=scenes[0],
-                product_image_url="https://1.1.1.1/product.png",
-                product_lock=snapshot["productLock"],
-                reference_analysis=snapshot.get("sourceContext", {}),
-            )
-            request["input"]["prompt"] += requirements_prompt
-            validate_kie_video_input(request["input"])
-            validate_generation_payload(
-                request["input"]["prompt"], row.context_json.get("referenceAnalysis", {}),
-                snapshot["productLock"],
-            )
+        # Validate the combined prompt before paid image edits. These public
+        # literal placeholders are never fetched, uploaded or sent to KIE.
+        window_context = (
+            build_window_context(plan, group, snapshot)
+            if group is not None and operation.result_json.get("windowContinuityVersion")
+            == WINDOW_CONTINUITY_VERSION else None
+        )
+        request = await asyncio.to_thread(
+            conditioned_group_request,
+            context=row.context_json, plan=plan, snapshot=snapshot,
+            duration_seconds=(group or plan["units"][index])["rawDurationFrames"] // 24,
+            window_context=window_context,
+            scenes=scenes,
+            segments=segments,
+            has_character_reference=bool(character),
+        )
         references: list[dict[str, Any]] = []
-        if plan.get("imageModel"):
-            from .image_workflow import prepare_scene_image
+        from .image_workflow import prepare_scene_image
 
-            if self.image_client is None:
-                from .engine.openai_images import OpenAIImageClient
+        if self.image_client is None:
+            from .engine.openai_images import OpenAIImageClient
 
-                if self.repair.settings is None:
-                    raise AppError(
-                        "OPENAI_IMAGES_NOT_CONFIGURED", "OpenAI image settings are required.", 503
-                    )
-                self.image_client = OpenAIImageClient(self.repair.settings)
-            for offset in image_offsets:
-                references.append(
-                    await prepare_scene_image(
-                        repair=self.repair,
-                        row=row,
-                        operation=operation,
-                        index=indices[offset],
-                        compiled_scene=scenes[offset],
-                        image_client=self.image_client,
-                        save=self._save,
-                        ensure_active=self.ensure_active,
-                    )
+            if self.repair.settings is None:
+                raise AppError(
+                    "OPENAI_IMAGES_NOT_CONFIGURED", "OpenAI image settings are required.", 503
                 )
+            self.image_client = OpenAIImageClient(self.repair.settings)
+        bookends: list[tuple[int, Literal["opening", "ending"]]] = [
+            (0, "opening"), (len(indices) - 1, "ending"),
+        ]
+        for offset, frame_role in bookends:
+            references.append(
+                await prepare_scene_image(
+                    repair=self.repair,
+                    row=row,
+                    operation=operation,
+                    index=indices[offset],
+                    compiled_scene=scenes[offset],
+                    frame_role=frame_role,
+                    image_client=self.image_client,
+                    save=self._save,
+                    ensure_active=self.ensure_active,
+                )
+            )
         product_data = await self.repair.media.read(row.context_json["productKey"])
         product_hash = row.context_json.get("productMediaHash")
         if product_hash is not None and hashlib.sha256(product_data).hexdigest() != product_hash:
             raise AppError(
                 "SMART_REMAKE_INPUT_CHANGED", "The retained product reference changed.", 409
             )
-        upload_media = [UploadedMedia(
-            bytes=product_data, mime_type=row.context_json["productMimeType"],
-            file_name="product-reference",
-        )]
-        if character is not None:
-            upload_media.append(character)
+        upload_media = []
         for reference in references:
             data = await self.repair.media.read(reference["storageKey"])
             if row.context_json.get("p0") and (
@@ -520,7 +551,11 @@ class KieWorkflow:
         for media in upload_media:
             await require_generation_policy(self.repair, row)
             urls.append(await self.client.upload_file(media))
-        request = {**request, "input": {**request["input"], "image_urls": urls}}
+        image_fields = (
+            {"first_frame_url": urls[0], "last_frame_url": urls[1]}
+            if request["model"] == WAN_VIDEO_MODEL else {"image_urls": urls}
+        )
+        request = {**request, "input": {**request["input"], **image_fields}}
         return request, references
 
     async def _task(
@@ -562,21 +597,26 @@ class KieWorkflow:
             if reconcile_only:
                 return None
             request, references = await self._request(row, operation, index, group)
+            api_contract = getattr(self.client, "api_contract", None)
+            wire_binding = {"apiContract": api_contract} if isinstance(api_contract, str) else {}
             request_hash = _fingerprint({
                 "model": request["model"],
                 "input": {name: value for name, value in request["input"].items()
-                          if name != "image_urls"},
+                          if name not in {"image_urls", "first_frame_url", "last_frame_url"}},
                 "productHash": row.context_json.get("productMediaHash"),
                 "characterHash": row.context_json.get("characterMediaHash"),
                 "imageHashes": [reference["mediaHash"] for reference in references],
                 "expectationsHash": operation.result_json["expectationsHash"],
+                **wire_binding,
             })
             attempt, created = await reserve_generation_attempt(
                 self.repair, row, operation, slot=f"video:{key}", request_hash=request_hash,
                 stage="video", provider="kie", model=request["model"],
-                profile={name: request["input"][name] for name in (
-                    "model", "duration", "aspect_ratio", "resolution"
-                ) if name in request["input"]},
+                profile={"model": request["input"].get("model", request["model"]), **{
+                    name: request["input"][name] for name in (
+                        "duration", "aspect_ratio", "resolution"
+                    ) if name in request["input"]
+                }} | wire_binding,
             )
             if not created and not attempt.provider_task_id:
                 raise AppError(
@@ -591,6 +631,7 @@ class KieWorkflow:
                 "requestHash": request_hash,
                 "model": request["input"].get("model", request["model"]),
                 "requestModel": request["model"],
+                **wire_binding,
                 "imageReferences": references,
                 "generationExpectations": copy.deepcopy(
                     operation.result_json["generationExpectations"]
@@ -636,14 +677,9 @@ class KieWorkflow:
                 details = getattr(exc, "details", None) or {}
                 if isinstance(details, dict) and isinstance(details.get("providerError"), dict):
                     details = details["providerError"]
-                provider_error: dict[str, Any] = {
-                    target: details[source]
-                    for source, target in (("status", "httpStatus"),
-                                           ("providerCode", "providerCode"))
-                    if isinstance(details, dict) and type(details.get(source)) is int
-                }
-                if isinstance(details, dict) and isinstance(details.get("providerMessage"), str):
-                    provider_error["providerMessage"] = details["providerMessage"][:500]
+                provider_error = sanitize_provider_error(
+                    details, secrets=(getattr(self.client, "api_key", ""),),
+                )
                 if code in {
                     "KIE_AUTH_FAILED",
                     "KIE_CREDITS_EXHAUSTED",
@@ -664,6 +700,7 @@ class KieWorkflow:
                             "providerError": provider_error,
                             "tasks": {**operation.result_json.get("tasks", {}), key: {
                                 **task, "status": "rejected", "errorCode": code,
+                                "providerError": provider_error,
                             }},
                         },
                         status="failed",
@@ -681,6 +718,10 @@ class KieWorkflow:
                         "needsReconciliation": True,
                         "errorCode": "SMART_REMAKE_SUBMISSION_UNRESOLVED",
                         "providerError": provider_error,
+                        "tasks": {**operation.result_json.get("tasks", {}), key: {
+                            **task, "providerError": provider_error,
+                            "errorCode": "SMART_REMAKE_SUBMISSION_UNRESOLVED",
+                        }},
                     },
                 )
                 raise AppError(
@@ -711,24 +752,64 @@ class KieWorkflow:
         )
         while True:
             self.ensure_active()
-            status = await self.client.get_task(task["taskId"])
+            try:
+                if task.get("requestModel") == WAN_VIDEO_MODEL:
+                    status = await self.client.get_task(task["taskId"], model=WAN_VIDEO_MODEL)
+                else:
+                    status = await self.client.get_task(task["taskId"])
+            except SmartRemakeError as exc:
+                provider_error = sanitize_provider_error(
+                    exc.details, secrets=(getattr(self.client, "api_key", ""),),
+                )
+                await self._save(operation, {
+                    **operation.result_json, "providerError": provider_error,
+                    "providerTaskId": task["taskId"],
+                    "tasks": {**operation.result_json.get("tasks", {}), key: {
+                        **task, "providerError": provider_error, "errorCode": exc.code,
+                    }},
+                })
+                raise
             # Remote JSON and injected fake clients cannot supply execution proof.
             receipt = {
                 name: value for name, value in status.get("receipt", {}).items()
-                if name != "executionEvidence"
+                if name not in {"executionEvidence", "terminalExecutionEvidence"}
             }
+            if status["status"] in {"completed", "failed"}:
+                terminal_proof = generation_execution_receipt(
+                    self.client, attempt_id=task.get("attemptId"),
+                    request_hash=str(task.get("requestHash") or ""), provider="kie",
+                    model=task.get("requestModel") or "veo-3-1",
+                    operation="kie.tasks.get", task_id=task["taskId"],
+                ).get("executionEvidence")
+                if terminal_proof is not None:
+                    receipt["terminalExecutionEvidence"] = terminal_proof
             if status["status"] == "failed":
+                provider_error = sanitize_provider_error(
+                    status.get("providerError", {
+                        "providerCode": status.get("error_code", status.get("failCode")),
+                        "providerMessage": status.get("error_message"),
+                    }),
+                    secrets=(getattr(self.client, "api_key", ""),),
+                )
                 await settle_generation_attempt(
                     self.repair, row, task.get("attemptId"), status="failed",
                     receipt={
                         "providerTaskId": task["taskId"], "errorCode": "KIE_TASK_FAILED",
-                        **receipt,
+                        **receipt, **provider_error,
                     },
                     usage=status.get("usage"),
                 )
                 await self._save(
                     operation,
-                    {**operation.result_json, "errorCode": "KIE_TASK_FAILED"},
+                    {
+                        **operation.result_json, "errorCode": "KIE_TASK_FAILED",
+                        "needsReconciliation": False, "providerError": provider_error,
+                        "providerTaskId": task["taskId"],
+                        "tasks": {**operation.result_json.get("tasks", {}), key: {
+                            **task, "status": "failed", "errorCode": "KIE_TASK_FAILED",
+                            "providerError": provider_error,
+                        }},
+                    },
                     status="failed",
                 )
                 raise AppError(
@@ -809,7 +890,16 @@ class KieWorkflow:
             request.get("baseVersionId"),
             metadata,
             source="regenerated",
-            audio_required=row.context_json["audioRequired"],
+            audio_required=bool(
+                (operation.result_json.get("renderPlan")
+                 or row.context_json.get("renderPlan") or {})
+                .get("audioRequired", row.context_json["audioRequired"])
+            ),
+            expected_duration=(
+                (operation.result_json.get("renderPlan") or row.context_json["renderPlan"])
+                ["units"][index].get("rawDurationFrames", 192) // 24
+                if row.state_json.get("schemaVersion") == 2 else 8
+            ),
         )
         if row.state_json.get("schemaVersion") == 2:
             from .timeline_media import probe_timeline_media
@@ -820,7 +910,10 @@ class KieWorkflow:
                 unit["targetDurationFrames"] for unit in plan["units"] if unit["id"] == scene["id"]
             )
             version.update(
-                rawDurationFrames=192,
+                rawDurationFrames=next(
+                    unit["rawDurationFrames"] for unit in plan["units"]
+                    if unit["id"] == scene["id"]
+                ),
                 frameCount=info["frameCount"],
                 suggestedInFrame=0,
                 suggestedOutFrame=target_frames,
@@ -893,6 +986,10 @@ class KieWorkflow:
             self.repair.workspace_id, project_id, operation_id
         )
         if operation.status != "running":
+            if operation.status == "completed" and operation.result_json.get("kind") == "render":
+                from .project_preview import queue_automatic_preview
+
+                await queue_automatic_preview(self.repair, row, operation)
             return {
                 "project_id": str(project_id),
                 "operation_id": str(operation_id),
@@ -918,6 +1015,8 @@ class KieWorkflow:
                     return {"project_id": str(project_id), "status": "running"}
             plan = await self._freeze_plan(row, operation)
             groups = plan.get("groups") if operation.result_json["kind"] == "render" else None
+            if operation.result_json.get("repairGroup"):
+                groups = [operation.result_json["repairGroup"]["group"]]
             work = (
                 [(0, group) for group in groups] if groups else [(index, None) for index in indices]
             )
@@ -929,19 +1028,32 @@ class KieWorkflow:
                 if task is None:
                     return {"project_id": str(project_id), "status": "running"}
                 if group is not None:
-                    await self._retain_group(row, group, task)
+                    if operation.result_json["kind"] == "repair":
+                        from .provider_group_repair import retain_group_repair
+
+                        await retain_group_repair(
+                            self.repair, row, operation, task, self.client,
+                            ensure_active=self.ensure_active,
+                        )
+                    else:
+                        await self._retain_group(row, group, task)
                 else:
                     await self._retain(row, operation, index, task)
             if operation.result_json["kind"] == "render":
-                row = await self.repair.repository.project(self.repair.workspace_id, project_id)
+                row = await self.repair.repository.project(
+                    self.repair.workspace_id, project_id, lock=True,
+                )
                 if row.state_json.get("schemaVersion") == 2:
-                    # Retained raw clips are only suggestions. Seller confirms
-                    # fixed-duration ranges before the separate compose job.
+                    from .project_preview import mark_automatic_preview, queue_automatic_preview
+
+                    mark_automatic_preview(row, operation)
+                    # Pending local preview and paid completion commit together.
                     await self._save(
                         operation,
                         {**operation.result_json, "needsReconciliation": False},
                         status="completed",
                     )
+                    await queue_automatic_preview(self.repair, row, operation)
                     return {
                         "project_id": str(project_id),
                         "operation_id": str(operation_id),

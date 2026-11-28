@@ -93,6 +93,10 @@ async def repair_receipt(
         "errorCode": result.get("errorCode"),
         "needsReconciliation": bool(result.get("needsReconciliation")),
     }
+    if result.get("repairGroup"):
+        from .provider_group_repair import group_repair_public_fields
+
+        receipt.update(group_repair_public_fields(row.state_json, operation))
     normalization = result.get("repairNormalization")
     if isinstance(normalization, dict) and isinstance(normalization.get("reason"), str):
         receipt["normalizationReason"] = normalization["reason"]

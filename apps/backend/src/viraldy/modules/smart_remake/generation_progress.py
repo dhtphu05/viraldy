@@ -16,7 +16,9 @@ from .generation_expectations import (
     require_generation_expectations,
     validate_generation_expectations,
 )
+from .provider_errors import public_provider_error_fields
 from .provider_execution import safe_provider_identifier, validated_execution_evidence
+from .timeline_schemas import provider_window_frames
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +69,13 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
     except (AppError, TypeError, ValueError):
         return None
     groups, units = plan["groups"], plan.get("units", [])
-    if row.state_json.get("targetDuration") not in {8, 16}:
+    if row.state_json.get("targetDuration") not in {8, 12, 16}:
         return None
-    if len(groups) != row.state_json["targetDuration"] // 8:
+    try:
+        raw_frames = provider_window_frames(plan)
+    except (KeyError, ValueError):
+        return None
+    if len(groups) != row.state_json["targetDuration"] * 24 // raw_frames:
         return None
     unit_ids = [unit.get("id") for unit in units]
     selected = []
@@ -77,8 +83,8 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
         cursor = 0
         if (
             not safe_provider_identifier(group.get("id"))
-            or group.get("rawDurationFrames") != 192
-            or group.get("targetDurationFrames") != 192
+            or group.get("rawDurationFrames") != raw_frames
+            or group.get("targetDurationFrames") != raw_frames
             or not group.get("renderUnitIds")
         ):
             return None
@@ -91,29 +97,62 @@ def _plan(row: Any, operation: Any, workspace_id: Any) -> dict[str, Any] | None:
                 type(end) is not int
                 or type(segment.get("inFrame")) is not int
                 or segment["inFrame"] != cursor
-                or not cursor < end <= 192
+                or not cursor < end <= raw_frames
             ):
                 return None
             cursor = end
-        if cursor != 192:
+        if cursor != raw_frames:
             return None
         selected.extend(group["renderUnitIds"])
     return plan if selected == unit_ids and len(set(selected)) == len(selected) else None
+
+
+def _frame_matches(image: dict[str, Any], scene: dict[str, Any]) -> bool:
+    role = image.get("frameRole")
+    if role is None:
+        return True  # Historical opening-image receipts predate explicit frame roles.
+    reference = image.get("referenceFrame")
+    if role == "opening":
+        return bool(reference == scene["openingFrame"])
+    return (
+        role == "ending"
+        and isinstance(reference, dict)
+        and reference.get("sourceMediaHash") == scene["openingFrame"]["sourceMediaHash"]
+        and reference.get("frame") == scene["sourceRange"]["endFrame"] - 1
+        and reference.get("extractorVersion") == scene["openingFrame"]["extractorVersion"]
+        and isinstance(reference.get("layoutHash"), str)
+        and re.fullmatch(r"[a-f0-9]{64}", reference["layoutHash"]) is not None
+    )
 
 
 def _images(row: Any, operation: Any, group: dict[str, Any]) -> list[dict[str, Any]]:
     result = operation.result_json
     units = {unit["id"]: unit for unit in result["renderPlan"]["units"]}
     indices = [units[identity]["sceneIndex"] for identity in group["renderUnitIds"]]
-    offsets = (
-        [0] if row.context_json.get("characterKey") else list(dict.fromkeys([0, len(indices) - 1]))
+    records = result.get("images", {})
+    bookends = any(
+        f"{index}:ending" in records or records.get(str(index), {}).get("frameRole")
+        for index in indices
     )
+    slots: list[tuple[int, str, str | None]] = (
+        [(0, str(indices[0]), "opening"), (len(indices) - 1, f"{indices[-1]}:ending", "ending")]
+        if bookends else [
+            (offset, str(indices[offset]), None)
+            for offset in ([0] if row.context_json.get("characterKey")
+                           else list(dict.fromkeys([0, len(indices) - 1])))
+        ]
+    )
+    scenes = {scene["renderUnitId"]: scene for scene in result["generationExpectations"]["scenes"]}
     images = []
-    for offset in offsets:
-        image = result.get("images", {}).get(str(indices[offset]), {})
+    for offset, key, role in slots:
+        image = records.get(key, {})
         expected = group["renderUnitIds"][offset]
         if image.get("renderUnitId") not in {None, expected} or (
             image.get("status") == "completed" and image.get("renderUnitId") != expected
+        ) or (
+            role is not None and image and image.get("frameRole") != role
+        ) or (
+            image.get("status") == "completed" and not _frame_matches(image, scenes[expected])
         ):
             image = {}
         images.append(image)
@@ -270,6 +309,7 @@ def _group(
         "groupId": group["id"],
         "stage": stage,
         "videoSubmitted": submitted,
+        **public_provider_error_fields(task),
         **({"inspectionReportId": report_id} if report_id else {}),
         **({"errorCode": image_error} if stage == "blocked" and image_error else {}),
     }
@@ -370,6 +410,7 @@ def _image_key(row: Any, operation: Any, image: dict[str, Any]) -> str | None:
         or image.get("expectationsHash") != operation.result_json["expectationsHash"]
         or image.get("sourceSceneId") != scene["sourceSceneId"]
         or image.get("openingFrame") != scene["openingFrame"]
+        or not _frame_matches(image, scene)
         or not isinstance(key, str)
         or not key.startswith(prefix)
         or re.fullmatch(r"[a-f0-9]{32}", key[len(prefix) :]) is None
@@ -397,7 +438,7 @@ def _video_key(
         or not isinstance(digest, str)
         or re.fullmatch(r"[a-f0-9]{64}", digest) is None
         or type(frame_count) is not int
-        or frame_count < 192
+        or frame_count < group["rawDurationFrames"]
     ):
         return None
     for version, segment in zip(versions, group["segments"], strict=True):
@@ -405,7 +446,7 @@ def _video_key(
             version.get("storageKey") != key
             or version.get("mediaHash") != digest
             or version.get("frameCount") != frame_count
-            or version.get("rawDurationFrames") != 192
+            or version.get("rawDurationFrames") != group["rawDurationFrames"]
             or version.get("suggestedInFrame") != segment["inFrame"]
             or version.get("suggestedOutFrame") != segment["outFrame"]
             or version.get("technicalCheck", {}).get("status") != "passed"

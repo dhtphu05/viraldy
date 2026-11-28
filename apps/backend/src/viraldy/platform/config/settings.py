@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import AnyUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, AnyUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -110,7 +110,26 @@ class Settings(BaseSettings):
     s3_access_key_id: SecretStr | None = None
     s3_secret_access_key: SecretStr | None = None
     s3_force_path_style: bool = True
-    s3_presigned_expiry_seconds: int = 900
+    s3_presigned_expiry_seconds: int = Field(default=900, ge=1, le=604800)
+
+    # ACCOUNT_ID is the existing Smart Remake R2 environment variable.
+    r2_account_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("R2_ACCOUNT_ID", "ACCOUNT_ID", "r2_account_id")
+    )
+    r2_access_key_id: SecretStr | None = None
+    r2_secret_access_key: SecretStr | None = None
+    r2_bucket: str | None = None
+
+    @property
+    def r2_configured(self) -> bool:
+        return all(
+            (
+                self.r2_account_id and self.r2_account_id.strip(),
+                self.r2_access_key_id and self.r2_access_key_id.get_secret_value().strip(),
+                self.r2_secret_access_key and self.r2_secret_access_key.get_secret_value().strip(),
+                self.r2_bucket and self.r2_bucket.strip(),
+            )
+        )
 
     max_declared_upload_mb: int = 250
     max_upload_size_bytes: int | None = Field(default=None, ge=1)

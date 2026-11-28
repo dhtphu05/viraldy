@@ -37,6 +37,7 @@ from .contracts import (
 from .expectations import (
     coverage_counts,
     opening_evidence_problem,
+    product_evidence_problem,
     validate_expectation_references,
 )
 from .media import image_observation, select_frames, technical_problem, video_observations
@@ -262,7 +263,17 @@ def _assess_model_finding(
         )
     status = proposal.status
     observed = proposal.observed
-    problem = opening_evidence_problem(rule, evidence, subject_media, refs)
+    if status == "passed" and rule.category == "product":
+        problem = product_evidence_problem(evidence, refs)
+        if problem:
+            return _finding(rule, "insufficient_evidence", problem, evidence)
+    problem = opening_evidence_problem(
+        rule,
+        evidence,
+        subject_media,
+        refs,
+        all_product_views=status == "passed",
+    )
     if problem:
         return _finding(rule, "insufficient_evidence", problem, evidence)
     # Static samples cannot establish complete action, cut/motion continuity or audio claims.

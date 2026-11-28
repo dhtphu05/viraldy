@@ -40,6 +40,7 @@ export interface RemakeResultNextActionInput {
     receiptUncertain?: boolean;
     candidate?: RemakeRepairCandidate | null;
     currentReportIds?: string[];
+    reviewMode?: "whole_video";
 }
 function sameTimeline(left?: SmartRemakeTimeline | null, right?: SmartRemakeTimeline | null) {
     if (!left || !right || left.fps !== right.fps || left.totalFrames !== right.totalFrames)
@@ -60,10 +61,12 @@ function sameTimeline(left?: SmartRemakeTimeline | null, right?: SmartRemakeTime
         })
     );
 }
-function currentAssembly(project: SmartRemakeProject): SmartRemakeAssembly | undefined {
+function currentAssembly(project: SmartRemakeProject | null): SmartRemakeAssembly | undefined {
+    if (!project) return undefined;
     const assembly = project.assemblies?.records.find(
         (item) => item.id === project.assemblies?.activeAssemblyId,
     );
+    // Constraints bind the baseline facts; assembly expectations also bind selected versions/ranges.
     if (
         !assembly ||
         (project.constraintsHash && assembly.constraintsHash !== project.constraintsHash)
@@ -71,8 +74,18 @@ function currentAssembly(project: SmartRemakeProject): SmartRemakeAssembly | und
         return undefined;
     if (project.schemaVersion === 2 && !sameTimeline(project.draftTimeline, assembly.timeline))
         return undefined;
+    if (
+        project.schemaVersion === 2 &&
+        project.draftTimeline?.items.some(
+            (item) =>
+                project.scenes.find((scene) => scene.id === item.renderUnitId)?.activeVersionId !==
+                item.versionId,
+        )
+    )
+        return undefined;
     return assembly;
 }
+export { currentAssembly as getCurrentRemakeAssembly };
 function sceneAction(
     project: SmartRemakeProject,
     scene: SmartRemakeProject["scenes"][number],
@@ -129,6 +142,8 @@ export function getRemakeResultNextAction(
         project.pendingOperation ||
         input.busy ||
         input.receiptUncertain ||
+        project.preview?.status === "pending" ||
+        project.preview?.status === "processing" ||
         project.lastOperation?.needsReconciliation
     ) {
         const needsReconciliation = Boolean(
@@ -141,7 +156,9 @@ export function getRemakeResultNextAction(
             label: needsReconciliation ? "Kiểm tra trạng thái" : "Xem tiến trình",
             reason: needsReconciliation
                 ? "Đối soát yêu cầu đã gửi trước khi tạo lượt mới."
-                : "Yêu cầu đã được lưu. Bạn có thể xem các clip đã hoàn tất.",
+                : project.preview?.status === "pending" || project.preview?.status === "processing"
+                  ? "Đang ghép bản xem trước từ các clip đã tạo. Kết quả sẽ tự cập nhật."
+                  : "Yêu cầu đã được lưu. Bạn có thể xem các clip đã hoàn tất.",
             needsReconciliation,
         };
     }
@@ -155,6 +172,14 @@ export function getRemakeResultNextAction(
     const candidate = candidateScene?.versions.find(
         (version) => version.id === input.candidate?.versionId && version.videoUrl,
     );
+    const candidateClipIndex =
+        input.candidate?.repairScope === "provider_group"
+            ? (project.renderPlan?.groups?.findIndex(
+                  (group) =>
+                      group.id === input.candidate?.renderGroupId &&
+                      group.renderUnitIds.includes(candidateScene?.id ?? ""),
+              ) ?? -1)
+            : -1;
     if (
         input.candidate?.projectId === project.id &&
         candidateScene &&
@@ -163,7 +188,7 @@ export function getRemakeResultNextAction(
     )
         return {
             kind: "candidate",
-            label: `Xem bản mới ${getRemakeSceneLabel(project, candidateScene.id, candidateScene.index).toLowerCase()}`,
+            label: `Xem bản mới ${candidateClipIndex >= 0 ? `clip ${candidateClipIndex + 1}` : getRemakeSceneLabel(project, candidateScene.id, candidateScene.index).toLowerCase()}`,
             reason: "So sánh trước khi áp dụng. Bản đang dùng vẫn được giữ.",
             sceneId: candidateScene.id,
             versionId: candidate.id,
@@ -192,11 +217,16 @@ export function getRemakeResultNextAction(
             );
     }
     if (project.schemaVersion === 2) {
+        const reviewMode = input.reviewMode ?? currentAssembly(project)?.reviewMode;
         for (const scene of project.scenes) {
             const item = project.draftTimeline?.items.find(
                 (value) => value.renderUnitId === scene.id,
             );
-            if (!item || !item.reviewed || item.versionId !== scene.activeVersionId)
+            if (
+                !item ||
+                (!item.reviewed && reviewMode !== "whole_video") ||
+                item.versionId !== scene.activeVersionId
+            )
                 return sceneAction(
                     project,
                     scene,
@@ -204,7 +234,7 @@ export function getRemakeResultNextAction(
                     "watch",
                 );
         }
-        const timelineError = getTimelinePublishError(project);
+        const timelineError = getTimelinePublishError(project, reviewMode);
         if (timelineError)
             return sceneAction(project, timelineProblemScene(project), timelineError, "watch");
     }
@@ -213,7 +243,10 @@ export function getRemakeResultNextAction(
         return {
             kind: "compose",
             label: "Ghép bản xem trước",
-            reason: "Ghép từ các đoạn đã chọn; không tạo thêm clip AI.",
+            reason:
+                input.reviewMode === "whole_video"
+                    ? "Ghép bản xem trước từ các clip đã tạo. Bạn sẽ duyệt nội dung sau khi xem toàn video."
+                    : "Ghép từ các đoạn đã chọn; không tạo thêm clip AI.",
         };
     if (assembly.technicalCheck.status !== "passed")
         return {

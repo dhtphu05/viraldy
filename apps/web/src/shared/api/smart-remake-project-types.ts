@@ -163,6 +163,7 @@ export type SmartRemakeInspectionReview = {
 };
 export type SmartRemakeAssembly = {
     id: string;
+    reviewMode?: "whole_video";
     expectationsHash?: string;
     projectId: string;
     schemaVersion: number;
@@ -191,7 +192,7 @@ export type SmartRemakeApproval = {
 export type SmartRemakeIntakeMetadata = {
     idempotencyKey: string;
     projectName: string;
-    targetDuration: 8 | 16;
+    targetDuration: 8 | 12 | 16;
     requirements: SmartRemakeRequirements;
     rights: SmartRemakeRights;
     budget: SmartRemakeBudgetPolicy;
@@ -214,6 +215,11 @@ export type RepairIntent = {
     instruction: string;
     advancedEdits?: { prompt?: string; imagePrompt?: string; videoPrompt?: string };
 };
+export type SmartRemakeRepairAffectedVersion = {
+    sceneId: string;
+    baseVersionId: string | null;
+    candidateVersionId: string | null;
+};
 export type SmartRemakeRepairReceipt = {
     operationId: string;
     sceneId: string | null;
@@ -223,12 +229,15 @@ export type SmartRemakeRepairReceipt = {
     errorCode?: string | null;
     needsReconciliation: boolean;
     normalizationReason?: string | null;
+    repairScope?: "provider_group";
+    renderGroupId?: string;
+    affectedVersions?: SmartRemakeRepairAffectedVersion[];
 };
 export type SmartRemakePreflightRequest = {
     action: SmartRemakePreflightAction;
     projectId?: string;
     expectedRevision?: number;
-    targetDuration?: 8 | 16;
+    targetDuration?: 8 | 12 | 16;
     referenceStartFrame?: number;
     analysisScope?: "excerpt" | "full_source";
     sourceDurationSeconds?: number;
@@ -237,6 +246,7 @@ export type SmartRemakePreflightRequest = {
     sceneId?: string;
     baseVersionId?: string | null;
     repairIntent?: RepairIntent;
+    repairScope?: "provider_group";
     subject?: SmartRemakeInspectSubject;
 };
 export type SmartRemakePreflight = {
@@ -246,7 +256,7 @@ export type SmartRemakePreflight = {
     contextHash: string;
     mode: string;
     scope: {
-        targetDuration: 8 | 16;
+        targetDuration: number;
         sceneCount: number;
         groupCount: number;
         imageCount: number;
@@ -255,6 +265,8 @@ export type SmartRemakePreflight = {
         analysisScope?: "excerpt" | "full_source";
         sceneId?: string | null;
         baseVersionId?: string | null;
+        repairScope?: "provider_group";
+        renderGroupId?: string;
     };
     calls: { analysis: number; image: number; video: number; inspection: number; total: number };
     budget: null | {
@@ -344,6 +356,12 @@ export type SmartRemakeGenerationStage =
     | "blocked"
     | "unknown";
 
+export type SmartRemakeProviderError = {
+    httpStatus?: number;
+    providerCode?: string | number;
+    providerMessage?: string;
+};
+
 export type SmartRemakeGenerationProgress = {
     operationId: string;
     status: "running" | "completed" | "failed";
@@ -357,6 +375,8 @@ export type SmartRemakeGenerationProgress = {
         conditioningImages?: Array<{ renderUnitId: string; url: string }>;
         videoUrl?: string;
         errorCode?: string;
+        providerError?: SmartRemakeProviderError;
+        providerTaskId?: string;
         inspectionReportId?: string;
     }>;
 };

@@ -1,8 +1,8 @@
 import { ArrowRight, Copy, Image, Loader2, MessageSquareText, Video } from "lucide-react";
 import { useId, useState } from "react";
 
-import { getRemakeScenes } from "@/features/smart-remake/lib/remake-studio";
-import type { SmartRemakeCompileResult } from "@/shared/api/smart-remake";
+import { getRemakeScenes, type RemakeScenePatch } from "@/features/smart-remake/lib/remake-studio";
+import type { SmartRemakeCompileResult, SmartRemakeRequirements } from "@/shared/api/smart-remake";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 import { RemakeSourceTimeline } from "./remake-source-timeline";
@@ -11,9 +11,15 @@ import { getRenderGroupBreaks } from "../lib/remake-groups";
 import { RemakeLogicalStoryboard } from "./remake-logical-storyboard";
 import { RemakeImagePreview } from "./remake-image-preview";
 import { RemakeSourceAudio } from "./remake-source-audio";
+import { RemakePlannedKiePrompts } from "./remake-kie-prompt-preview";
 import "./remake-storyboard.css";
 
 export interface RemakeStoryboardProps {
+    workspaceId?: string;
+    projectRevision?: number;
+    requirements?: SmartRemakeRequirements;
+    promptPreviewStale?: boolean;
+    sceneDrafts?: Record<number, RemakeScenePatch>;
     compileResult: SmartRemakeCompileResult;
     referenceUrl?: string | null;
     productUrl?: string | null;
@@ -35,6 +41,11 @@ const fieldClass =
 const VIDEO_PROMPT_LIMIT = 12_000;
 
 export function RemakeStoryboard({
+    workspaceId,
+    projectRevision,
+    requirements,
+    promptPreviewStale,
+    sceneDrafts,
     compileResult,
     referenceUrl,
     productUrl,
@@ -128,6 +139,26 @@ export function RemakeStoryboard({
                 </p>
                 <span>Chưa tạo video</span>
             </div>
+            {compileResult.renderPlan && (
+                <RemakePlannedKiePrompts
+                    workspaceId={workspaceId}
+                    projectRevision={projectRevision}
+                    compileResult={compileResult}
+                    sceneDrafts={sceneDrafts}
+                    requirements={requirements}
+                    stale={Boolean(
+                        promptPreviewStale ||
+                        isRecompiling ||
+                        sourceCutsDirty ||
+                        sourceCutsError ||
+                        (!requirements && sourcePlanDirty) ||
+                        (renderGroupBreaks &&
+                            compileResult.renderPlan.groupingPolicy !== "fixed_provider_windows" &&
+                            JSON.stringify(renderGroupBreaks) !==
+                                JSON.stringify(getRenderGroupBreaks(compileResult.renderPlan))),
+                    )}
+                />
+            )}
             <RemakeSourceAudio value={compileResult.referenceAnalysis?.sourceAudio} />
             <div className={sourceMap ? "remake-storyboard-workspace" : "space-y-5"}>
                 <aside id={`${id}-reference`} className="remake-storyboard-reference">
@@ -481,10 +512,14 @@ export function RemakeStoryboard({
                         />
                     ) : (
                         <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                            {sourceMap.scenes.length} cảnh · {sourceMap.scenes.length} lượt tạo ·
-                            Video hoàn chỉnh {compileResult.inputSummary.targetDuration} giây. Mỗi
-                            lượt tạo một clip 8 giây. Bạn chọn và duyệt đoạn phù hợp cho từng cảnh
-                            trước khi ghép.
+                            {sourceMap.scenes.length} cảnh ·{" "}
+                            {compileResult.inputSummary.targetDuration === 12
+                                ? 2
+                                : sourceMap.scenes.length}{" "}
+                            lượt tạo · Video hoàn chỉnh {compileResult.inputSummary.targetDuration}{" "}
+                            giây. Mỗi lượt tạo một clip{" "}
+                            {compileResult.inputSummary.targetDuration === 12 ? 6 : 8} giây. Bạn
+                            chọn và duyệt đoạn phù hợp cho từng cảnh trước khi ghép.
                         </p>
                     )}
                 </details>

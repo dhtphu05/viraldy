@@ -4,7 +4,7 @@ import type {
     SmartRemakeInspectionReport,
     SmartRemakeProject,
 } from "@/shared/api/smart-remake";
-import { getRemakeResultNextAction } from "./remake-result-next-action";
+import { getCurrentRemakeAssembly, getRemakeResultNextAction } from "./remake-result-next-action";
 
 const timeline = {
     fps: 24 as const,
@@ -32,6 +32,7 @@ const assembly: SmartRemakeAssembly = {
     mediaHash: "media-hash",
     manifestHash: "manifest",
     constraintsHash: "constraints",
+    expectationsHash: "selected-expectations",
     contextHash: "context",
     revision: 2,
     createdAt: "",
@@ -53,6 +54,7 @@ const report: SmartRemakeInspectionReport = {
     rubricVersion: "rubric",
     modelProfile: "model",
     constraintsHash: "constraints",
+    expectationsHash: "selected-expectations",
     manifestHash: "manifest",
     coverage: [
         {
@@ -87,6 +89,7 @@ const project: SmartRemakeProject = {
     targetDuration: 8,
     finalVideoUrl: "/final.mp4",
     constraintsHash: "constraints",
+    expectationsHash: "base-expectations",
     draftTimeline: timeline,
     publishedTimeline: timeline,
     scenes: [
@@ -127,6 +130,86 @@ const next = (overrides: Partial<SmartRemakeProject> = {}) =>
     getRemakeResultNextAction({ project: { ...project, ...overrides } });
 
 describe("result next action", () => {
+    it("keeps a selected assembly current when its expectations differ from the project baseline", () => {
+        expect(project.expectationsHash).not.toBe(assembly.expectationsHash);
+        expect(getCurrentRemakeAssembly(project)).toBe(assembly);
+        const ready = { ...project, inspectionSummary: undefined };
+        expect(
+            getRemakeResultNextAction({
+                project: { ...ready, preview: { schemaVersion: 1, status: "processing" } },
+                reviewMode: "whole_video",
+            }).kind,
+        ).toBe("progress");
+        expect(
+            getRemakeResultNextAction({
+                project: { ...ready, preview: { schemaVersion: 1, status: "ready" } },
+                reviewMode: "whole_video",
+            }),
+        ).toMatchObject({ kind: "inspect", assemblyId: assembly.id });
+    });
+    it("still rejects stale constraints, ranges, and active versions across hash domains", () => {
+        const changedVersion = {
+            ...project.scenes[0],
+            activeVersionId: "new-version",
+            versions: [
+                ...project.scenes[0].versions,
+                { ...project.scenes[0].versions[0], id: "new-version" },
+            ],
+        };
+        for (const patch of [
+            { constraintsHash: "changed-facts-or-requirements" },
+            {
+                draftTimeline: {
+                    ...timeline,
+                    items: [{ ...timeline.items[0], inFrame: 1, outFrame: 193 }],
+                },
+            },
+            { scenes: [changedVersion] },
+        ]) {
+            expect(getCurrentRemakeAssembly({ ...project, ...patch })).toBeUndefined();
+        }
+    });
+    it("moves an unreviewed whole preview through QA and approval without per-scene confirmations", () => {
+        const unreviewed = {
+            ...timeline,
+            items: timeline.items.map((item) => ({ ...item, reviewed: false })),
+        };
+        const value = {
+            ...project,
+            draftTimeline: unreviewed,
+            assemblies: {
+                activeAssemblyId: assembly.id,
+                records: [
+                    { ...assembly, reviewMode: "whole_video" as const, timeline: unreviewed },
+                ],
+            },
+        };
+        expect(getRemakeResultNextAction({ project: value, reviewMode: "whole_video" }).kind).toBe(
+            "approve",
+        );
+        expect(
+            getRemakeResultNextAction({
+                project: { ...value, assemblies: undefined },
+                reviewMode: "whole_video",
+            }).kind,
+        ).toBe("compose");
+        expect(
+            getRemakeResultNextAction({ project: { ...value, assemblies: undefined } }).kind,
+        ).toBe("scene");
+        expect(
+            getRemakeResultNextAction({
+                project: { ...value, inspectionSummary: undefined },
+                reviewMode: "whole_video",
+            }).kind,
+        ).toBe("inspect");
+        expect(
+            getRemakeResultNextAction({
+                project: { ...value, preview: { schemaVersion: 1, status: "processing" } },
+                reviewMode: "whole_video",
+            }).kind,
+        ).toBe("progress");
+    });
+
     const generationRecovery = {
         kind: "retry_initial_render" as const,
         stage: "image" as const,
@@ -227,6 +310,40 @@ describe("result next action", () => {
         expect(getRemakeResultNextAction({ project, needsPlanUpdate: true }).kind).toBe(
             "update_plan",
         );
+    });
+    it("names a tracked provider-group candidate by its clip instead of a source scene", () => {
+        const ready = structuredClone(project);
+        ready.scenes[0].versions.push({
+            ...ready.scenes[0].versions[0],
+            id: "candidate",
+            parentVersionId: "version",
+        });
+        ready.renderPlan = {
+            fps: 24,
+            provider: "kie",
+            units: [],
+            groups: [
+                {
+                    id: "group",
+                    renderUnitIds: ["scene"],
+                    rawDurationFrames: 192,
+                    targetDurationFrames: 192,
+                    segments: [{ renderUnitId: "scene", inFrame: 0, outFrame: 192 }],
+                },
+            ],
+        };
+        expect(
+            getRemakeResultNextAction({
+                project: ready,
+                candidate: {
+                    projectId: "project",
+                    sceneId: "scene",
+                    versionId: "candidate",
+                    repairScope: "provider_group",
+                    renderGroupId: "group",
+                },
+            }),
+        ).toMatchObject({ kind: "candidate", label: "Xem bản mới clip 1" });
     });
     it("only introduces candidates that exist in the matching project and scene", () => {
         const candidate = {
@@ -336,6 +453,8 @@ describe("result next action", () => {
             { stale: true },
             { manifestHash: "old" },
             { constraintsHash: "old" },
+            { expectationsHash: "old-selected-expectations" },
+            { expectationsHash: project.expectationsHash },
             { subject: { ...report.subject, mediaHash: "old" } },
         ]) {
             expect(
@@ -449,6 +568,7 @@ describe("result next action", () => {
             mediaHash: "media-hash",
             manifestHash: "manifest",
             constraintsHash: "constraints",
+            expectationsHash: "selected-expectations",
             reportId: "report",
             approvedAt: "",
         };
@@ -463,6 +583,19 @@ describe("result next action", () => {
                 },
             }).kind,
         ).toBe("approve");
+        for (const expectationsHash of [
+            "old-selected-expectations",
+            project.expectationsHash ?? undefined,
+        ]) {
+            expect(
+                next({
+                    release: {
+                        approvals: [{ ...approval, expectationsHash }],
+                        activeApprovalId: "approval",
+                    },
+                }).kind,
+            ).toBe("approve");
+        }
     });
     it("blocks deleted projects and otherwise handles legacy output without a new paid task", () => {
         expect(next({ deletion: { status: "deleted" } }).kind).toBe("blocked");

@@ -149,7 +149,7 @@ class SmartRemakeBudgetPolicy(SmartRemakeApiModel):
 class SmartRemakeIntakeRequest(SmartRemakeApiModel):
     idempotencyKey: str = Field(min_length=1, max_length=200)
     projectName: str = Field(default="Smart Remake", min_length=1, max_length=200)
-    targetDuration: Literal[8, 16] = 16
+    targetDuration: Literal[8, 12, 16] = 16
     requirements: SmartRemakeRequirements
     rights: SmartRemakeRights
     budget: SmartRemakeBudgetPolicy = Field(default_factory=SmartRemakeBudgetPolicy)

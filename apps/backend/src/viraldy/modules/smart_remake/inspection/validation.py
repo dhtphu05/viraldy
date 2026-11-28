@@ -20,6 +20,7 @@ from .expectations import (
     coverage_bounds,
     coverage_counts,
     opening_evidence_problem,
+    product_evidence_problem,
     validate_expectation_references,
 )
 from .requirements import TECHNICAL_REQUIREMENT, requirements_for, temporal_review_required
@@ -205,6 +206,10 @@ def validate_report_binding(
                 if item.mediaId in by_id
             ):
                 raise ValueError("Identity checks must compare the original reference role.")
+        if finding.status == "passed" and finding.category == "product":
+            problem = product_evidence_problem(finding.evidence, refs)
+            if problem:
+                raise ValueError(problem)
         if finding.status == "passed":
             problem = opening_evidence_problem(rule, finding.evidence, owned, refs)
             if problem:

@@ -25,6 +25,7 @@ from .generation_expectations import (
     require_generation_expectations,
     validate_generation_expectations,
 )
+from .product_references import product_reference_assets
 from .project_contracts import SmartRemakeApiModel, SmartRemakeMutation
 from .project_policy import assert_project_policy, constraints_hash, policy_hash
 from .repair_media import now_iso
@@ -265,13 +266,20 @@ def _snapshot(row: Any, request: InspectionSubjectRequest, workspace_id: UUID) -
             scene["renderUnitId"]: scene.get("selection") for scene in expectations["scenes"]
         } != selections:
             raise _error("MEDIA_CHANGED", "The expectations do not bind these selected ranges.")
-    if expectations["requirementsHash"] != expectations_hash(p0["requirements"]) or expectations[
-        "references"
-    ] != {
-        role: {"mediaHash": asset["mediaHash"]}
-        for role, asset in p0["assets"].items()
-        if role in {"source", "product", "character"}
-    }:
+    product_views = product_reference_assets(row.context_json)
+    if (
+        expectations.get(
+            "productReferenceHashes", [expectations["references"]["product"]["mediaHash"]]
+        )
+        != [asset.get("mediaHash") for asset in product_views]
+        or expectations["requirementsHash"] != expectations_hash(p0["requirements"])
+        or expectations["references"]
+        != {
+            role: {"mediaHash": asset["mediaHash"]}
+            for role, asset in p0["assets"].items()
+            if role in {"source", "product", "character"}
+        }
+    ):
         code = (
             "SMART_REMAKE_ASSEMBLY_EXPECTATIONS_REQUIRED"
             if request.kind == "assembly"
@@ -282,6 +290,13 @@ def _snapshot(row: Any, request: InspectionSubjectRequest, workspace_id: UUID) -
         )
     subject["mediaHash"] = retained["mediaHash"]
     assets = {role: _owned(workspace_id, asset) for role, asset in p0["assets"].items()}
+    assets.update(
+        {
+            f"product-reference-{index + 1}": {**_owned(workspace_id, asset), "role": "product"}
+            for index, asset in enumerate(product_views)
+            if index > 0
+        }
+    )
     assets.update(neighbor_assets)
     return {
         "subject": subject,

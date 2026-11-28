@@ -97,7 +97,7 @@ export async function uploadAssetRevision(
     );
 }
 
-function uploadSessionFile(
+export function uploadSessionFile(
     session: UploadSession,
     file: File,
     onProgress?: (value: number) => void,

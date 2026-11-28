@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "./smart-remake";
+import * as intakeUploads from "./smart-remake-uploads";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+});
 const response = (data: unknown) => Response.json({ data, meta: { requestId: "fixture" } });
 
 describe("Smart Remake owned project boundaries", () => {
@@ -23,6 +27,10 @@ describe("Smart Remake owned project boundaries", () => {
         const metadata = { idempotencyKey: "intake-1", targetDuration: 8 };
         const source = new File(["source"], "source.mp4", { type: "video/mp4" });
         const product = new File(["product"], "product.png", { type: "image/png" });
+        vi.spyOn(intakeUploads, "uploadSmartRemakeInputs").mockResolvedValue({
+            sourceAssetVersionId: "source-version",
+            productAssetVersionId: "product-version",
+        });
         await expect(
             api.createSmartRemakeProject("workspace", {
                 metadata: metadata as api.SmartRemakeIntakeMetadata,
@@ -32,13 +40,13 @@ describe("Smart Remake owned project boundaries", () => {
         ).resolves.toEqual({ project });
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(fetch.mock.calls[0][0]).toBe(
-            "/api/backend/workspaces/workspace/smart-remake/projects",
+            "/api/backend/workspaces/workspace/smart-remake/projects/from-assets",
         );
-        const body = fetch.mock.calls[0][1].body as FormData;
-        expect(JSON.parse(String(body.get("metadata")))).toEqual(metadata);
-        expect(body.get("referenceVideo")).toBe(source);
-        expect(body.get("productImage")).toBe(product);
-        expect(body.has("characterImage")).toBe(false);
+        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+            metadata,
+            sourceAssetVersionId: "source-version",
+            productAssetVersionId: "product-version",
+        });
     });
 
     it("compiles the owned intake and revision without replacing retained media", async () => {
@@ -187,4 +195,41 @@ it("sends structured repair intent without synthesized legacy prompts", async ()
     };
     await api.repairSmartRemakeScene("workspace", "owned", "scene", input);
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(input);
+});
+
+it("keeps provider clip scope through preflight and repair without changing the scene endpoint", async () => {
+    const fetch = vi
+        .fn()
+        .mockImplementation(async () => response({ operationId: "repair", status: "running" }));
+    vi.stubGlobal("fetch", fetch);
+    const repairIntent: api.RepairIntent = {
+        schemaVersion: 1,
+        issues: ["action"],
+        instruction: "Giữ hai tay tự nhiên trong cả clip",
+    };
+    const input: api.SmartRemakePreflightRequest = {
+        action: "repair",
+        projectId: "owned",
+        expectedRevision: 7,
+        sceneId: "anchor-scene",
+        baseVersionId: "base",
+        repairScope: "provider_group",
+        repairIntent,
+    };
+    await api.getSmartRemakePreflight("workspace", input);
+    await api.repairSmartRemakeScene("workspace", "owned", "anchor-scene", {
+        baseVersionId: "base",
+        expectedRevision: 7,
+        idempotencyKey: "repair-one-clip",
+        repairScope: "provider_group",
+        repairIntent,
+    });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(input);
+    expect(fetch.mock.calls[1][0]).toContain("/scenes/anchor-scene/repairs");
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+        repairScope: "provider_group",
+        repairIntent,
+        idempotencyKey: "repair-one-clip",
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
 });

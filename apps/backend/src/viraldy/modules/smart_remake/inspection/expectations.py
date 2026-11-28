@@ -74,8 +74,22 @@ def validate_expectation_references(
 ) -> None:
     if constraints.expectations is None:
         return
-    by_role = {item.role: item for item in [media, *references] if item.role}
+    by_role = {
+        item.role: item for item in [media, *references] if item.role and item.role != "product"
+    }
+    products = [item for item in references if item.role == "product"]
+    if not products and media.role == "product":
+        products = [media]
+    expected_products = constraints.expectations.productReferenceHashes or [
+        constraints.expectations.references["product"].mediaHash,
+    ]
+    if [item.mediaHash for item in products] != expected_products or len(
+        {item.id for item in products}
+    ) != len(products):
+        raise ValueError("Inspection product references changed or are incomplete.")
     for role, expected in constraints.expectations.references.items():
+        if role == "product":
+            continue
         actual = by_role.get(role)
         if actual is None or actual.mediaHash != expected.mediaHash:
             raise ValueError(
@@ -89,11 +103,24 @@ def validate_expectation_references(
         raise ValueError("Inspection expectations exceed retained source frames.")
 
 
+def product_evidence_problem(
+    evidence: list[Evidence],
+    references: list[ResolvedMedia],
+) -> str | None:
+    expected = {(item.id, item.mediaHash) for item in references if item.role == "product"}
+    cited = {(item.mediaId, item.mediaHash) for item in evidence}
+    if not expected <= cited:
+        return "Passing product checks must compare every retained product reference view."
+    return None
+
+
 def opening_evidence_problem(
     rule: Requirement,
     evidence: list[Evidence],
     media: ResolvedMedia,
     references: list[ResolvedMedia],
+    *,
+    all_product_views: bool = True,
 ) -> str | None:
     if rule.sourceFrame is None:
         return None
@@ -106,6 +133,8 @@ def opening_evidence_problem(
         return (
             "Opening-state checks must compare the output, original source and identity references."
         )
+    if all_product_views and (problem := product_evidence_problem(evidence, references)):
+        return problem
     if not any(
         item.mediaId in by_id
         and by_id[item.mediaId].role == "source"

@@ -62,6 +62,39 @@ const apiResult: SmartRemakeRenderResult = {
 };
 
 describe("renderSmartRemakeVideo", () => {
+    it.each([
+        ["SMART_REMAKE_GROUP_REPAIR_STALE", /đoạn cắt.*thay đổi.*mở lại yêu cầu sửa clip/],
+        ["SMART_REMAKE_GROUP_REPAIR_UNAVAILABLE", /Wan 12 giây.*hai clip 6 giây/],
+        ["SMART_REMAKE_GROUP_REPAIR_ANCHOR_REQUIRED", /chọn lại Clip 1 hoặc Clip 2/],
+    ])("explains clip repair recovery for %s", (code, expected) => {
+        const message = getRemakeErrorMessage(
+            new ApiError(code as string, "PRIVATE_OPERATION_PAYLOAD", 409),
+        );
+        expect(message).toMatch(expected as RegExp);
+        expect(message).not.toContain("PRIVATE_OPERATION_PAYLOAD");
+    });
+    it("keeps provider setup instructions valid for a saved Wan plan", async () => {
+        const message =
+            "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
+        expect(
+            getRemakeErrorMessage(
+                new ApiError("SMART_REMAKE_TIMELINE_PROVIDER_REQUIRED", "internal", 503),
+            ),
+        ).toBe(message);
+        await expect(
+            renderSmartRemakeVideo("workspace", {
+                compileResult: {
+                    ...compileResult,
+                    schemaVersion: 2,
+                    projectId: "saved",
+                    revision: 1,
+                    renderPlan: { ...compileResult.renderPlan!, videoModel: "wan/3-0-video" },
+                },
+                health,
+            }),
+        ).rejects.toThrow(message);
+        expect(renderSmartRemake).not.toHaveBeenCalled();
+    });
     it.each(["source_rhythm", "fit_target"] as const)(
         "requires an explicit update before submitting an old %s plan with extra video calls",
         async (timingMode) => {
@@ -339,6 +372,39 @@ describe("saved KIE project polling", () => {
     it("checks a running KIE project every five seconds", () => {
         expect(getRemakeProjectPollInterval(pending)).toBe(5000);
     });
+    it.each(["pending", "processing"] as const)(
+        "keeps reading a %s preview after rendering has finished",
+        (status) => {
+            const value = {
+                ...pending,
+                pendingOperation: undefined,
+                preview: { schemaVersion: 1 as const, status },
+            };
+            expect(getRemakeProjectPollInterval(value)).toBe(5000);
+            expect(
+                getRemakeProjectPollInterval({
+                    ...value,
+                    lastOperation: {
+                        id: "uncertain",
+                        status: "failed",
+                        needsReconciliation: true,
+                    },
+                }),
+            ).toBe(false);
+        },
+    );
+    it.each(["ready", "failed", "stale"] as const)(
+        "stops reading a terminal %s preview",
+        (status) => {
+            expect(
+                getRemakeProjectPollInterval({
+                    ...pending,
+                    pendingOperation: undefined,
+                    preview: { schemaVersion: 1, status },
+                }),
+            ).toBe(false);
+        },
+    );
 
     it("stops when complete, missing, or waiting for manual reconciliation", () => {
         expect(getRemakeProjectPollInterval(null)).toBe(false);
@@ -403,13 +469,29 @@ describe("saved KIE project polling", () => {
     });
 
     it("uses a safe fallback when no failure code is available", () => {
+        const message = getRemakeProjectError({
+            ...pending,
+            pendingOperation: undefined,
+            lastOperation: { id: "operation", status: "failed", errorCode: null },
+        });
+        expect(message).toContain("Chưa hoàn tất yêu cầu");
+        expect(message).not.toContain("KIE");
+    });
+
+    it("explains the saved KIE failure after a project reload using the retained provider reason", () => {
         expect(
             getRemakeProjectError({
                 ...pending,
                 pendingOperation: undefined,
-                lastOperation: { id: "operation", status: "failed", errorCode: null },
+                lastOperation: {
+                    id: "operation",
+                    status: "failed",
+                    errorCode: "KIE_TASK_FAILED",
+                    providerTaskId: "kie-saved-task",
+                    providerError: { providerCode: "500", providerMessage: "Internal Error" },
+                },
             }),
-        ).toContain("Chưa tạo được video");
+        ).toContain("Lỗi từ nhà cung cấp kie.ai");
     });
 });
 
@@ -601,8 +683,37 @@ describe("seller-facing KIE errors", () => {
             }),
         );
         expect(message).toContain(phrase);
+        if (code.startsWith("KIE_")) expect(message).toMatch(/kie/i);
         expect(message).not.toContain("PRIVATE_");
         expect(message).not.toContain("fake-token");
+    });
+
+    it.each([
+        ["The input content was flagged for containing a prominent public figure.", "bộ lọc"],
+        ["Internal Error, Please try again later.", "lỗi nội bộ"],
+        ["Server exception, please try again later or contact customer service", "lỗi nội bộ"],
+    ])(
+        "explains the retained KIE reason without inventing a cause: %s",
+        (providerMessage, phrase) => {
+            const failed = getRemakeErrorMessage(
+                new ApiError("KIE_TASK_FAILED", "PRIVATE_MESSAGE", 503, {
+                    providerError: { providerMessage },
+                }),
+            );
+            expect(failed).toContain("Lỗi từ nhà cung cấp kie.ai");
+            expect(failed).toContain(phrase);
+            expect(failed).not.toMatch(/hoàn tiền|không tính phí|prompt quá dài|PRIVATE_MESSAGE/);
+        },
+    );
+
+    it("does not turn a generic KIE 500 into a public-figure or prompt-length diagnosis", () => {
+        const message = getRemakeErrorMessage(
+            new ApiError("KIE_TASK_FAILED", "private", 503, {
+                providerError: { providerCode: 500 },
+            }),
+        );
+        expect(message).toContain("Lỗi từ nhà cung cấp kie.ai");
+        expect(message).not.toMatch(/nhân vật công chúng|prompt quá dài/);
     });
 
     it("preserves actionable local validation messages", () => {

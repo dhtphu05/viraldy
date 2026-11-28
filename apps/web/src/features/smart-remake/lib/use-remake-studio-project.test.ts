@@ -391,6 +391,91 @@ async function prepared() {
 }
 
 describe("owned intake studio lifecycle", () => {
+    it("starts new projects at twelve seconds and sends that duration through preflight and intake", async () => {
+        calls.intake.mockImplementation(async (_workspace, input) => ({
+            project: {
+                ...project(),
+                targetDuration: input.metadata.targetDuration,
+                requirements: input.metadata.requirements,
+                rights: input.metadata.rights,
+                budget: { policy: input.metadata.budget },
+            },
+        }));
+        calls.preflight.mockImplementation(async (_workspace, input) => ({
+            action: input.action,
+            contextHash: "twelve-second-intake",
+            mode: "fixture",
+            scope: { targetDuration: 12, sceneCount: 0, groupCount: 2, imageCount: 0 },
+            calls: { analysis: 3, image: 0, video: 0, inspection: 0, total: 3 },
+            budget: null,
+            blockers: [],
+        }));
+        const hook = renderHook(() => useRemakeStudio("workspace", "account", undefined, true), {
+            wrapper,
+        });
+        await waitFor(() => expect(hook.result.current.health.data?.enabled).toBe(true));
+        expect(hook.result.current.duration).toBe(12);
+        act(() => {
+            hook.result.current.onVideo(new File(["source"], "source.mp4", { type: "video/mp4" }));
+            hook.result.current.onImages([
+                new File(["product"], "product.png", { type: "image/png" }),
+            ]);
+            hook.result.current.onSourceMetadata(30);
+            hook.result.current.onRightsChange(confirmRemakeMediaRights(rights));
+        });
+        await act(() => hook.result.current.requestAction("analyze"));
+        expect(calls.preflight.mock.calls[0][1].targetDuration).toBe(12);
+        expect(calls.intake.mock.calls[0][1].metadata.targetDuration).toBe(12);
+        expect(calls.compile.mock.calls[0][1].targetDuration).toBe(12);
+        expect(calls.compile.mock.calls[0][1].analysisScope).toBe("full_source");
+    });
+
+    it("sends every selected angle with the chosen primary and rejects over-limit additions", async () => {
+        const hook = await prepared();
+        const side = new File(["side"], "side.png", { type: "image/png" });
+        act(() => {
+            hook.result.current.onImages([side]);
+            hook.result.current.onPrimaryChange(1);
+        });
+        act(() => hook.result.current.onRightsChange(confirmRemakeMediaRights(rights)));
+        await act(() => hook.result.current.analyze());
+        expect(calls.intake.mock.calls[0][1].productImage).toBe(side);
+        expect(
+            calls.intake.mock.calls[0][1].additionalProductImages.map((file: File) => file.name),
+        ).toEqual(["product.png"]);
+        act(() =>
+            hook.result.current.onImages(
+                Array.from(
+                    { length: 13 },
+                    (_, index) =>
+                        new File([String(index)], `extra-${index}.png`, { type: "image/png" }),
+                ),
+            ),
+        );
+        expect(hook.result.current.productUrls).toHaveLength(2);
+        expect(hook.result.current.productUploadError).toContain("14 ảnh");
+    });
+
+    it("restores primary and supplemental preview URLs when opening a saved project", async () => {
+        const saved = {
+            ...project("compiled"),
+            additionalProductImageUrls: ["/back.png", "/side.png"],
+        };
+        calls.project.mockResolvedValue(saved);
+        const hook = renderHook(() => useRemakeStudio("workspace", "account", "owned"), {
+            wrapper,
+        });
+        await waitFor(() => expect(hook.result.current.project?.id).toBe("owned"));
+        expect(hook.result.current.productUrls).toEqual(["/product.png", "/back.png", "/side.png"]);
+        expect(hook.result.current.primaryIndex).toBe(0);
+        act(() => hook.result.current.onPrimaryChange(1));
+        expect(hook.result.current.primaryIndex).toBe(0);
+        expect(hook.result.current.productUploadError).toContain("Thêm lại video mẫu và bộ ảnh");
+        act(() => hook.result.current.onRemoveImage(1));
+        expect(hook.result.current.productUrls).toEqual(["/product.png", "/back.png", "/side.png"]);
+        expect(calls.intake).not.toHaveBeenCalled();
+    });
+
     it("requires media rights before the first analysis", async () => {
         const hook = await prepared();
         expect(hook.result.current.canAnalyze).toBe(false);
@@ -1803,42 +1888,60 @@ describe("action-gated studio lifecycle", () => {
         expect(calls.removeDraft).not.toHaveBeenCalled();
         expect(calls.repair).not.toHaveBeenCalled();
     });
-    it("keeps structured repair intent immutable across preflight and confirmation", async () => {
-        owned = {
-            ...project("compiled"),
-            rights: confirmRemakeMediaRights(rights),
-            scenes: [
-                {
-                    id: "scene",
-                    index: 0,
-                    activeVersionId: "version",
-                    versions: [existingClip],
-                    prompt: "p",
-                    imagePrompt: "i",
-                    videoPrompt: "v",
-                    startSecond: 0,
-                    durationSeconds: 8,
-                },
-            ],
-        };
-        const hook = await inSessionProject();
-        const repairIntent = {
-            schemaVersion: 1 as const,
-            issues: ["action" as const],
-            instruction: "Lift slowly",
-        };
-        await act(() =>
-            hook.result.current.requestAction("repair", { sceneId: "scene", repairIntent }),
-        );
-        repairIntent.instruction = "Changed outside modal";
-        expect(calls.preflight.mock.calls.at(-1)![1].repairIntent.instruction).toBe("Lift slowly");
-        expect(calls.repair.mock.calls[0][3]).toMatchObject({
-            repairIntent: { instruction: "Lift slowly" },
-        });
-        expect(calls.writeMarker.mock.invocationCallOrder[0]).toBeLessThan(
-            calls.repair.mock.invocationCallOrder[0],
-        );
-    });
+    it.each([undefined, "provider_group"] as const)(
+        "keeps structured repair intent and %s scope immutable across preflight and confirmation",
+        async (repairScope) => {
+            owned = {
+                ...project("compiled"),
+                rights: confirmRemakeMediaRights(rights),
+                scenes: [
+                    {
+                        id: "scene",
+                        index: 0,
+                        activeVersionId: "version",
+                        versions: [existingClip],
+                        prompt: "p",
+                        imagePrompt: "i",
+                        videoPrompt: "v",
+                        startSecond: 0,
+                        durationSeconds: 8,
+                    },
+                ],
+            };
+            const hook = await inSessionProject();
+            const repairIntent = {
+                schemaVersion: 1 as const,
+                issues: ["action" as const],
+                instruction: "Lift slowly",
+            };
+            await act(() =>
+                hook.result.current.requestAction("repair", {
+                    sceneId: "scene",
+                    repairIntent,
+                    ...(repairScope ? { repairScope } : {}),
+                }),
+            );
+            repairIntent.instruction = "Changed outside modal";
+            expect(calls.preflight.mock.calls.at(-1)![1].repairIntent.instruction).toBe(
+                "Lift slowly",
+            );
+            if (repairScope) {
+                expect(calls.repair).not.toHaveBeenCalled();
+                expect(calls.writeMarker).not.toHaveBeenCalled();
+                expect(hook.result.current.pendingAction).toMatchObject({ repairScope });
+                await act(() => hook.result.current.confirmAction(confirmed(hook)));
+            }
+            expect(calls.repair.mock.calls[0][3]).toMatchObject({
+                repairIntent: { instruction: "Lift slowly" },
+            });
+            expect(calls.preflight.mock.calls.at(-1)![1].repairScope).toBe(repairScope);
+            expect(calls.repair.mock.calls[0][3].repairScope).toBe(repairScope);
+            expect(calls.writeMarker.mock.calls[0][1].repairScope).toBe(repairScope);
+            expect(calls.writeMarker.mock.invocationCallOrder[0]).toBeLessThan(
+                calls.repair.mock.invocationCallOrder[0],
+            );
+        },
+    );
     it("does not POST a repair when the durable submission marker cannot commit", async () => {
         owned = {
             ...project("compiled"),

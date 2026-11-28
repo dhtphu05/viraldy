@@ -22,6 +22,7 @@ from viraldy.modules.smart_remake.provider_execution import (
 from viraldy.platform.config.settings import Settings
 from viraldy.shared.errors.base import AppError
 
+from ..product_references import MAX_PRODUCT_REFERENCE_IMAGES
 from .schemas import UploadedMedia
 
 IMAGE_MODEL = "gpt-image-2.6-sunburst"
@@ -30,6 +31,7 @@ IMAGE_SIZE = "720x1280"
 IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_RESPONSE_BYTES = 40 * 1024 * 1024
+MAX_IMAGE_REFERENCES = 16
 _FORMATS = {"image/png": "PNG", "image/jpeg": "JPEG", "image/webp": "WEBP"}
 _QUOTA_ERRORS = {
     "insufficient_quota", "billing_hard_limit_reached", "credit_balance_exhausted",
@@ -158,6 +160,8 @@ class OpenAIImageClient:
         product: UploadedMedia,
         layout: UploadedMedia,
         character: UploadedMedia | None = None,
+        additional_products: list[UploadedMedia] | None = None,
+        continuity_frame: UploadedMedia | None = None,
         model: str = IMAGE_MODEL,
         quality: str = "max",
         complexity: str = "high",
@@ -170,17 +174,29 @@ class OpenAIImageClient:
             or quality not in {"low", "medium", "high", "xhigh", "max"}
             or complexity not in {"low", "medium", "high"}
             or not 0 < len(prompt.strip()) <= 32000
+            or (additional_products is not None and not isinstance(additional_products, list))
+            or len(additional_products or []) >= MAX_PRODUCT_REFERENCE_IMAGES
         ):
             raise _invalid_input()
         _validate_input(product)
         _validate_input(layout)
         files = [
             ("image[]", ("product-reference", product.bytes, product.mime_type)),
-            ("image[]", ("composition-reference", layout.bytes, layout.mime_type)),
         ]
+        for index, supporting in enumerate(additional_products or [], start=2):
+            _validate_input(supporting)
+            files.append(("image[]", (
+                f"product-reference-{index}", supporting.bytes, supporting.mime_type,
+            )))
+        files.append(("image[]", ("composition-reference", layout.bytes, layout.mime_type)))
         if character is not None:
             _validate_input(character)
             files.append(("image[]", ("character-reference", character.bytes, character.mime_type)))
+        if continuity_frame is not None and len(files) < MAX_IMAGE_REFERENCES:
+            _validate_input(continuity_frame)
+            files.append(("image[]", (
+                "continuity-reference", continuity_frame.bytes, continuity_frame.mime_type,
+            )))
         async with self._client() as client:
             try:
                 response = await client.post(

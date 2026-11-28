@@ -129,6 +129,24 @@ def test_exact_trim_offsets_and_frozen_final_segments_are_explicit(retained):
     )
 
 
+def test_twelve_second_assembly_maps_both_six_second_clips(retained):
+    row, workspace, assembly_id = retained
+    assembly = row.context_json["p0"]["assemblies"]["records"][0]
+    assembly["timeline"]["totalFrames"] = 288
+    assembly["technicalCheck"]["frameCount"] = 288
+    for index, item in enumerate(assembly["timeline"]["items"]):
+        item.update(targetStartFrame=index * 144, targetDurationFrames=144, inFrame=0, outFrame=144)
+        assembly["stateSnapshot"]["scenes"][index]["versions"][0]["frameCount"] = 144
+    assembly["manifest"]["timeline"] = copy.deepcopy(assembly["timeline"])
+    assembly["manifestHash"] = content_hash(assembly["manifest"])
+    mappings = inspection_mapping_projection(row, workspace)["inspectionMappings"]
+    final = [item for item in mappings if item.get("assemblyId") == assembly_id
+             and item["from"]["timebase"] == "final" and item["to"]["mediaId"] == "subject"]
+    assert {(item["from"]["inFrame"], item["from"]["outFrame"]) for item in final} == {
+        (0, 144), (144, 288),
+    }
+
+
 def test_shared_raw_clips_have_unique_virtual_ids_and_real_playback_clock(retained):
     row, workspace, assembly_id = retained
     projection = inspection_mapping_projection(row, workspace)

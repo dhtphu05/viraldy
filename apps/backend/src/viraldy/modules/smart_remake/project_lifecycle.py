@@ -553,7 +553,12 @@ class ProjectLifecycleService:
         self, project_id: UUID, actor_id: UUID, request: DeletionRequest
     ) -> dict[str, Any]:
         row, operation, fresh, payload = await self._deletion_start(project_id, actor_id, request)
-        if not fresh and operation.status == "completed":
+        retry_staged = not fresh and operation.status == "completed" and any(
+            item.get("stagedUpload")
+            and item.get("status") in {"pending_upload_expiry", "failed"}
+            for item in operation.result_json.get("deletion", {}).get("objects", [])
+        )
+        if not fresh and operation.status == "completed" and not retry_staged:
             return await self._envelope(
                 project_id, operation, {"deletion": _replay(operation, "deletion")}
             )
@@ -563,6 +568,12 @@ class ProjectLifecycleService:
                     "SMART_REMAKE_OPERATION_IN_PROGRESS", "Deletion is still running."
                 )
             try:
+                if retry_staged:
+                    row = await self.repository.project(self.workspace_id, project_id, lock=True)
+                    context = copy.deepcopy(row.context_json)
+                    context["p0"]["deletion"]["status"] = "suspended"
+                    row.context_json = context
+                    await self.repository.session.commit()
                 shared, running = await self._deletion_dependencies(row, operation)
                 prefix = f"workspaces/{self.workspace_id}/smart-remake/{project_id}/"
                 inventory = deletion_inventory(

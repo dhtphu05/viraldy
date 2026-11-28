@@ -133,9 +133,9 @@ def export_labeled_media(
     data: bytes, *, expected_frames: int, audio_required: bool
 ) -> tuple[bytes, dict[str, Any]]:
     """Burn in the disclosure and prove the output still matches its reviewed media."""
-    if type(expected_frames) is not int or expected_frames not in (192, 384):
+    if type(expected_frames) is not int or expected_frames not in (192, 288, 384):
         raise AppError(
-            "SMART_REMAKE_EXPORT_CHECK_FAILED", "A P0 export must contain 192 or 384 frames."
+            "SMART_REMAKE_EXPORT_CHECK_FAILED", "Export duration must be 8, 12 or 16 seconds."
         )
     _, dimensions = _validate_media(
         data, expected_frames=expected_frames, audio_required=audio_required

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
@@ -19,6 +20,7 @@ from viraldy.shared.errors.base import AppError, ConflictError, NotFoundError
 from .engine.media_validation import assert_product_image, assert_reference_video
 from .engine.schemas import UploadedMedia
 from .models import SmartRemakeProjectModel
+from .product_references import MAX_PRODUCT_REFERENCE_IMAGES, read_product_references
 from .project_contracts import SmartRemakeIntakeRequest
 from .project_policy import assert_character_consent, constraints_hash, rights_snapshot, stable_hash
 from .repair_media import RepairMediaStore
@@ -89,7 +91,15 @@ async def create_intake(
     source: UploadedMedia | bytes,
     product: UploadedMedia | bytes,
     character: UploadedMedia | bytes | None = None,
+    *,
+    additional_products: Sequence[UploadedMedia | bytes] | None = None,
+    staged_uploads: Sequence[dict[str, Any]] | None = None,
 ) -> SmartRemakeProjectModel:
+    if len(additional_products or []) >= MAX_PRODUCT_REFERENCE_IMAGES:
+        raise AppError(
+            "SMART_REMAKE_PRODUCT_REFERENCES_INVALID", "Use at most fourteen product images.", 422
+        )
+    additional = [_upload(value, role="product") for value in additional_products or []]
     uploads = {
         "source": _upload(source, role="source"),
         "product": _upload(product, role="product"),
@@ -102,7 +112,19 @@ async def create_intake(
         )
     if "character" in uploads:
         assert_character_consent(payload.rights.model_dump(mode="json"))
-    hashes = {role: hashlib.sha256(upload.bytes).hexdigest() for role, upload in uploads.items()}
+    hashes: dict[str, Any] = {
+        role: hashlib.sha256(upload.bytes).hexdigest() for role, upload in uploads.items()
+    }
+    if additional:
+        hashes["additionalProducts"] = [
+            hashlib.sha256(upload.bytes).hexdigest() for upload in additional
+        ]
+        product_hashes = [hashes["product"], *hashes["additionalProducts"]]
+        if len(set(product_hashes)) != len(product_hashes):
+            raise AppError(
+                "SMART_REMAKE_PRODUCT_REFERENCES_INVALID",
+                "Choose distinct product images; the same image was included more than once.", 422,
+            )
     request_hash = stable_hash({"request": payload.model_dump(mode="json"), "inputs": hashes})
     project_id = uuid5(
         NAMESPACE_URL, f"viraldy-p0:{workspace_id}:{actor_id}:{payload.idempotencyKey}"
@@ -138,10 +160,18 @@ async def create_intake(
                 "sizeBytes": len(upload.bytes),
             }
         now = datetime.now(UTC).isoformat()
+        additional_assets = []
+        for upload, digest in zip(additional, hashes.get("additionalProducts", []), strict=True):
+            key = await media.put(prefix, upload.bytes, upload.mime_type)
+            keys.append(key)
+            additional_assets.append({
+                "id": str(uuid4()), "role": "product", "storageKey": key,
+                "mimeType": upload.mime_type, "mediaHash": digest, "sizeBytes": len(upload.bytes),
+            })
         context: dict[str, Any] = {
             "schemaVersion": 2,
             "projectName": payload.projectName,
-            "audioRequired": False,
+            "audioRequired": payload.targetDuration == 12,
             "p0": {
                 "schemaVersion": 1,
                 "phase": "intake",
@@ -157,6 +187,10 @@ async def create_intake(
                 "release": {"approval": None},
             },
         }
+        if staged_uploads:
+            context["p0"]["stagedUploads"] = [dict(item) for item in staged_uploads]
+        if additional_assets:
+            context["p0"]["additionalProductReferences"] = additional_assets
         for role, asset in assets.items():
             context.update(
                 {
@@ -208,7 +242,7 @@ async def assert_input_binding(row: SmartRemakeProjectModel, media: RepairMediaS
         raise AppError(
             "SMART_REMAKE_INTAKE_REQUIRED", "Create an owned intake before continuing.", 403
         )
-    hashes = {}
+    hashes: dict[str, Any] = {}
     for role, asset in assets.items():
         if row.context_json.get(f"{role}Key") != asset.get("storageKey"):
             raise AppError("SMART_REMAKE_INPUT_CHANGED", "Saved input bindings have changed.", 409)
@@ -224,5 +258,11 @@ async def assert_input_binding(row: SmartRemakeProjectModel, media: RepairMediaS
         ):
             raise AppError("SMART_REMAKE_INPUT_CHANGED", "Owned input bytes have changed.", 409)
         hashes[role] = media_hash
+    if "additionalProductReferences" in p0:
+        references = await read_product_references(row.context_json, media)
+        if len(references) > 1:
+            hashes["additionalProducts"] = [
+                hashlib.sha256(value.bytes).hexdigest() for value in references[1:]
+            ]
     if stable_hash(hashes) != p0["inputHash"]:
         raise AppError("SMART_REMAKE_INPUT_CHANGED", "Owned input manifest has changed.", 409)

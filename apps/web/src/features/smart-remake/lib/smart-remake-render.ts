@@ -5,6 +5,7 @@ import {
     type SmartRemakeProject,
     type SmartRemakeRenderResult,
     type SmartRemakeGenerationRecovery,
+    type SmartRemakeProviderError,
 } from "@/shared/api/smart-remake";
 import { ApiError } from "@/shared/api/errors";
 import { isDemoVideoAvailable } from "@/shared/lib/optional-demo-media";
@@ -42,6 +43,12 @@ export function getRemakeErrorMessage(cause: unknown): string {
             return "Cần kiểm tra trạng thái lượt AI trước. Các dữ liệu đã có vẫn được giữ; hệ thống chưa gửi lượt mới để tránh gọi trùng.";
         case "SMART_REMAKE_BASE_VERSION_REQUIRED":
             return "Cảnh này chưa có clip để sửa. Tiếp tục tạo video trước.";
+        case "SMART_REMAKE_GROUP_REPAIR_STALE":
+            return "Clip hoặc đoạn cắt đã thay đổi. Làm mới dự án rồi mở lại yêu cầu sửa clip.";
+        case "SMART_REMAKE_GROUP_REPAIR_UNAVAILABLE":
+            return "Sửa theo clip cần kịch bản Wan 12 giây với hai clip 6 giây có tiếng. Cập nhật kịch bản để tiếp tục.";
+        case "SMART_REMAKE_GROUP_REPAIR_ANCHOR_REQUIRED":
+            return "Mở lại phần xem video và chọn lại Clip 1 hoặc Clip 2 cần sửa.";
         case "SMART_REMAKE_BASE_VERSION_CONFLICT":
         case "SMART_REMAKE_CANDIDATE_STALE":
         case "SMART_REMAKE_IDEMPOTENCY_CONFLICT":
@@ -58,7 +65,7 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "SMART_REMAKE_EXPECTATIONS_INVALID":
             return "Cập nhật kịch bản để đồng bộ sản phẩm, tư liệu và yêu cầu cảnh trước khi tạo video nhé.";
         case "SMART_REMAKE_PROVIDER_PLAN_UPDATE_REQUIRED":
-            return "Cập nhật kịch bản để tạo đúng 1 clip cho đầu ra 8 giây hoặc 2 clip cho 16 giây. Các clip và tác vụ đã gửi vẫn được giữ.";
+            return "Cập nhật kịch bản để tạo đúng số clip theo thời lượng đầu ra. Các clip và tác vụ đã gửi vẫn được giữ.";
         case "SMART_REMAKE_ASSEMBLY_EXPECTATIONS_REQUIRED":
             return "Ghép lại bản xem trước để kiểm tra theo yêu cầu hiện tại. Các clip đã có vẫn được giữ.";
         case "SMART_REMAKE_PRODUCT_ANALYSIS_INCOMPLETE":
@@ -76,20 +83,20 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "SMART_REMAKE_SOURCE_FRAME_INVALID":
             return "Chưa đọc được video mẫu. Thử video MP4, MOV hoặc WebM phát được đầy đủ nhé.";
         case "SMART_REMAKE_TIMELINE_SCENE_TOO_LONG":
-            return "Có cảnh dài hơn 8 giây. Thêm mốc cắt ở bên dưới rồi cập nhật kịch bản nhé.";
+            return "Có cảnh vượt thời lượng một clip. Thêm mốc cắt ở bên dưới rồi cập nhật kịch bản nhé.";
         case "SMART_REMAKE_TIMELINE_SCENE_LIMIT":
             return "Kịch bản cũ chưa hỗ trợ đủ cảnh. Cập nhật kịch bản để phân tích toàn bộ video mẫu nhé.";
         case "SMART_REMAKE_TIMELINE_DENSITY_UNSUPPORTED":
         case "SMART_REMAKE_OUTPUT_DENSITY_UNSUPPORTED":
-            return "Không đủ khung hình trong thời lượng đã chọn để giữ đủ các cảnh. Chọn 16 giây hoặc xem lại các mốc cắt nhé.";
+            return "Không đủ khung hình trong thời lượng đầu ra để giữ đủ các cảnh. Xem lại các mốc cắt rồi cập nhật kịch bản nhé.";
         case "SMART_REMAKE_PROVIDER_PROMPT_TOO_LARGE":
             return "Chưa đóng gói được đầy đủ hướng dẫn cho KIE. Rút gọn yêu cầu bổ sung rồi cập nhật kịch bản nhé.";
         case "SMART_REMAKE_TIMELINE_CUTS_INVALID":
             return "Mốc cắt cần tăng dần và phủ đủ đoạn mẫu. Chỉnh lại các mốc rồi thử nhé.";
         case "SMART_REMAKE_TIMELINE_PROVIDER_REQUIRED":
-            return "Timeline cần kết nối KIE Veo để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
+            return "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
         case "SMART_REMAKE_RENDER_GROUPS_INVALID":
-            return "Nhóm cảnh chưa hợp lệ. Mỗi nhóm cần gồm các cảnh liền nhau và tối đa 8 giây; cập nhật lại kịch bản nhé.";
+            return "Nhóm cảnh chưa hợp lệ. Mỗi nhóm cần gồm các cảnh liền nhau và vừa thời lượng clip của provider; cập nhật lại kịch bản nhé.";
         case "OPENAI_IMAGE_NOT_CONFIGURED":
         case "OPENAI_IMAGES_NOT_CONFIGURED":
         case "OPENAI_IMAGE_AUTH_FAILED":
@@ -141,31 +148,41 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "KIE_NOT_CONFIGURED":
         case "KIE_AUTH_FAILED":
         case "KIE_DURABLE_JOB_REQUIRED":
-            return "Dịch vụ tạo video chưa sẵn sàng. Nhờ quản trị viên kiểm tra kết nối để tiếp tục.";
+            return "KIE: Dịch vụ tạo video chưa sẵn sàng. Nhờ quản trị viên kiểm tra kết nối để tiếp tục.";
         case "KIE_CREDITS_EXHAUSTED":
-            return "Dịch vụ tạo video đã hết lượt sử dụng. Nhờ quản trị viên bổ sung để tiếp tục.";
+            return "KIE: Dịch vụ tạo video đã hết lượt sử dụng. Nhờ quản trị viên bổ sung để tiếp tục.";
         case "KIE_RATE_LIMITED":
-            return "Dịch vụ tạo video đang bận. Đợi ít phút rồi kiểm tra lại yêu cầu đã gửi nhé.";
+            return "KIE: Dịch vụ tạo video đang bận. Đợi ít phút rồi kiểm tra lại yêu cầu đã gửi nhé.";
         case "KIE_SUBMISSION_UNCERTAIN":
         case "KIE_POLL_TIMEOUT":
-            return "Chưa xác định được kết quả. Kiểm tra lại yêu cầu trước khi tạo tiếp để tránh gửi trùng.";
-        case "KIE_TASK_FAILED":
-            return "Chưa tạo được video. Các cảnh hoàn tất vẫn được giữ; hãy mở dự án để kiểm tra.";
+        case "SMART_REMAKE_SUBMISSION_UNRESOLVED":
+            return "Chưa xác định được kết quả từ kie.ai. Kiểm tra lại yêu cầu trước khi tạo tiếp để tránh gửi trùng.";
+        case "KIE_TASK_FAILED": {
+            const message = String(
+                (cause.details?.providerError as SmartRemakeProviderError | undefined)
+                    ?.providerMessage ?? "",
+            ).toLowerCase();
+            if (message.includes("public figure"))
+                return "Lỗi từ nhà cung cấp kie.ai: bộ lọc từ chối tạo video vì cho rằng tư liệu liên quan đến nhân vật công chúng. Kiểm tra ảnh và nội dung trước khi thử lại.";
+            if (/internal error|server exception/.test(message))
+                return "Lỗi từ nhà cung cấp kie.ai: hệ thống tạo video báo lỗi nội bộ. Các clip đã hoàn tất vẫn được giữ; xem phản hồi và kiểm tra trạng thái.";
+            return "Lỗi từ nhà cung cấp kie.ai. Chưa tạo được video. Các cảnh hoàn tất vẫn được giữ; hãy mở dự án để kiểm tra.";
+        }
         case "KIE_UPLOAD_FAILED":
             return "Lỗi kết nối khi tải ảnh tham chiếu lên KIE. Ảnh đã tạo vẫn được giữ trong dự án; hãy thử lại khi kết nối ổn định.";
         case "KIE_UNSAFE_MEDIA_URL":
-            return "Chưa gửi được ảnh sản phẩm. Kiểm tra ảnh JPG, PNG hoặc WebP và thử lại nhé.";
+            return "Chưa gửi được ảnh sản phẩm tới KIE. Kiểm tra ảnh JPG, PNG hoặc WebP và thử lại nhé.";
         case "KIE_VALIDATION_FAILED":
-            return "Yêu cầu tạo video chưa hợp lệ. Kiểm tra ảnh sản phẩm và prompt từng cảnh nhé.";
+            return "KIE: Yêu cầu tạo video chưa hợp lệ. Kiểm tra ảnh sản phẩm và prompt từng cảnh nhé.";
         case "KIE_OUTPUT_DOWNLOAD_FAILED":
-            return "Video đã tạo chưa tải về được. Giữ dự án và kiểm tra lại, chưa cần tạo cảnh mới.";
+            return "Video từ KIE đã tạo nhưng chưa tải về được. Giữ dự án và kiểm tra lại, chưa cần tạo cảnh mới.";
         case "SMART_REMAKE_OPERATION_UNRESOLVED":
             return "Yêu cầu trước có thể vẫn đang xử lý. Bấm Kiểm tra lại để cập nhật trước khi tạo tiếp.";
         default:
             return cause.code.startsWith("OPENAI_IMAGE_")
                 ? "Chưa hoàn tất bước tạo ảnh. Các tư liệu đã lưu vẫn được giữ; kiểm tra lại dự án trước khi thử tiếp."
                 : cause.code.startsWith("KIE_")
-                  ? "Chưa hoàn tất yêu cầu tạo video. Các cảnh đã có vẫn được giữ; kiểm tra lại dự án trước khi tạo tiếp."
+                  ? "Chưa hoàn tất yêu cầu tạo video với KIE. Các cảnh đã có vẫn được giữ; kiểm tra lại dự án trước khi tạo tiếp."
                   : cause.code.startsWith("SMART_REMAKE_")
                     ? "Chưa hoàn tất yêu cầu Smart Remake. Kiểm tra lại dự án hoặc tư liệu rồi thử lại nhé."
                     : cause.message;
@@ -176,12 +193,15 @@ export function getRemakeProjectError(project: SmartRemakeProject | null): strin
     if (project?.pendingOperation || project?.lastOperation?.status !== "failed") return null;
     return getRemakeErrorMessage(
         new ApiError(
-            project.lastOperation.errorCode || "KIE_TASK_FAILED",
+            project.lastOperation.errorCode || "SMART_REMAKE_OPERATION_FAILED",
             "Chưa hoàn tất yêu cầu. Các cảnh đã có vẫn được giữ; kiểm tra lại dự án trước khi tạo tiếp.",
-            project.generationRecovery?.httpStatus ?? 503,
-            project.generationRecovery
-                ? { providerErrorCode: project.generationRecovery.providerErrorCode }
-                : undefined,
+            project.lastOperation.providerError?.httpStatus ??
+                project.generationRecovery?.httpStatus ??
+                503,
+            {
+                providerErrorCode: project.generationRecovery?.providerErrorCode,
+                providerError: project.lastOperation.providerError,
+            },
         ),
     );
 }
@@ -248,6 +268,11 @@ export function hasRemakeRepairClip(
 }
 
 export function getRemakeProjectPollInterval(project: SmartRemakeProject | null): 5000 | false {
+    if (project?.preview?.status === "pending" || project?.preview?.status === "processing")
+        return project.pendingOperation?.needsReconciliation ||
+            project.lastOperation?.needsReconciliation
+            ? false
+            : 5000;
     return project?.pendingOperation &&
         (project.provider === "kie" ||
             project.phase !== undefined ||
@@ -333,7 +358,7 @@ export async function renderSmartRemakeVideo(
         throw new Error("Kịch bản chưa được lưu đầy đủ. Cập nhật kịch bản trước khi tạo nhé.");
     if (isTimeline && provider !== "kie" && provider !== "fixture")
         throw new Error(
-            "Timeline cần kết nối KIE Veo để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.",
+            "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.",
         );
     const setupError = getRemakeGenerationSetupError(input.compileResult, health);
     if (setupError) throw new Error(setupError);

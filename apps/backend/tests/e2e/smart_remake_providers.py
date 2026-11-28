@@ -88,6 +88,30 @@ def _assert_ledger(stage: str, request_hash: str) -> str:
     return str(found[0])
 
 
+def _submitted_provider_bindings(stage: str) -> list[dict[str, Any]]:
+    """Read pending operation inputs through their own committed ledger reservation."""
+    import psycopg
+
+    url = os.environ["DATABASE_SYNC_URL"].replace("postgresql+psycopg://", "postgresql://")
+    with psycopg.connect(url) as connection:
+        rows = connection.execute(
+            "SELECT a.request_hash, p.context_json, o.result_json, a.id "
+            "FROM smart_remake_attempts a "
+            "JOIN smart_remake_operations o ON o.id::text = a.metadata_json->>'operationId' "
+            "AND o.project_id = a.project_id "
+            "JOIN smart_remake_projects p ON p.id = a.project_id "
+            "AND p.workspace_id = a.workspace_id "
+            "WHERE a.stage = %s AND a.status IN ('reserved', 'submitted') "
+            "AND o.status = 'running' ORDER BY a.created_at DESC",
+            (stage,),
+        ).fetchall()
+    return [
+        {"requestHash": request_hash, "context": context, "result": result,
+         "attemptId": str(attempt_id)}
+        for request_hash, context, result, attempt_id in rows
+    ]
+
+
 def _bound_prompt_value(prompt: str, prefix: str, *, last: bool = False) -> str:
     values = [line.removeprefix(prefix).strip()
               for line in prompt.splitlines() if line.startswith(prefix)]
@@ -177,20 +201,59 @@ class OfflineImageClient:
 
         from PIL import Image
 
-        snapshot = {key: kwargs[key] for key in ("prompt", "model", "quality", "complexity")}
-        snapshot["size"] = "720x1280"
-        snapshot["expectationsHash"] = _bound_prompt_value(kwargs["prompt"], "EXPECTATIONS HASH:")
-        opening = json.loads(_bound_prompt_value(kwargs["prompt"], "SOURCE OPENING BINDING:"))
-        snapshot["openingFrame"] = opening["openingFrame"]
+        snapshot = {key: kwargs[key] for key in ("prompt", "model", "quality")}
+        snapshot.update(
+            size="720x1280",
+            expectationsHash=_bound_prompt_value(kwargs["prompt"], "EXPECTATIONS HASH:"),
+            openingFrame=json.loads(_bound_prompt_value(
+                kwargs["prompt"], "SOURCE OPENING BINDING:",
+            ))["openingFrame"],
+        )
+        conditioning = json.loads(_bound_prompt_value(kwargs["prompt"], "CONDITIONING FRAME:"))
+        snapshot["frameRole"] = conditioning.pop("frameRole")
+        snapshot["referenceFrame"] = conditioning
         for key in ("product", "layout", "character"):
             if kwargs.get(key) is not None:
                 with Image.open(BytesIO(kwargs[key].bytes)) as image:
                     image.verify()
                 snapshot[f"{key}Hash"] = hashlib.sha256(kwargs[key].bytes).hexdigest()
-        if snapshot["openingFrame"]["layoutHash"] != snapshot["layoutHash"]:
-            raise AssertionError("Offline image layout differs from its frozen source opening")
-        request_hash = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+        if snapshot["referenceFrame"]["layoutHash"] != snapshot["layoutHash"]:
+            raise AssertionError("Offline image layout differs from its source frame binding")
+        policy = _bound_prompt_value(kwargs["prompt"], "PRESENTER IDENTITY POLICY:")
+        matching = []
+        for binding in _submitted_provider_bindings("image"):
+            result = binding["result"]
+            if result.get("expectationsHash") != snapshot["expectationsHash"]:
+                continue
+            for intent in result.get("images", {}).values():
+                actor = intent.get("presenterIdentity") or {}
+                if (
+                    intent.get("status") != "submitting"
+                    or intent.get("requestHash") != binding["requestHash"]
+                    or intent.get("attemptId") != binding["attemptId"]
+                    or intent.get("referenceFrame") != snapshot["referenceFrame"]
+                    or intent.get("frameRole") != snapshot["frameRole"]
+                    or actor.get("policyVersion") != policy
+                    or actor.get("productMediaHash") != snapshot["productHash"]
+                    or actor.get("sourceMediaHash") != conditioning["sourceMediaHash"]
+                    or (actor.get("anchor") and actor["anchor"]["mediaHash"]
+                        != snapshot.get("characterHash"))
+                ):
+                    continue
+                bound_snapshot = {**snapshot, "presenterIdentity": actor}
+                if "complexity" in intent:
+                    bound_snapshot["complexity"] = kwargs["complexity"]
+                actual_hash = hashlib.sha256(
+                    json.dumps(bound_snapshot, sort_keys=True).encode()
+                ).hexdigest()
+                if actual_hash == binding["requestHash"]:
+                    matching.append((actual_hash, binding["attemptId"]))
+        if len(matching) != 1:
+            raise AssertionError("Offline image inputs do not match one committed provider attempt")
+        request_hash, committed_attempt = matching[0]
         attempt_id = _assert_ledger("image", request_hash)
+        if attempt_id != committed_attempt:
+            raise AssertionError("Offline image reservation belongs to a different attempt")
         data = Path(os.environ["P0_E2E_MEDIA"], "conditioning.png").read_bytes()
         _record(
             "image",
@@ -220,22 +283,38 @@ class OfflineKieClient:
 
     async def create_task(self, *, model: str, input_data: dict[str, Any]) -> dict[str, Any]:
         uploads = [self.uploads[url] for url in input_data["image_urls"]]
-        snapshot = {
-            "model": model,
-            "input": {key: value for key, value in input_data.items() if key != "image_urls"},
-            "productHash": uploads[0]["hash"],
-            "characterHash": next(
-                (item["hash"] for item in uploads if item["role"] == "character-reference"), None
-            ),
-            "imageHashes": [item["hash"] for item in uploads if item["role"] == "scene-reference"],
-            "expectationsHash": _bound_prompt_value(
-                input_data["prompt"], "GENERATION EXPECTATIONS HASH:", last=True,
-            ),
-        }
-        request_hash = hashlib.sha256(
-            json.dumps(snapshot, sort_keys=True, default=str).encode()
-        ).hexdigest()
+        matching = []
+        for binding in _submitted_provider_bindings("video"):
+            context, result = binding["context"], binding["result"]
+            for intent in result.get("tasks", {}).values():
+                if (
+                    intent.get("status") != "submitting"
+                    or intent.get("requestHash") != binding["requestHash"]
+                    or intent.get("attemptId") != binding["attemptId"]
+                    or intent.get("expectationsHash") != result.get("expectationsHash")
+                ):
+                    continue
+                snapshot = {
+                    "model": model,
+                    "input": {key: value for key, value in input_data.items()
+                              if key != "image_urls"},
+                    "productHash": context.get("productMediaHash"),
+                    "characterHash": context.get("characterMediaHash"),
+                    "imageHashes": [item["hash"] for item in uploads],
+                    "expectationsHash": result["expectationsHash"],
+                    **({"apiContract": intent["apiContract"]} if "apiContract" in intent else {}),
+                }
+                actual_hash = hashlib.sha256(
+                    json.dumps(snapshot, sort_keys=True, default=str).encode()
+                ).hexdigest()
+                if actual_hash == binding["requestHash"]:
+                    matching.append((actual_hash, binding["attemptId"]))
+        if len(matching) != 1:
+            raise AssertionError("Offline video inputs do not match one committed provider attempt")
+        request_hash, committed_attempt = matching[0]
         attempt_id = _assert_ledger("video", request_hash)
+        if attempt_id != committed_attempt:
+            raise AssertionError("Offline video ledger attempt changed before submission")
         task_id = f"offline-{uuid4()}"
         _record(
             "video",

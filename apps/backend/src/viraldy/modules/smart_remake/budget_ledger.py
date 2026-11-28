@@ -18,10 +18,12 @@ from viraldy.shared.errors.base import AppError, ConflictError, NotFoundError
 
 from .budget_models import SmartRemakeAttemptModel as Attempt
 from .generation_recovery import (
+    authorized_unconfirmed_replacement_keys,
     is_authorized_unconfirmed_replacement,
     is_completed_analysis_response,
     is_known_image_rejection,
     is_known_video_rejection,
+    is_terminal_failed_video_response,
 )
 from .models import SmartRemakeOperationModel, SmartRemakeProjectModel
 
@@ -163,21 +165,62 @@ async def initialize_budget(
     return normalized
 
 
+def _authorized_image_slot(
+    previous: Attempt, owned: dict[str, Any], slot: str, request_hash: str | None,
+    purpose: str | None,
+) -> bool:
+    if (
+        slot != previous.metadata_json.get("slot") or request_hash != previous.request_hash
+        or purpose != previous.purpose
+    ):
+        return False
+    if owned.get("kind") == "repair":
+        index = owned.get("sceneIndex")
+        return (
+            previous.purpose == "repair" and type(index) is int and index >= 0
+            and slot in {f"image:{index}", f"image:{index}:ending"}
+        )
+    if owned.get("kind") != "render" or previous.purpose != "initial":
+        return False
+    plan = owned.get("renderPlan") or {}
+    units, groups = plan.get("units"), plan.get("groups")
+    if not isinstance(units, list) or not isinstance(groups, list):
+        return False
+    positions = {unit.get("id"): index for index, unit in enumerate(units)
+                 if isinstance(unit, dict) and isinstance(unit.get("id"), str)}
+    if len(positions) != len(units):
+        return False
+    for group in groups:
+        ids = group.get("renderUnitIds") if isinstance(group, dict) else None
+        if not isinstance(ids, list) or not ids or any(
+            not isinstance(unit_id, str) or unit_id not in positions for unit_id in ids
+        ):
+            return False
+        if slot in {f"image:{positions[ids[0]]}", f"image:{positions[ids[-1]]}:ending"}:
+            return True
+    return False
+
+
 async def _authorized_replacement_collision(
     session: AsyncSession, workspace_id: UUID, project_id: UUID, previous: Attempt,
     *, actor_id: UUID | None, idempotency_key: str, metadata: dict[str, Any] | None,
+    request_hash: str | None = None,
+    purpose: str | None = None,
 ) -> bool:
-    if not is_authorized_unconfirmed_replacement(previous) or actor_id != previous.actor_id:
+    replacement_keys = authorized_unconfirmed_replacement_keys(previous)
+    if (
+        not replacement_keys or actor_id != previous.actor_id
+        or previous.project_id != project_id or previous.workspace_id != workspace_id
+    ):
         return False
     incoming = metadata or {}
-    authorization = previous.metadata_json["replacementAuthorization"]
     try:
         operation_id = UUID(incoming.get("operationId"))
     except (TypeError, ValueError, AttributeError):
         return False
     slot = incoming.get("slot")
     if (
-        str(operation_id) == authorization["operationId"]
+        str(operation_id) == previous.metadata_json["operationId"]
         or not isinstance(slot, str)
         or idempotency_key != f"{operation_id}:{slot}"
     ):
@@ -189,7 +232,7 @@ async def _authorized_replacement_collision(
         .where(
             operation.id == operation_id, operation.project_id == project_id,
             SmartRemakeProjectModel.workspace_id == workspace_id,
-            operation.idempotency_key == authorization["replacementKey"],
+            operation.idempotency_key.in_(sorted(replacement_keys)),
             operation.status == "running",
             operation.result_json["actorId"].as_string() == str(actor_id),
             operation.result_json["kind"].as_string().in_(("render", "repair")),
@@ -197,6 +240,8 @@ async def _authorized_replacement_collision(
     )
     if not isinstance(owned, dict):
         return False
+    if previous.stage == "image":
+        return _authorized_image_slot(previous, owned, slot, request_hash, purpose)
     if owned.get("kind") == "repair":
         return slot == previous.metadata_json.get("slot") == f"video:{owned.get('sceneIndex')}"
     if owned.get("kind") != "render" or not slot.startswith("video:group:"):
@@ -249,11 +294,11 @@ async def reserve_attempt(
         )
         existing_metadata = {
             key: value for key, value in existing.metadata_json.items()
-            if key != "replacementAuthorization"
+            if key not in {"replacementAuthorization", "additionalReplacementAuthorizations"}
         }
         incoming_metadata = {
             key: value for key, value in (metadata or {}).items()
-            if key != "replacementAuthorization"
+            if key not in {"replacementAuthorization", "additionalReplacementAuthorizations"}
         }
         if pricing_drift:
             existing_metadata = {
@@ -317,13 +362,15 @@ async def reserve_attempt(
         and row.status != "completed"
         and not is_known_image_rejection(row)
         and not is_known_video_rejection(row)
+        and not is_terminal_failed_video_response(row)
         and not is_completed_analysis_response(row)
         )
     ]
     for previous in uncertain:
         if not await _authorized_replacement_collision(
             session, workspace_id, project_id, previous, actor_id=actor_id,
-            idempotency_key=idempotency_key, metadata=metadata,
+            idempotency_key=idempotency_key, metadata=metadata, request_hash=request_hash,
+            purpose=purpose,
         ):
             await session.rollback()
             raise ConflictError(

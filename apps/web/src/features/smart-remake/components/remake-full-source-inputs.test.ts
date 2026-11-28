@@ -34,6 +34,13 @@ function inputProps(): RemakeInputsProps {
 }
 
 describe("full-source intake", () => {
+    it("presents a fixed twelve-second output with two six-second clips and audio", () => {
+        render(createElement(RemakeInputs, { ...inputProps(), duration: 12 }));
+        expect(screen.getByText("12 giây")).toBeTruthy();
+        expect(screen.getByText(/2 clip × 6 giây.*Có âm thanh/)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "8 giây" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "16 giây" })).toBeNull();
+    });
     it("keeps the full measured video separate from the output duration", () => {
         const onStart = vi.fn();
         render(
@@ -61,9 +68,8 @@ describe("full-source intake", () => {
         );
         expect(screen.getByText(/4 giây tư liệu/)).toBeTruthy();
         expect(screen.queryByRole("alert")).toBeNull();
-        expect(screen.getByRole("button", { name: "16 giây" }).getAttribute("aria-pressed")).toBe(
-            "true",
-        );
+        expect(screen.getByText("16 giây")).toBeTruthy();
+        expect(screen.queryByText(/2 clip × 6 giây|Có âm thanh/)).toBeNull();
     });
 
     it("updates the source duration after media metadata has loaded", () => {

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from .inspection_service import InspectionSubjectRequest
 from .project_contracts import SmartRemakeApiModel, SmartRemakeBudgetPolicy
@@ -25,7 +31,7 @@ class PreflightRequest(SmartRemakeApiModel):
     budgetMode: Literal["unlimited", "limited"] | None = None
     projectId: str | None = None
     expectedRevision: int | None = Field(default=None, ge=1)
-    targetDuration: Literal[8, 16] | None = None
+    targetDuration: Literal[8, 12, 16] | None = None
     referenceStartFrame: int | None = Field(default=None, ge=0)
     analysisScope: Literal["excerpt", "full_source"] | None = None
     sourceDurationSeconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -33,7 +39,15 @@ class PreflightRequest(SmartRemakeApiModel):
     sceneId: str | None = Field(default=None, min_length=1, max_length=200)
     baseVersionId: str | None = Field(default=None, min_length=1, max_length=200)
     repairIntent: RepairIntent | None = None
+    repairScope: Literal["provider_group"] | None = None
     subject: InspectionSubjectRequest | None = None
+
+    @model_serializer(mode="wrap")
+    def compatible_repair_scope(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = cast(dict[str, Any], handler(self))
+        if self.repairScope is None:
+            payload.pop("repairScope", None)
+        return payload
 
     @model_validator(mode="after")
     def matching_action(self) -> PreflightRequest:
@@ -52,7 +66,9 @@ class PreflightRequest(SmartRemakeApiModel):
             raise ValueError("A repair requires its retained scene.")
         if self.action == "inspect" and self.subject is None:
             raise ValueError("An inspection requires its retained subject.")
-        if self.action != "repair" and (self.sceneId or self.baseVersionId or self.repairIntent):
+        if self.action != "repair" and (
+            self.sceneId or self.baseVersionId or self.repairIntent or self.repairScope
+        ):
             raise ValueError("Scene/base version identities belong to repair actions.")
         if self.action != "inspect" and self.subject is not None:
             raise ValueError("An inspection subject belongs to an inspection action.")
@@ -69,6 +85,8 @@ class PreflightScope(SmartRemakeApiModel):
     analysisScope: Literal["excerpt", "full_source"] | None = None
     sceneId: str | None = None
     baseVersionId: str | None = None
+    repairScope: Literal["provider_group"] | None = None
+    renderGroupId: str | None = None
 
 
 class PreflightCalls(SmartRemakeApiModel):

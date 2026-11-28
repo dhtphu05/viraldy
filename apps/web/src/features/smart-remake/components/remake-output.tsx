@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowLeft, Film, History, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import type {
     SmartRemakeProject,
@@ -20,6 +20,10 @@ import { RemakeClipThumbnail } from "./remake-clip-thumbnail";
 import { RemakeEmptyOutput } from "./remake-empty-output";
 import { getTimelinePublishError } from "../lib/remake-timeline";
 import { getTimelinePreviewScope } from "../lib/remake-preview";
+import { getRenderWindowFrames } from "../lib/remake-groups";
+import { getCurrentRemakeAssembly } from "../lib/remake-result-next-action";
+import { RemakeGenerationProgress } from "./remake-generation-progress";
+import { RemakeClipGroups } from "./remake-clip-groups";
 import { getRemakeSceneLabel } from "../lib/remake-scene-label";
 import type { RemakeRepairCandidate } from "../lib/remake-action";
 import "./remake-output.css";
@@ -39,6 +43,7 @@ export interface RemakeOutputProps {
     productUrl?: string | null;
     busy: boolean;
     onRepair(sceneId: string, draft: RepairIntent): Promise<string | null>;
+    onRepairGroup?(groupId: string, draft: RepairIntent): Promise<string | null>;
     onAccept(sceneId: string, versionId: string): Promise<boolean>;
     onRefresh(): void;
     onViewGenerationInspection?(reportId: string): void;
@@ -65,15 +70,30 @@ const primaryButton =
 const seconds = (value: number) => Number(value.toFixed(3));
 
 export function RemakeOutput(props: RemakeOutputProps) {
-    return <OutputSession key={props.project?.id ?? "pending"} {...props} />;
+    const presentation =
+        props.guided && props.project?.renderPlan?.groupingPolicy === "fixed_provider_windows"
+            ? "clips"
+            : "scenes";
+    return <OutputSession key={`${props.project?.id ?? "pending"}:${presentation}`} {...props} />;
 }
 function OutputSession(props: RemakeOutputProps) {
     const { project, result, busy } = props;
+    const providerWindowSeconds = seconds(getRenderWindowFrames(project?.renderPlan) / 24);
     const timelineMode = project?.schemaVersion === 2;
+    const wholeVideoReview = Boolean(props.guided && timelineMode && !result?.isDemo);
+    const reviewByClip =
+        wholeVideoReview && project?.renderPlan?.groupingPolicy === "fixed_provider_windows";
+    const advancedId = useId();
+    const advancedButton = useRef<HTMLButtonElement>(null);
+    const [advancedOpen, setAdvancedOpen] = useState(
+        Boolean(props.initialSceneId) && !reviewByClip,
+    );
     const [selectedSceneId, setSelectedSceneId] = useState<string | null>(
-        props.initialSceneId && project?.scenes.some((scene) => scene.id === props.initialSceneId)
+        !reviewByClip &&
+            props.initialSceneId &&
+            project?.scenes.some((scene) => scene.id === props.initialSceneId)
             ? props.initialSceneId
-            : timelineMode
+            : timelineMode && !props.guided
               ? (project.scenes[0]?.id ?? null)
               : null,
     );
@@ -93,6 +113,13 @@ function OutputSession(props: RemakeOutputProps) {
             return;
         consumedNavigation.current = next.requestId;
 
+        if (
+            wholeVideoReview &&
+            project.renderPlan?.groupingPolicy === "fixed_provider_windows" &&
+            project.renderPlan.groups?.some((group) => group.renderUnitIds.includes(next.sceneId))
+        )
+            return;
+        if (wholeVideoReview) setAdvancedOpen(true);
         setSelectedSceneId(target.id);
         setCandidateId(next.view === "compare" ? (next.versionId ?? null) : null);
         const base = target.versions.find((version) => version.id === target.activeVersionId);
@@ -103,7 +130,7 @@ function OutputSession(props: RemakeOutputProps) {
         );
         sessionElement.current?.focus({ preventScroll: true });
         sessionElement.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
-    }, [project, props.navigation]);
+    }, [project, props.navigation, wholeVideoReview]);
     const [localBusy, setLocalBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [trimPreview, setTrimPreview] = useState<
@@ -130,7 +157,9 @@ function OutputSession(props: RemakeOutputProps) {
     const timelineItem = project?.draftTimeline?.items.find(
         (item) => item.renderUnitId === scene?.id,
     );
-    const publishError = timelineMode ? getTimelinePublishError(project) : null;
+    const publishError = timelineMode
+        ? getTimelinePublishError(project, wholeVideoReview ? "whole_video" : undefined)
+        : null;
     const productImage = project?.productImageUrl || props.productUrl;
     const finalUrl = project
         ? project.finalVideoUrl || null
@@ -138,6 +167,25 @@ function OutputSession(props: RemakeOutputProps) {
           ? result.finalVideoUrl
           : null;
     const demo = Boolean(result?.isDemo);
+    const previewAssembly = wholeVideoReview ? getCurrentRemakeAssembly(project) : undefined;
+    const hasWholePreview = Boolean(
+        previewAssembly?.technicalCheck.status === "passed" && finalUrl,
+    );
+    const previewApproved = Boolean(
+        previewAssembly &&
+        project?.release?.approvals?.some(
+            (approval) =>
+                approval.id === project.release?.activeApprovalId &&
+                approval.status === "approved" &&
+                approval.assemblyId === previewAssembly.id &&
+                approval.mediaHash === previewAssembly.mediaHash &&
+                approval.manifestHash === previewAssembly.manifestHash &&
+                approval.constraintsHash === previewAssembly.constraintsHash &&
+                project.inspectionSummary?.currentReportIds?.includes(approval.reportId) &&
+                (!previewAssembly.expectationsHash ||
+                    approval.expectationsHash === previewAssembly.expectationsHash),
+        ),
+    );
     const fixtureOnly = !project && result?.provider === "fixture";
     const waitingForOutput = result?.status === "submitted" || result?.status === "running";
     const autoUpdating =
@@ -264,8 +312,8 @@ function OutputSession(props: RemakeOutputProps) {
                 </div>
                 {hasRenderFragments && (
                     <p className="text-xs leading-relaxed text-text-secondary">
-                        Một cảnh nguồn có thể được chia thành hai đoạn khi đi qua mốc 8 giây; số
-                        cảnh nguồn không đổi.
+                        Một cảnh nguồn có thể được chia thành hai đoạn khi đi qua mốc{" "}
+                        {providerWindowSeconds} giây; số cảnh nguồn không đổi.
                     </p>
                 )}
                 <Button
@@ -338,20 +386,96 @@ function OutputSession(props: RemakeOutputProps) {
                     )}
                 </header>
             )}
-            {timelineMode && (
+            {wholeVideoReview && project && (
+                <section
+                    aria-label="Bản xem trước toàn video"
+                    className="space-y-4 rounded-3xl bg-surface p-5 sm:p-6"
+                >
+                    <div>
+                        <h3 className="font-semibold text-text-primary">
+                            Bản xem trước toàn video
+                        </h3>
+                        <p className="mt-1 text-sm text-text-secondary">
+                            {project.targetDuration} giây
+                            {project.renderPlan?.audioRequired === true ? " · Có âm thanh" : ""} ·
+                            {previewApproved ? "Đã duyệt nội dung" : "Chưa duyệt xuất"}
+                        </p>
+                        <p className="mt-2 text-sm text-text-secondary">
+                            Xem toàn video trước, rồi chọn clip cần sửa bên dưới nếu cần thay đổi.
+                        </p>
+                    </div>
+                    {hasWholePreview ? (
+                        <RemakePlayer
+                            url={finalUrl!}
+                            scope={null}
+                            versionLabel={`Bản xem trước · ${project.targetDuration} giây`}
+                        />
+                    ) : (
+                        <div className="space-y-3">
+                            <p role="status" className="text-sm text-text-secondary">
+                                {project.preview?.status === "pending" ||
+                                project.preview?.status === "processing"
+                                    ? `Đang ghép bản xem trước ${project.targetDuration} giây từ các clip đã tạo.`
+                                    : project.preview?.status === "failed"
+                                      ? "Chưa ghép được bản xem trước. Có thể thử ghép lại từ các clip đã có."
+                                      : "Bản xem trước sẽ xuất hiện sau khi các clip được tạo và ghép xong."}
+                            </p>
+                            {!reviewByClip && (
+                                <RemakeGenerationProgress
+                                    project={project}
+                                    busy={processing}
+                                    onCheckStatus={props.onRefresh}
+                                    onViewInspection={props.onViewGenerationInspection}
+                                />
+                            )}
+                        </div>
+                    )}
+                </section>
+            )}
+            {wholeVideoReview && project && (
+                <RemakeClipGroups
+                    workspaceId={props.workspaceId}
+                    project={project}
+                    busy={pending}
+                    repairCandidate={props.repairCandidate}
+                    navigation={props.navigation}
+                    onRepairGroup={props.onRepairGroup}
+                    onAccept={props.onAccept}
+                    onRefresh={props.onRefresh}
+                />
+            )}
+            {wholeVideoReview && project && (
+                <Button
+                    ref={advancedButton}
+                    type="button"
+                    variant="ghost"
+                    className={quietButton}
+                    aria-expanded={advancedOpen}
+                    aria-controls={advancedOpen ? advancedId : undefined}
+                    onClick={() => {
+                        if (!advancedOpen && !selectedSceneId)
+                            setSelectedSceneId(project.scenes[0]?.id ?? null);
+                        setAdvancedOpen((current) => !current);
+                    }}
+                >
+                    Nâng cao · Cảnh nguồn và đoạn cắt
+                </Button>
+            )}
+            {timelineMode && (!wholeVideoReview || advancedOpen) && (
                 <div className="remake-output-selection flex flex-wrap items-center justify-between gap-4">
                     <div className="remake-output-selection__copy">
                         <div>
                             <p className="text-sm font-medium text-text-primary">
-                                Đã chọn{" "}
-                                {project.draftTimeline?.items.filter((item) => item.reviewed)
-                                    .length ?? 0}
-                                /{project.draftTimeline?.items.length ?? project.scenes.length} đoạn
+                                {wholeVideoReview
+                                    ? `${project.draftTimeline?.items.length ?? project.scenes.length} đoạn dựng`
+                                    : `Đã chọn ${project.draftTimeline?.items.filter((item) => item.reviewed).length ?? 0}/${project.draftTimeline?.items.length ?? project.scenes.length} đoạn`}
                                 · Video {project.targetDuration} giây
                             </p>
                             <p className="mt-1 text-xs text-text-secondary">
                                 {publishError ??
-                                    "Đủ các đoạn đã chọn. Sẵn sàng ghép preview để kiểm tra nội dung."}
+                                    (wholeVideoReview
+                                        ? "Tinh chỉnh đoạn cắt ở đây là tùy chọn. Bạn có thể xem và duyệt toàn video."
+                                        : "Đủ các đoạn đã chọn. Sẵn sàng ghép preview để kiểm tra nội dung.")}
                             </p>
                         </div>
                     </div>
@@ -417,598 +541,627 @@ function OutputSession(props: RemakeOutputProps) {
                             : "Đang xử lý. Bạn có thể tiếp tục xem video."}
                 </p>
             )}
-            {!finalUrl && !project ? (
-                <div className="rounded-3xl bg-surface p-8 text-center">
-                    {waitingForOutput && !fixtureOnly ? (
-                        <RemakeProcessingVisual compact />
-                    ) : (
-                        <Film
-                            className="mx-auto mb-3 size-8 text-text-tertiary"
-                            aria-hidden="true"
-                        />
-                    )}
-                    <h3 className="font-medium text-text-primary">
-                        {fixtureOnly
-                            ? "Đã kiểm tra yêu cầu · Chưa tạo video"
-                            : waitingForOutput
-                              ? "Đang tạo video"
-                              : "Chưa có video kết quả"}
-                    </h3>
-                    <p className="mt-2 text-sm text-text-secondary">
-                        {fixtureOnly
-                            ? "Chế độ kiểm tra không tạo video. Chuyển sang dịch vụ tạo video để có kết quả thật."
-                            : waitingForOutput
-                              ? "Yêu cầu đã được gửi. Video sẽ xuất hiện khi xử lý xong."
-                              : "Tạo video từ kịch bản để bắt đầu xem và sửa từng cảnh."}
-                    </p>
-                </div>
-            ) : (
-                <div
-                    className="remake-preview-tools remake-output-workspace"
-                    data-view={scene ? "scene" : "whole"}
-                >
-                    <div className="remake-output-canvas min-w-0">
-                        <div className="remake-output-canvas__heading flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <h3 className="font-medium text-text-primary">
-                                    {scene
-                                        ? `${sceneLabel} · ${seconds(scene.startSecond)}–${seconds(scene.startSecond + scene.durationSeconds)} giây`
-                                        : "Toàn video"}
-                                </h3>
-                            </div>
-                            {scene && (!timelineMode || finalUrl) && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="min-h-11"
-                                    disabled={pending && !timelineMode}
-                                    onClick={() => {
-                                        setSelectedSceneId(null);
-                                        props.onSceneChange?.(null);
-                                        setCandidateId(null);
-                                        setView("watch");
-                                    }}
-                                >
-                                    <ArrowLeft aria-hidden="true" />{" "}
-                                    {timelineMode ? "Xem video đã xuất" : "Xem toàn video"}
-                                </Button>
-                            )}
-                            {demo && (
-                                <span className="rounded-full bg-surface-soft px-3 py-1 text-xs text-text-secondary">
-                                    Video minh họa
-                                </span>
-                            )}
-                        </div>
-                        <div className="remake-output-stage">
-                            {scene ? (
-                                active ? (
-                                    <RemakePlayer
-                                        url={active.videoUrl}
-                                        compareUrl={
-                                            view === "compare" ? candidate?.videoUrl : undefined
-                                        }
-                                        compareScope={
-                                            timelineMode && candidate
-                                                ? getTimelinePreviewScope(
-                                                      timelineItem,
-                                                      candidate,
-                                                      undefined,
-                                                      timelineItem?.targetDurationFrames ??
-                                                          scene.durationSeconds * 24,
-                                                  )
-                                                : undefined
-                                        }
-                                        scope={
-                                            timelineMode
-                                                ? getTimelinePreviewScope(
-                                                      timelineItem,
-                                                      active,
-                                                      view !== "compare" &&
-                                                          trimPreview?.sceneId === scene.id &&
-                                                          trimPreview.versionId === active.id
-                                                          ? trimPreview.scope
-                                                          : undefined,
-                                                      timelineItem?.targetDurationFrames ??
-                                                          scene.durationSeconds * 24,
-                                                  )
-                                                : null
-                                        }
-                                        versionLabel={
-                                            timelineMode
-                                                ? `Clip AI · 8 giây · ${sceneLabel}`
-                                                : "Cảnh đang dùng"
-                                        }
-                                        onMetadata={
-                                            timelineMode
-                                                ? (duration) =>
-                                                      setMeasuredFrames((current) => ({
-                                                          ...current,
-                                                          [active.id]: Math.floor(
-                                                              duration * 24 + 0.01,
-                                                          ),
-                                                      }))
-                                                : undefined
-                                        }
-                                        compareLabel={
-                                            candidate?.usedByRevision ? "Bản trước" : "Bản mới"
-                                        }
-                                    />
-                                ) : view === "compare" && candidate?.videoUrl ? (
-                                    <RemakePlayer
-                                        url={candidate.videoUrl}
-                                        scope={
-                                            timelineMode
-                                                ? getTimelinePreviewScope(
-                                                      timelineItem,
-                                                      candidate,
-                                                      undefined,
-                                                      timelineItem?.targetDurationFrames ??
-                                                          scene.durationSeconds * 24,
-                                                  )
-                                                : null
-                                        }
-                                        versionLabel="Bản mới · chưa có bản đang dùng"
-                                    />
-                                ) : (
-                                    <p className="rounded-xl bg-surface-soft p-5 text-sm text-text-secondary">
-                                        Cảnh này chưa có video đang dùng.
-                                    </p>
-                                )
-                            ) : finalUrl ? (
-                                <RemakePlayer
-                                    url={finalUrl}
-                                    scope={null}
-                                    versionLabel={
-                                        timelineMode
-                                            ? "Video đã xuất · Bản đã ghép"
-                                            : "Toàn video đang dùng"
-                                    }
-                                />
-                            ) : (
-                                <div className="space-y-3 rounded-xl bg-surface-soft p-5 text-sm text-text-secondary">
-                                    {autoUpdating && !canRecover && (
-                                        <RemakeProcessingVisual compact />
-                                    )}
-                                    <p>
-                                        {canRecover
-                                            ? "Các cảnh đã sẵn sàng. Hãy ghép lại để có toàn video."
-                                            : autoUpdating
-                                              ? "Đang tạo video từ kịch bản đã duyệt. Các cảnh hoàn tất sẽ được giữ trong dự án này."
-                                              : "Cần hoàn thiện cảnh trước khi có toàn video. Chọn cảnh bên dưới để xem và tạo lại."}
-                                    </p>
-                                    {canRecover && (
-                                        <div className="space-y-2">
-                                            <Button
-                                                type="button"
-                                                className={primaryButton}
-                                                disabled={pending}
-                                                onClick={() => void recoverComposition()}
-                                            >
-                                                <RefreshCw aria-hidden="true" /> Ghép lại video
-                                            </Button>
-                                            <p className="text-xs">
-                                                Dùng các clip đã có. Không tạo lại cảnh bằng AI.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                        {timelineMode && project?.draftTimeline && (
-                            <div className="remake-output-timeline space-y-3">
-                                <div className="remake-output-timeline__heading">
-                                    <h3 className="text-sm font-medium text-text-primary">
-                                        Các cảnh sẽ ghép · {project.targetDuration} giây
+            {(!wholeVideoReview || advancedOpen) &&
+                (!finalUrl && !project ? (
+                    <div className="rounded-3xl bg-surface p-8 text-center">
+                        {waitingForOutput && !fixtureOnly ? (
+                            <RemakeProcessingVisual compact />
+                        ) : (
+                            <Film
+                                className="mx-auto mb-3 size-8 text-text-tertiary"
+                                aria-hidden="true"
+                            />
+                        )}
+                        <h3 className="font-medium text-text-primary">
+                            {fixtureOnly
+                                ? "Đã kiểm tra yêu cầu · Chưa tạo video"
+                                : waitingForOutput
+                                  ? "Đang tạo video"
+                                  : "Chưa có video kết quả"}
+                        </h3>
+                        <p className="mt-2 text-sm text-text-secondary">
+                            {fixtureOnly
+                                ? "Chế độ kiểm tra không tạo video. Chuyển sang dịch vụ tạo video để có kết quả thật."
+                                : waitingForOutput
+                                  ? "Yêu cầu đã được gửi. Video sẽ xuất hiện khi xử lý xong."
+                                  : "Tạo video từ kịch bản để bắt đầu xem và sửa từng cảnh."}
+                        </p>
+                    </div>
+                ) : (
+                    <div
+                        id={wholeVideoReview ? advancedId : undefined}
+                        className="remake-preview-tools remake-output-workspace"
+                        data-view={scene ? "scene" : "whole"}
+                    >
+                        <div className="remake-output-canvas min-w-0">
+                            <div className="remake-output-canvas__heading flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="font-medium text-text-primary">
+                                        {scene
+                                            ? `${sceneLabel} · ${seconds(scene.startSecond)}–${seconds(scene.startSecond + scene.durationSeconds)} giây`
+                                            : "Toàn video"}
                                     </h3>
-                                    <span className="remake-output-timeline__legend">
-                                        <i aria-hidden="true" /> Cảnh đang xem
-                                    </span>
                                 </div>
-                                <div className="remake-filmstrip-scroll">
-                                    <div
-                                        className="remake-filmstrip"
-                                        style={{
-                                            minWidth: Math.max(
-                                                280,
-                                                project.draftTimeline.items.length * 100,
-                                            ),
+                                {scene && (!timelineMode || finalUrl) && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="min-h-11"
+                                        disabled={pending && !timelineMode}
+                                        onClick={() => {
+                                            if (wholeVideoReview) {
+                                                setAdvancedOpen(false);
+                                                advancedButton.current?.focus();
+                                            }
+                                            setSelectedSceneId(null);
+                                            props.onSceneChange?.(null);
+                                            setCandidateId(null);
+                                            setView("watch");
                                         }}
                                     >
-                                        {project.draftTimeline.items.map((item, index) => {
-                                            const unit = project.scenes.find(
-                                                (value) => value.id === item.renderUnitId,
+                                        <ArrowLeft aria-hidden="true" />{" "}
+                                        {wholeVideoReview
+                                            ? "Về bản xem trước"
+                                            : timelineMode
+                                              ? "Xem video đã xuất"
+                                              : "Xem toàn video"}
+                                    </Button>
+                                )}
+                                {demo && (
+                                    <span className="rounded-full bg-surface-soft px-3 py-1 text-xs text-text-secondary">
+                                        Video minh họa
+                                    </span>
+                                )}
+                            </div>
+                            <div className="remake-output-stage">
+                                {scene ? (
+                                    active ? (
+                                        <RemakePlayer
+                                            url={active.videoUrl}
+                                            compareUrl={
+                                                view === "compare" ? candidate?.videoUrl : undefined
+                                            }
+                                            compareScope={
+                                                timelineMode && candidate
+                                                    ? getTimelinePreviewScope(
+                                                          timelineItem,
+                                                          candidate,
+                                                          undefined,
+                                                          timelineItem?.targetDurationFrames ??
+                                                              scene.durationSeconds * 24,
+                                                      )
+                                                    : undefined
+                                            }
+                                            scope={
+                                                timelineMode
+                                                    ? getTimelinePreviewScope(
+                                                          timelineItem,
+                                                          active,
+                                                          view !== "compare" &&
+                                                              trimPreview?.sceneId === scene.id &&
+                                                              trimPreview.versionId === active.id
+                                                              ? trimPreview.scope
+                                                              : undefined,
+                                                          timelineItem?.targetDurationFrames ??
+                                                              scene.durationSeconds * 24,
+                                                      )
+                                                    : null
+                                            }
+                                            versionLabel={
+                                                timelineMode
+                                                    ? `Clip AI · ${seconds((active.frameCount ?? active.technicalCheck.frameCount ?? active.rawDurationFrames ?? scene.rawDurationFrames ?? 192) / 24)} giây · ${sceneLabel}`
+                                                    : "Cảnh đang dùng"
+                                            }
+                                            onMetadata={
+                                                timelineMode
+                                                    ? (duration) =>
+                                                          setMeasuredFrames((current) => ({
+                                                              ...current,
+                                                              [active.id]: Math.floor(
+                                                                  duration * 24 + 0.01,
+                                                              ),
+                                                          }))
+                                                    : undefined
+                                            }
+                                            compareLabel={
+                                                candidate?.usedByRevision ? "Bản trước" : "Bản mới"
+                                            }
+                                        />
+                                    ) : view === "compare" && candidate?.videoUrl ? (
+                                        <RemakePlayer
+                                            url={candidate.videoUrl}
+                                            scope={
+                                                timelineMode
+                                                    ? getTimelinePreviewScope(
+                                                          timelineItem,
+                                                          candidate,
+                                                          undefined,
+                                                          timelineItem?.targetDurationFrames ??
+                                                              scene.durationSeconds * 24,
+                                                      )
+                                                    : null
+                                            }
+                                            versionLabel="Bản mới · chưa có bản đang dùng"
+                                        />
+                                    ) : (
+                                        <p className="rounded-xl bg-surface-soft p-5 text-sm text-text-secondary">
+                                            Cảnh này chưa có video đang dùng.
+                                        </p>
+                                    )
+                                ) : finalUrl ? (
+                                    <RemakePlayer
+                                        url={finalUrl}
+                                        scope={null}
+                                        versionLabel={
+                                            timelineMode
+                                                ? "Video đã xuất · Bản đã ghép"
+                                                : "Toàn video đang dùng"
+                                        }
+                                    />
+                                ) : (
+                                    <div className="space-y-3 rounded-xl bg-surface-soft p-5 text-sm text-text-secondary">
+                                        {autoUpdating && !canRecover && (
+                                            <RemakeProcessingVisual compact />
+                                        )}
+                                        <p>
+                                            {canRecover
+                                                ? "Các cảnh đã sẵn sàng. Hãy ghép lại để có toàn video."
+                                                : autoUpdating
+                                                  ? "Đang tạo video từ kịch bản đã duyệt. Các cảnh hoàn tất sẽ được giữ trong dự án này."
+                                                  : "Cần hoàn thiện cảnh trước khi có toàn video. Chọn cảnh bên dưới để xem và tạo lại."}
+                                        </p>
+                                        {canRecover && (
+                                            <div className="space-y-2">
+                                                <Button
+                                                    type="button"
+                                                    className={primaryButton}
+                                                    disabled={pending}
+                                                    onClick={() => void recoverComposition()}
+                                                >
+                                                    <RefreshCw aria-hidden="true" /> Ghép lại video
+                                                </Button>
+                                                <p className="text-xs">
+                                                    Dùng các clip đã có. Không tạo lại cảnh bằng AI.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            {timelineMode && project?.draftTimeline && (
+                                <div className="remake-output-timeline space-y-3">
+                                    <div className="remake-output-timeline__heading">
+                                        <h3 className="text-sm font-medium text-text-primary">
+                                            Các cảnh sẽ ghép · {project.targetDuration} giây
+                                        </h3>
+                                        <span className="remake-output-timeline__legend">
+                                            <i aria-hidden="true" /> Cảnh đang xem
+                                        </span>
+                                    </div>
+                                    <div className="remake-filmstrip-scroll">
+                                        <div
+                                            className="remake-filmstrip"
+                                            style={{
+                                                minWidth: Math.max(
+                                                    280,
+                                                    project.draftTimeline.items.length * 100,
+                                                ),
+                                            }}
+                                        >
+                                            {project.draftTimeline.items.map((item, index) => {
+                                                const unit = project.scenes.find(
+                                                    (value) => value.id === item.renderUnitId,
+                                                );
+                                                const timelineClip = unit?.versions.find(
+                                                    (value) => value.id === unit.activeVersionId,
+                                                );
+                                                const hasClip = Boolean(timelineClip);
+                                                return (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        aria-pressed={
+                                                            scene?.id === item.renderUnitId
+                                                        }
+                                                        title={`${getRemakeSceneLabel(project, item.renderUnitId, index)} · ${Number((item.targetDurationFrames / 24).toFixed(3))} giây · ${item.reviewed ? "Đã chọn" : hasClip ? "Chưa chọn" : "Chờ clip"}`}
+                                                        className={cn(
+                                                            "remake-filmstrip-scene",
+                                                            scene?.id === item.renderUnitId &&
+                                                                "is-selected",
+                                                        )}
+                                                        style={{
+                                                            flexBasis: `${(item.targetDurationFrames / project.draftTimeline!.totalFrames) * 100}%`,
+                                                        }}
+                                                        onClick={() => {
+                                                            setSelectedSceneId(item.renderUnitId);
+                                                            props.onSceneChange?.(
+                                                                item.renderUnitId,
+                                                            );
+                                                            setCandidateId(null);
+                                                            setView("watch");
+                                                            setTrimPreview(undefined);
+                                                        }}
+                                                    >
+                                                        <span
+                                                            className="remake-scene-grain"
+                                                            aria-hidden="true"
+                                                        >
+                                                            {timelineClip?.videoUrl ? (
+                                                                <RemakeClipThumbnail
+                                                                    key={timelineClip.videoUrl}
+                                                                    src={timelineClip.videoUrl}
+                                                                />
+                                                            ) : (
+                                                                <Film className="size-5 opacity-40" />
+                                                            )}
+                                                        </span>
+                                                        <strong>
+                                                            {getRemakeSceneLabel(
+                                                                project,
+                                                                item.renderUnitId,
+                                                                index,
+                                                            )}
+                                                        </strong>
+                                                        <span>
+                                                            {Number(
+                                                                (
+                                                                    item.targetDurationFrames / 24
+                                                                ).toFixed(3),
+                                                            )}{" "}
+                                                            giây ·{" "}
+                                                            {item.reviewed
+                                                                ? "Đã chọn"
+                                                                : hasClip
+                                                                  ? "Chưa chọn"
+                                                                  : "Chờ clip"}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="mt-2 flex justify-between text-xs text-text-tertiary">
+                                            <span>0 giây</span>
+                                            <span>{project.targetDuration} giây</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-text-secondary">
+                                        Bấm một cảnh để xem và chọn đoạn dùng. Tua video bằng thanh
+                                        trong trình phát.
+                                    </p>
+                                </div>
+                            )}
+                            {project && !demo && !timelineMode && (
+                                <div className="remake-output-timeline space-y-3">
+                                    <p className="text-sm font-medium text-text-primary">
+                                        Chọn cảnh để xem hoặc sửa
+                                    </p>
+                                    <div
+                                        className="flex gap-3 overflow-x-auto pb-2"
+                                        aria-label="Danh sách cảnh"
+                                    >
+                                        {project.scenes.map((item) => {
+                                            const clip = item.versions.find(
+                                                (version) => version.id === item.activeVersionId,
                                             );
-                                            const timelineClip = unit?.versions.find(
-                                                (value) => value.id === unit.activeVersionId,
+                                            const unseen = item.versions.filter(
+                                                (version) =>
+                                                    version.id !== item.activeVersionId &&
+                                                    !version.usedByRevision,
                                             );
-                                            const hasClip = Boolean(timelineClip);
                                             return (
                                                 <button
-                                                    key={item.id}
                                                     type="button"
-                                                    aria-pressed={scene?.id === item.renderUnitId}
-                                                    title={`${getRemakeSceneLabel(project, item.renderUnitId, index)} · ${Number((item.targetDurationFrames / 24).toFixed(3))} giây · ${item.reviewed ? "Đã chọn" : hasClip ? "Chưa chọn" : "Chờ clip"}`}
+                                                    key={item.id}
+                                                    aria-pressed={item.id === scene?.id}
+                                                    disabled={pending}
                                                     className={cn(
-                                                        "remake-filmstrip-scene",
-                                                        scene?.id === item.renderUnitId &&
-                                                            "is-selected",
+                                                        "w-36 shrink-0 rounded-2xl bg-surface-soft p-2 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+                                                        item.id === scene?.id &&
+                                                            "bg-primary-soft ring-2 ring-primary/40",
                                                     )}
-                                                    style={{
-                                                        flexBasis: `${(item.targetDurationFrames / project.draftTimeline!.totalFrames) * 100}%`,
-                                                    }}
                                                     onClick={() => {
-                                                        setSelectedSceneId(item.renderUnitId);
-                                                        props.onSceneChange?.(item.renderUnitId);
+                                                        setSelectedSceneId(item.id);
+                                                        props.onSceneChange?.(item.id);
                                                         setCandidateId(null);
                                                         setView("watch");
-                                                        setTrimPreview(undefined);
+                                                        setMessage(null);
                                                     }}
                                                 >
-                                                    <span
-                                                        className="remake-scene-grain"
-                                                        aria-hidden="true"
-                                                    >
-                                                        {timelineClip?.videoUrl ? (
+                                                    <div className="flex h-24 items-center justify-center overflow-hidden rounded-xl bg-black/90">
+                                                        {clip?.videoUrl ? (
                                                             <RemakeClipThumbnail
-                                                                key={timelineClip.videoUrl}
-                                                                src={timelineClip.videoUrl}
+                                                                key={clip.videoUrl}
+                                                                src={clip.videoUrl}
+                                                                label={`Hình xem trước ${getRemakeSceneLabel(project, item.id, item.index).toLowerCase()}`}
                                                             />
                                                         ) : (
-                                                            <Film className="size-5 opacity-40" />
+                                                            <Film
+                                                                className="size-6 text-white/60"
+                                                                aria-hidden="true"
+                                                            />
                                                         )}
-                                                    </span>
-                                                    <strong>
+                                                    </div>
+                                                    <span className="mt-2 block text-sm font-medium text-text-primary">
                                                         {getRemakeSceneLabel(
                                                             project,
-                                                            item.renderUnitId,
-                                                            index,
+                                                            item.id,
+                                                            item.index,
                                                         )}
-                                                    </strong>
-                                                    <span>
-                                                        {Number(
-                                                            (
-                                                                item.targetDurationFrames / 24
-                                                            ).toFixed(3),
+                                                    </span>
+                                                    {unseen.length > 0 && (
+                                                        <span className="mt-1 block text-xs font-medium text-primary">
+                                                            {unseen.length} bản mới chờ xem
+                                                        </span>
+                                                    )}
+                                                    <span className="block text-xs text-text-secondary">
+                                                        {seconds(item.startSecond)}–
+                                                        {seconds(
+                                                            item.startSecond + item.durationSeconds,
                                                         )}{" "}
-                                                        giây ·{" "}
-                                                        {item.reviewed
-                                                            ? "Đã chọn"
-                                                            : hasClip
-                                                              ? "Chưa chọn"
-                                                              : "Chờ clip"}
+                                                        giây
                                                     </span>
                                                 </button>
                                             );
                                         })}
                                     </div>
-                                    <div className="mt-2 flex justify-between text-xs text-text-tertiary">
-                                        <span>0 giây</span>
-                                        <span>{project.targetDuration} giây</span>
-                                    </div>
                                 </div>
-                                <p className="text-xs text-text-secondary">
-                                    Bấm một cảnh để xem và chọn đoạn dùng. Tua video bằng thanh
-                                    trong trình phát.
-                                </p>
-                            </div>
-                        )}
-                        {project && !demo && !timelineMode && (
-                            <div className="remake-output-timeline space-y-3">
-                                <p className="text-sm font-medium text-text-primary">
-                                    Chọn cảnh để xem hoặc sửa
-                                </p>
-                                <div
-                                    className="flex gap-3 overflow-x-auto pb-2"
-                                    aria-label="Danh sách cảnh"
-                                >
-                                    {project.scenes.map((item) => {
-                                        const clip = item.versions.find(
-                                            (version) => version.id === item.activeVersionId,
-                                        );
-                                        const unseen = item.versions.filter(
-                                            (version) =>
-                                                version.id !== item.activeVersionId &&
-                                                !version.usedByRevision,
-                                        );
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={item.id}
-                                                aria-pressed={item.id === scene?.id}
-                                                disabled={pending}
-                                                className={cn(
-                                                    "w-36 shrink-0 rounded-2xl bg-surface-soft p-2 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-                                                    item.id === scene?.id &&
-                                                        "bg-primary-soft ring-2 ring-primary/40",
-                                                )}
-                                                onClick={() => {
-                                                    setSelectedSceneId(item.id);
-                                                    props.onSceneChange?.(item.id);
-                                                    setCandidateId(null);
-                                                    setView("watch");
-                                                    setMessage(null);
-                                                }}
-                                            >
-                                                <div className="flex h-24 items-center justify-center overflow-hidden rounded-xl bg-black/90">
-                                                    {clip?.videoUrl ? (
-                                                        <RemakeClipThumbnail
-                                                            key={clip.videoUrl}
-                                                            src={clip.videoUrl}
-                                                            label={`Hình xem trước ${getRemakeSceneLabel(project, item.id, item.index).toLowerCase()}`}
-                                                        />
-                                                    ) : (
-                                                        <Film
-                                                            className="size-6 text-white/60"
-                                                            aria-hidden="true"
-                                                        />
-                                                    )}
-                                                </div>
-                                                <span className="mt-2 block text-sm font-medium text-text-primary">
-                                                    {getRemakeSceneLabel(
-                                                        project,
-                                                        item.id,
-                                                        item.index,
-                                                    )}
-                                                </span>
-                                                {unseen.length > 0 && (
-                                                    <span className="mt-1 block text-xs font-medium text-primary">
-                                                        {unseen.length} bản mới chờ xem
-                                                    </span>
-                                                )}
-                                                <span className="block text-xs text-text-secondary">
-                                                    {seconds(item.startSecond)}–
-                                                    {seconds(
-                                                        item.startSecond + item.durationSeconds,
-                                                    )}{" "}
-                                                    giây
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <aside
-                        className="remake-output-dock min-w-0"
-                        aria-label="Hoàn thiện cảnh đang xem"
-                    >
-                        {timelineMode && timelineItem && active && props.onTimelineSave && (
-                            <RemakeTrimTools
-                                key={`${timelineItem.id}:${active.id}:${timelineItem.inFrame}:${timelineItem.reviewed}`}
-                                item={timelineItem}
-                                versionId={active.id}
-                                sharedClip={Boolean(
-                                    active.renderGroupId &&
-                                    project?.renderPlan?.groups?.some(
-                                        (group) =>
-                                            group.id === active.renderGroupId &&
-                                            group.renderUnitIds.length > 1,
-                                    ),
-                                )}
-                                rawFrameCount={
-                                    active.frameCount ??
-                                    active.technicalCheck.frameCount ??
-                                    measuredFrames[active.id] ??
-                                    null
-                                }
-                                busy={pending || Boolean(props.savingTimeline)}
-                                onSave={props.onTimelineSave}
-                                onPreview={(scope) =>
-                                    setTrimPreview({
-                                        sceneId: scene!.id,
-                                        versionId: active.id,
-                                        scope,
-                                    })
-                                }
-                            />
-                        )}
-                        <div className="remake-output-side-panels">
-                            {productImage && (
-                                <div className="remake-output-reference flex items-center gap-4">
-                                    <div className="remake-output-reference__image">
-                                        <RemakeImagePreview
-                                            src={productImage}
-                                            alt="Ảnh sản phẩm dùng khi tạo video"
-                                            enlarge
-                                        />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-medium text-text-primary">
-                                            Sản phẩm tham chiếu
-                                        </h3>
-                                        <p className="mt-1 text-xs text-text-secondary">
-                                            Đối chiếu hình dáng, màu sắc và bao bì khi duyệt cảnh.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                            {scene && project && !demo && usableBase ? (
-                                <div className="remake-output-scene-tools space-y-5">
-                                    <div
-                                        className="remake-output-scene-tabs grid min-w-0 auto-rows-fr grid-cols-2 gap-2"
-                                        role="group"
-                                        aria-label="Công cụ cảnh"
-                                    >
-                                        {(
-                                            [
-                                                ["watch", "Xem"],
-                                                ["repair", "Sửa cảnh"],
-                                                ["compare", "So sánh"],
-                                                ["history", "Lịch sử"],
-                                            ] as const
-                                        ).map(([value, label]) => (
-                                            <Button
-                                                key={value}
-                                                type="button"
-                                                variant="ghost"
-                                                className={cn(
-                                                    "min-h-11 px-3",
-                                                    view === value &&
-                                                        "bg-primary-soft text-primary",
-                                                )}
-                                                aria-pressed={view === value}
-                                                disabled={value === "repair" && !usableBase}
-                                                onClick={() => setView(value)}
-                                            >
-                                                {label}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                    {view === "watch" && !props.guided && (
-                                        <div className="space-y-4">
-                                            <div>
-                                                <h3 className="font-medium text-text-primary">
-                                                    Cảnh này đã đạt chưa?
-                                                </h3>
-                                                <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                                                    Kiểm tra sản phẩm, chuyển động và nội dung. Nếu
-                                                    chưa đạt, chọn vấn đề cần sửa để AI tạo một bản
-                                                    mới cho riêng cảnh này.
-                                                </p>
-                                            </div>
-                                            <Button
-                                                type="button"
-                                                variant={props.guided ? "outline" : "default"}
-                                                className={cn(
-                                                    props.guided ? quietButton : primaryButton,
-                                                    "w-full",
-                                                )}
-                                                disabled={pending}
-                                                onClick={() => setView("repair")}
-                                            >
-                                                <Sparkles aria-hidden="true" /> Sửa và tạo lại cảnh
-                                            </Button>
-                                            <p className="text-xs leading-relaxed text-text-secondary">
-                                                Cảnh khác giữ nguyên. Bản mới chỉ thay thế sau khi
-                                                bạn bấm áp dụng.
-                                            </p>
-                                        </div>
-                                    )}
-                                    {view === "repair" && usableBase && (
-                                        <RemakeRepairForm
-                                            key={`${props.workspaceId}:${project.id}:${scene.id}:${scene.activeVersionId ?? "initial"}`}
-                                            workspaceId={props.workspaceId}
-                                            projectId={project.id}
-                                            scene={scene}
-                                            sceneLabel={sceneLabel ?? undefined}
-                                            active={active}
-                                            busy={pending}
-                                            onRepair={repair}
-                                            draft={
-                                                props.repairDrafts?.[
-                                                    `${scene.id}:${scene.activeVersionId ?? "initial"}`
-                                                ]
-                                            }
-                                            onDraftChange={(draft) =>
-                                                props.onRepairDraftChange?.(
-                                                    scene.id,
-                                                    scene.activeVersionId,
-                                                    draft,
-                                                )
-                                            }
-                                            saveStatus={props.repairDraftSaveStatus}
-                                            failureReason={props.repairFailures?.[scene.id]}
-                                            legacyDraftAvailable={props.legacyRepairDraftAvailable}
-                                            onImportLegacyDraft={
-                                                props.onImportLegacyRepairDraft
-                                                    ? () =>
-                                                          props.onImportLegacyRepairDraft?.(
-                                                              scene.id,
-                                                              scene.activeVersionId,
-                                                          )
-                                                    : undefined
-                                            }
-                                        />
-                                    )}
-                                    {view === "compare" &&
-                                        (candidate ? (
-                                            <RemakeVersionReview
-                                                project={project}
-                                                sceneId={scene.id}
-                                                version={candidate}
-                                                busy={pending}
-                                                onAccept={accept}
-                                            />
-                                        ) : (
-                                            <div className="space-y-3">
-                                                <p className="text-sm text-text-secondary">
-                                                    Chọn một phiên bản trong lịch sử hoặc tạo lại
-                                                    cảnh để so sánh.
-                                                </p>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    className={quietButton}
-                                                    onClick={() => setView("history")}
-                                                >
-                                                    <History aria-hidden="true" /> Mở lịch sử
-                                                </Button>
-                                            </div>
-                                        ))}
-                                    {view === "history" && (
-                                        <div className="space-y-3">
-                                            <h3 className="font-medium text-text-primary">
-                                                Phiên bản {sceneLabel?.toLowerCase()}
-                                            </h3>
-                                            {[...scene.versions].reverse().map((version, index) => (
-                                                <div
-                                                    key={version.id}
-                                                    className="rounded-2xl bg-surface-soft p-4"
-                                                >
-                                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                                        <span className="text-sm font-medium text-text-primary">
-                                                            Phiên bản{" "}
-                                                            {scene.versions.length - index}
-                                                        </span>
-                                                        <span className="text-xs text-text-secondary">
-                                                            {version.id === scene.activeVersionId
-                                                                ? "Đang dùng"
-                                                                : version.usedByRevision
-                                                                  ? "Đã dùng trước đây"
-                                                                  : "Chưa áp dụng"}
-                                                        </span>
-                                                    </div>
-                                                    <p className="mt-2 line-clamp-2 text-xs text-text-secondary">
-                                                        {version.videoPrompt || version.prompt}
-                                                    </p>
-                                                    {version.id !== scene.activeVersionId && (
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            className="mt-2 min-h-11 w-full"
-                                                            disabled={pending}
-                                                            onClick={() => {
-                                                                setCandidateId(version.id);
-                                                                setView("compare");
-                                                            }}
-                                                        >
-                                                            So sánh
-                                                            {version.usedByRevision
-                                                                ? " và khôi phục"
-                                                                : " bản này"}
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                !demo && (
-                                    <div className="rounded-3xl bg-surface p-5 text-sm leading-relaxed text-text-secondary">
-                                        {scene && !usableBase
-                                            ? "Cảnh này chưa có clip dùng được để sửa. Hoàn tất lượt tạo video trước."
-                                            : project
-                                              ? "Chọn một cảnh bên dưới video để xem yêu cầu, tạo bản mới hoặc mở lịch sử."
-                                              : "Video này chưa có dữ liệu cảnh để sửa riêng. Bạn vẫn có thể xem và tải toàn video."}
-                                    </div>
-                                )
                             )}
                         </div>
-                    </aside>
-                </div>
-            )}
+                        <aside
+                            className="remake-output-dock min-w-0"
+                            aria-label="Hoàn thiện cảnh đang xem"
+                        >
+                            {timelineMode && timelineItem && active && props.onTimelineSave && (
+                                <RemakeTrimTools
+                                    key={`${timelineItem.id}:${active.id}:${timelineItem.inFrame}:${timelineItem.reviewed}`}
+                                    item={timelineItem}
+                                    versionId={active.id}
+                                    sharedClip={Boolean(
+                                        active.renderGroupId &&
+                                        project?.renderPlan?.groups?.some(
+                                            (group) =>
+                                                group.id === active.renderGroupId &&
+                                                group.renderUnitIds.length > 1,
+                                        ),
+                                    )}
+                                    rawFrameCount={
+                                        active.frameCount ??
+                                        active.technicalCheck.frameCount ??
+                                        measuredFrames[active.id] ??
+                                        null
+                                    }
+                                    plannedFrameCount={
+                                        active.rawDurationFrames ??
+                                        scene?.rawDurationFrames ??
+                                        getRenderWindowFrames(project?.renderPlan)
+                                    }
+                                    suggestedInFrame={active.suggestedInFrame}
+                                    busy={pending || Boolean(props.savingTimeline)}
+                                    onSave={props.onTimelineSave}
+                                    onPreview={(scope) =>
+                                        setTrimPreview({
+                                            sceneId: scene!.id,
+                                            versionId: active.id,
+                                            scope,
+                                        })
+                                    }
+                                />
+                            )}
+                            <div className="remake-output-side-panels">
+                                {productImage && (
+                                    <div className="remake-output-reference flex items-center gap-4">
+                                        <div className="remake-output-reference__image">
+                                            <RemakeImagePreview
+                                                src={productImage}
+                                                alt="Ảnh sản phẩm dùng khi tạo video"
+                                                enlarge
+                                            />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-medium text-text-primary">
+                                                Sản phẩm tham chiếu
+                                            </h3>
+                                            <p className="mt-1 text-xs text-text-secondary">
+                                                Đối chiếu hình dáng, màu sắc và bao bì khi duyệt
+                                                cảnh.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                                {scene && project && !demo && usableBase ? (
+                                    <div className="remake-output-scene-tools space-y-5">
+                                        <div
+                                            className="remake-output-scene-tabs grid min-w-0 auto-rows-fr grid-cols-2 gap-2"
+                                            role="group"
+                                            aria-label="Công cụ cảnh"
+                                        >
+                                            {(
+                                                [
+                                                    ["watch", "Xem"],
+                                                    ["repair", "Sửa cảnh"],
+                                                    ["compare", "So sánh"],
+                                                    ["history", "Lịch sử"],
+                                                ] as const
+                                            ).map(([value, label]) => (
+                                                <Button
+                                                    key={value}
+                                                    type="button"
+                                                    variant="ghost"
+                                                    className={cn(
+                                                        "min-h-11 px-3",
+                                                        view === value &&
+                                                            "bg-primary-soft text-primary",
+                                                    )}
+                                                    aria-pressed={view === value}
+                                                    disabled={value === "repair" && !usableBase}
+                                                    onClick={() => setView(value)}
+                                                >
+                                                    {label}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                        {view === "watch" && !props.guided && (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <h3 className="font-medium text-text-primary">
+                                                        Cảnh này đã đạt chưa?
+                                                    </h3>
+                                                    <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                                                        Kiểm tra sản phẩm, chuyển động và nội dung.
+                                                        Nếu chưa đạt, chọn vấn đề cần sửa để AI tạo
+                                                        một bản mới cho riêng cảnh này.
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant={props.guided ? "outline" : "default"}
+                                                    className={cn(
+                                                        props.guided ? quietButton : primaryButton,
+                                                        "w-full",
+                                                    )}
+                                                    disabled={pending}
+                                                    onClick={() => setView("repair")}
+                                                >
+                                                    <Sparkles aria-hidden="true" /> Sửa và tạo lại
+                                                    cảnh
+                                                </Button>
+                                                <p className="text-xs leading-relaxed text-text-secondary">
+                                                    Cảnh khác giữ nguyên. Bản mới chỉ thay thế sau
+                                                    khi bạn bấm áp dụng.
+                                                </p>
+                                            </div>
+                                        )}
+                                        {view === "repair" && usableBase && (
+                                            <RemakeRepairForm
+                                                key={`${props.workspaceId}:${project.id}:${scene.id}:${scene.activeVersionId ?? "initial"}`}
+                                                workspaceId={props.workspaceId}
+                                                projectId={project.id}
+                                                scene={scene}
+                                                sceneLabel={sceneLabel ?? undefined}
+                                                active={active}
+                                                busy={pending}
+                                                onRepair={repair}
+                                                draft={
+                                                    props.repairDrafts?.[
+                                                        `${scene.id}:${scene.activeVersionId ?? "initial"}`
+                                                    ]
+                                                }
+                                                onDraftChange={(draft) =>
+                                                    props.onRepairDraftChange?.(
+                                                        scene.id,
+                                                        scene.activeVersionId,
+                                                        draft,
+                                                    )
+                                                }
+                                                saveStatus={props.repairDraftSaveStatus}
+                                                failureReason={props.repairFailures?.[scene.id]}
+                                                legacyDraftAvailable={
+                                                    props.legacyRepairDraftAvailable
+                                                }
+                                                onImportLegacyDraft={
+                                                    props.onImportLegacyRepairDraft
+                                                        ? () =>
+                                                              props.onImportLegacyRepairDraft?.(
+                                                                  scene.id,
+                                                                  scene.activeVersionId,
+                                                              )
+                                                        : undefined
+                                                }
+                                            />
+                                        )}
+                                        {view === "compare" &&
+                                            (candidate ? (
+                                                <RemakeVersionReview
+                                                    project={project}
+                                                    sceneId={scene.id}
+                                                    version={candidate}
+                                                    busy={pending}
+                                                    onAccept={accept}
+                                                />
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <p className="text-sm text-text-secondary">
+                                                        Chọn một phiên bản trong lịch sử hoặc tạo
+                                                        lại cảnh để so sánh.
+                                                    </p>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        className={quietButton}
+                                                        onClick={() => setView("history")}
+                                                    >
+                                                        <History aria-hidden="true" /> Mở lịch sử
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        {view === "history" && (
+                                            <div className="space-y-3">
+                                                <h3 className="font-medium text-text-primary">
+                                                    Phiên bản {sceneLabel?.toLowerCase()}
+                                                </h3>
+                                                {[...scene.versions]
+                                                    .reverse()
+                                                    .map((version, index) => (
+                                                        <div
+                                                            key={version.id}
+                                                            className="rounded-2xl bg-surface-soft p-4"
+                                                        >
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <span className="text-sm font-medium text-text-primary">
+                                                                    Phiên bản{" "}
+                                                                    {scene.versions.length - index}
+                                                                </span>
+                                                                <span className="text-xs text-text-secondary">
+                                                                    {version.id ===
+                                                                    scene.activeVersionId
+                                                                        ? "Đang dùng"
+                                                                        : version.usedByRevision
+                                                                          ? "Đã dùng trước đây"
+                                                                          : "Chưa áp dụng"}
+                                                                </span>
+                                                            </div>
+                                                            <p className="mt-2 line-clamp-2 text-xs text-text-secondary">
+                                                                {version.videoPrompt ||
+                                                                    version.prompt}
+                                                            </p>
+                                                            {version.id !==
+                                                                scene.activeVersionId && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    className="mt-2 min-h-11 w-full"
+                                                                    disabled={pending}
+                                                                    onClick={() => {
+                                                                        setCandidateId(version.id);
+                                                                        setView("compare");
+                                                                    }}
+                                                                >
+                                                                    So sánh
+                                                                    {version.usedByRevision
+                                                                        ? " và khôi phục"
+                                                                        : " bản này"}
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    !demo && (
+                                        <div className="rounded-3xl bg-surface p-5 text-sm leading-relaxed text-text-secondary">
+                                            {scene && !usableBase
+                                                ? "Cảnh này chưa có clip dùng được để sửa. Hoàn tất lượt tạo video trước."
+                                                : project
+                                                  ? "Chọn một cảnh bên dưới video để xem yêu cầu, tạo bản mới hoặc mở lịch sử."
+                                                  : "Video này chưa có dữ liệu cảnh để sửa riêng. Bạn vẫn có thể xem và tải toàn video."}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        </aside>
+                    </div>
+                ))}
         </section>
     );
 }

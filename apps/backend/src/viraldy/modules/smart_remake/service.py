@@ -14,6 +14,8 @@ from .engine import compile_smart_remake, render_smart_remake
 from .engine.config import (
     get_flowkit_url,
     get_kie_api_key,
+    get_kie_video_model,
+    get_kie_video_resolution,
     get_max_product_image_bytes,
     get_max_reference_video_bytes,
     get_unifically_api_key,
@@ -39,12 +41,14 @@ def feature_enabled(settings: Settings) -> bool:
 
 def health_payload(settings: Settings) -> dict[str, Any]:
     fixture = settings.ai_mode.strip().lower() in {"fixture", "mock"}
+    video_model = get_kie_video_model()
     return {
         "enabled": feature_enabled(settings),
         "mode": "fixture" if fixture else "live",
         "providers": ["fixture"] if fixture else ["kie", "unifically", "flowkit"],
         "kieConfigured": bool(get_kie_api_key()),
-        "kieVideoModel": "veo3_lite",
+        "kieVideoModel": video_model,
+        "kieVideoResolution": get_kie_video_resolution(video_model),
         "openaiImagesConfigured": bool(getattr(settings, "openai_api_key", None)),
         "openaiImageModel": "gpt-image-2.6-sunburst",
         "flowkitUrlSet": bool(get_flowkit_url()),
@@ -102,10 +106,10 @@ def _duration(value: str) -> int:
         duration = int(value)
     except ValueError as exc:
         raise AppError(
-            "INVALID_SMART_REMAKE_DURATION", "Duration must be 8 or 16 seconds."
+            "INVALID_SMART_REMAKE_DURATION", "Duration must be 8, 12 or 16 seconds."
         ) from exc
-    if duration not in {8, 16}:
-        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8 or 16 seconds.")
+    if duration not in {8, 12, 16}:
+        raise AppError("INVALID_SMART_REMAKE_DURATION", "Duration must be 8, 12 or 16 seconds.")
     return duration
 
 
@@ -123,6 +127,7 @@ async def compile_request(
     product_description: str | None,
     reference_video: UploadFile | None,
     product_image: UploadFile | None,
+    additional_product_images: list[UploadFile] | None = None,
 ) -> dict[str, Any]:
     if not feature_enabled(settings):
         raise AppError("SMART_REMAKE_DISABLED", "Smart Remake is disabled.", 503)
@@ -130,6 +135,10 @@ async def compile_request(
         raise AppError("INVALID_SMART_REMAKE_ASPECT_RATIO", "Smart Remake supports 9:16 only.")
     reference = await read_media(reference_video, "video/mp4")
     product = await read_media(product_image, "image/png")
+    additional = [
+        value for upload in additional_product_images or []
+        if (value := await read_media(upload, "image/png")) is not None
+    ]
     resolved_product_url = product_url.strip() if product_url else None
     resolved_product_title = product_title
     resolved_product_description = product_description
@@ -157,6 +166,7 @@ async def compile_request(
         productUrl=resolved_product_url,
         referenceVideo=reference,
         productImage=product,
+        **({"additionalProductImages": additional} if additional else {}),
         productMetadata=ProductMetadata(
             title=resolved_product_title,
             description=resolved_product_description,

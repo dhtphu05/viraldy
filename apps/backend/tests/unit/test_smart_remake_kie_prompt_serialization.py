@@ -1,7 +1,6 @@
-"""Provider prompt sharing must preserve every literal scene direction."""
+"""Compact video briefs preserve timed actions, product facts and unique seller prose."""
 
 import copy
-import json
 import re
 
 import pytest
@@ -22,6 +21,7 @@ def directions():
             "sourceSceneId": f"source-{index}",
             "sourceRange": {"startFrame": index * 24, "endFrame": (index + 1) * 24},
             "openingFrame": {"sourceFrame": index * 24, "sourceMediaHash": "a" * 64},
+            "targetDurationFrames": 14 if index < 12 else 24,
             "shotPlan": {
                 "physicalAction": {"verb": f"action-{index}"},
                 "stateBefore": "closed",
@@ -35,34 +35,67 @@ def directions():
     ]
 
 
-def expand(value, shared):
-    if isinstance(value, str):
-        for token, literal in shared.items():
-            value = value.replace(token, literal)
-        return value
-    if isinstance(value, dict):
-        return {key: expand(child, shared) for key, child in value.items()}
-    if isinstance(value, list):
-        return [expand(child, shared) for child in value]
-    return value
+def render(scenes, **changes):
+    segments, cursor = [], 0
+    for index, scene in enumerate(scenes):
+        frames = scene.get("targetDurationFrames") or (
+            192 // len(scenes) if index < len(scenes) - 1 else 192 - cursor
+        )
+        segments.append({"inFrame": cursor, "outFrame": cursor + frames})
+        cursor += frames
+    return module.build_kie_group_request(
+        scenes=scenes,
+        segments=segments,
+        reference_image_urls=["https://8.8.8.8/opening.png", "https://8.8.8.8/final.png"],
+        **changes,
+    )["input"]["prompt"]
 
 
-def test_repeated_prompt_text_round_trips_without_changing_scene_data():
+def scene_blocks(prompt):
+    return re.findall(
+        r"(\[00:\d+\.\d{3}–00:\d+\.\d{3}\] SCENE \d+\n.*?)(?=\n\n\[00:|\Z)",
+        prompt,
+        re.DOTALL,
+    )
+
+
+def test_repeated_prose_is_deduplicated_without_losing_unique_scene_requirements():
     original = directions()
     before = copy.deepcopy(original)
-    compact, shared = module._shared_scene_direction_text(original)
-    assert shared
-    assert expand(compact, shared) == original == before
-    assert len(json.dumps(compact)) + len(json.dumps(shared)) < len(json.dumps(original))
-    assert len(compact) == 13
+    prompt = render(original)
+    blocks = scene_blocks(prompt)
+    assert len(blocks) == len(original) == 13
+    for index, block in enumerate(blocks):
+        for requirement in (
+            f"action-{index}", "closed", "open", f"Unique creative requirement {index}:",
+            f"Opening frame {index}, closed lid.",
+            f"Open the lid during interval {index}; then pour.",
+        ):
+            assert requirement in block
+        assert block.count("Keep the exact seller product, physical cause and effect") == 1
+    assert "SHARED SCENE DIRECTION TEXT" not in prompt
+    assert "[[KIE_SHARED_TEXT_" not in prompt
+    assert len(prompt) < sum(len(scene[key]) for scene in original
+                             for key in ("prompt", "imagePrompt", "videoPrompt"))
+    assert original == before
 
 
-def test_original_reference_like_text_is_not_changed_or_accidentally_expanded():
+def test_seller_reference_like_literal_is_preserved_without_token_expansion():
     original = directions()
-    original[0]["videoPrompt"] += " Literal [[KIE_SHARED_TEXT_0_1]] must remain."
-    compact, shared = module._shared_scene_direction_text(original)
-    assert expand(compact, shared) == original
-    assert "[[KIE_SHARED_TEXT_0_1]]" not in shared
+    literal = "Literal [[KIE_SHARED_TEXT_0_1]] must remain."
+    original[0]["videoPrompt"] += " " + literal
+    before = copy.deepcopy(original)
+    prompt = render(original)
+    assert prompt.count(literal) == 1
+    assert "SHARED SCENE DIRECTION TEXT" not in prompt
+    assert original == before
+
+
+def test_distinct_lettercase_in_product_engraving_directions_is_not_deduplicated():
+    scene = {"prompt": "Show engraving ABC.", "videoPrompt": "Show engraving abc."}
+    prompt = render([scene])
+    assert "Show engraving ABC." in prompt
+    assert "Show engraving abc." in prompt
 
 
 @pytest.mark.parametrize("length,accepted", [(60000, True), (60001, False), (86000, False)])
@@ -81,68 +114,42 @@ def test_provider_observed_character_limit_is_checked_before_submission(length, 
         assert "60000" in str(rejected.value)
 
 
-def test_group_serialization_keeps_all_ranges_and_shared_instructions():
+def test_group_keeps_all_timed_scenes_product_constraints_and_literal_seller_edits():
     original = directions()
     edit = "Make the lid rotate clockwise; literal [[KIE_SHARED_TEXT_0_1]] stays unchanged."
     original[0]["userEdits"] = edit
-    segments, cursor = [], 0
-    for index, scene in enumerate(original):
-        frames = 14 if index < 12 else 24
-        scene["targetDurationFrames"] = frames
-        segments.append({"inFrame": cursor, "outFrame": cursor + frames})
-        cursor += frames
-    request = module.build_kie_group_request(
-        scenes=original,
-        segments=segments,
-        reference_image_urls=["https://8.8.8.8/product.png"],
+    before = copy.deepcopy(original)
+    prompt = render(
+        original,
         product_lock={"productName": "Pink cup", "mustPreserve": ["pink handle"]},
     )
-    prompt = request["input"]["prompt"]
-    shared = json.loads(re.search(r"SHARED SCENE DIRECTION TEXT: (.+)", prompt).group(1))
-    serialized = [
-        json.loads(value)
-        for value in re.findall(
-            r"Scene direction \(shotPlan times are local to THIS scene\): (.+)",
-            prompt,
-        )
-    ]
-    restored = expand(serialized, shared)
-    assert len(restored) == 13
-    assert [value["sourceRange"] for value in restored] == [
-        value["sourceRange"] for value in original
-    ]
-    assert [value["shotPlan"] for value in restored] == [value["shotPlan"] for value in original]
-    assert [value["videoPrompt"] for value in restored] == [
-        value["videoPrompt"] for value in original
-    ]
-    assert "pink handle" in prompt
-    assert edit in prompt
-    assert "Treat USER EDITS and all other fields literally" in prompt
+    blocks = scene_blocks(prompt)
+    assert len(blocks) == 13
+    cursor = 0
+    for index, (scene, block) in enumerate(zip(original, blocks, strict=True)):
+        end = cursor + scene["targetDurationFrames"]
+        assert block.startswith(f"[00:{cursor / 24:06.3f}–00:{end / 24:06.3f}] SCENE {index + 1}\n")
+        assert all(text in block for text in (f"action-{index}", "closed", "open"))
+        cursor = end
+    assert cursor == 192
+    assert all(f"unit-{index}" not in prompt and f"source-{index}" not in prompt
+               for index in range(13))
+    assert "sourceRange" not in prompt and "openingFrame" not in prompt
+    assert "Pink cup" in prompt and "pink handle" in prompt
+    assert edit in blocks[0] and all(edit not in block for block in blocks[1:])
+    assert "USER EDITS" in prompt
+    assert original == before
 
 
 @pytest.mark.parametrize("scene_count", [2, 13])
-def test_sharing_overhead_never_grows_a_valid_boundary_prompt(monkeypatch, scene_count):
-    repeated = "C" * 376 + "."
-    scenes, segments, cursor = [], [], 0
-    for index in range(scene_count):
-        frames = 192 // scene_count if index < scene_count - 1 else 192 - cursor
-        scenes.append({
-            "videoPrompt": repeated if index < 2 else f"Unique action {index}.",
-            "targetDurationFrames": frames,
-            "shotPlan": {"padding": ""},
-        })
-        segments.append({"inFrame": cursor, "outFrame": cursor + frames})
-        cursor += frames
-
-    def build():
-        return module.build_kie_group_request(
-            scenes=scenes, segments=segments,
-            reference_image_urls=["https://8.8.8.8/product.png"],
-        )["input"]["prompt"]
-
-    with monkeypatch.context() as unshared:
-        unshared.setattr(module, "_shared_scene_direction_text", lambda values: (values, {}))
-        scenes[0]["shotPlan"]["padding"] = "z" * (60000 - len(build()))
-        original = build()
-        assert len(original) == 60000
-    assert build() == original
+def test_unique_prose_at_provider_boundary_is_preserved_and_never_truncated(scene_count):
+    scenes = [{"videoPrompt": f"Unique action {index}."} for index in range(scene_count)]
+    before_length = len(scenes[0]["videoPrompt"])
+    literal = "z" * (60000 - len(render(scenes)) + before_length)
+    scenes[0]["videoPrompt"] = literal
+    prompt = render(scenes)
+    assert len(prompt) == 60000 and literal in prompt
+    assert len(scene_blocks(prompt)) == scene_count
+    scenes[0]["videoPrompt"] += "z"
+    with pytest.raises(SmartRemakeError, match="60000"):
+        render(scenes)

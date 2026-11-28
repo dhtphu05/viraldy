@@ -100,6 +100,21 @@ describe("source excerpt and cuts", () => {
 });
 
 describe("publish readiness", () => {
+    it("allows one whole-video preview without per-scene review while retaining technical and range gates", () => {
+        const value = project();
+        value.draftTimeline!.items = value.draftTimeline!.items.map((item) => ({
+            ...item,
+            reviewed: false,
+        }));
+        expect(getTimelinePublishError(value)).toContain("Duyệt đoạn");
+        expect(getTimelinePublishError(value, "whole_video")).toBeNull();
+        value.scenes[0].versions[0].technicalCheck.status = "failed";
+        expect(getTimelinePublishError(value, "whole_video")).toContain("Chờ đủ clip");
+        value.scenes[0].versions[0].technicalCheck.status = "passed";
+        value.draftTimeline!.items[0].outFrame += 1;
+        expect(getTimelinePublishError(value, "whole_video")).toContain("Đoạn cắt chưa hợp lệ");
+    });
+
     it("accepts more than four reviewed render units without weakening frame or review gates", () => {
         const value = project();
         value.scenes = Array.from({ length: 6 }, (_, index) => ({

@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SmartRemakeProject, SmartRemakeSceneVersion } from "@/shared/api/smart-remake";
+import type {
+    SmartRemakeAssembly,
+    SmartRemakeProject,
+    SmartRemakeSceneVersion,
+} from "@/shared/api/smart-remake";
 import { RemakeOutput, RemakeVersionReview } from "./remake-output";
 
 const version: SmartRemakeSceneVersion = {
@@ -85,6 +89,51 @@ describe("RemakeOutput", () => {
             ],
         },
     };
+    it("makes the matched whole preview primary and keeps scene confirmation inside Advanced", () => {
+        const value: SmartRemakeProject = {
+            ...timelineProject,
+            assemblies: {
+                activeAssemblyId: "preview",
+                records: [
+                    {
+                        id: "preview",
+                        reviewMode: "whole_video",
+                        timeline: timelineProject.draftTimeline!,
+                        technicalCheck: { status: "passed", mediaHash: "preview" },
+                    } as SmartRemakeAssembly,
+                ],
+            },
+        };
+        const html = renderToStaticMarkup(
+            createElement(RemakeOutput, { ...props, project: value, guided: true }),
+        );
+        expect(html).toContain("Bản xem trước toàn video");
+        expect(html).toContain("Chưa duyệt xuất");
+        expect(html).toContain('src="https://example.com/whole.mp4"');
+        expect(html).not.toContain("Dùng đoạn này");
+        expect(html).not.toContain("Đã chọn");
+        expect(html).toContain("Nâng cao");
+        expect(props.onRepair).not.toHaveBeenCalled();
+    });
+
+    it("labels a six-second saved raw clip without rewriting legacy clip durations", () => {
+        const value: SmartRemakeProject = {
+            ...timelineProject,
+            targetDuration: 12,
+            scenes: timelineProject.scenes.map((scene) => ({
+                ...scene,
+                rawDurationFrames: 144,
+                durationSeconds: 6,
+                versions: scene.versions.map((version) => ({ ...version, rawDurationFrames: 144 })),
+            })),
+        };
+        const html = renderToStaticMarkup(
+            createElement(RemakeOutput, { ...props, project: value }),
+        );
+        expect(html).toContain("Clip AI · 6 giây");
+        expect(html).not.toContain("Clip AI · 8 giây");
+    });
+
     it.each([
         [0, "0–1.333"],
         [1 / 3, "0.333–1.667"],

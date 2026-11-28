@@ -70,6 +70,24 @@ export const generationProject = () =>
     }) as unknown as SmartRemakeProject;
 
 describe("provider window generation progress", () => {
+    it("projects a saved twelve-second plan into two six-second windows", () => {
+        const project = generationProject();
+        project.targetDuration = 12;
+        project.renderPlan!.groups = project.renderPlan!.groups!.map((group) => ({
+            ...group,
+            rawDurationFrames: 144,
+            targetDurationFrames: 144,
+        }));
+        const progress = getRemakeGenerationProgress(project)!;
+        expect(progress.plannedCount).toBe(2);
+        expect(
+            progress.groups.map(({ startSecond, endSecond }) => [startSecond, endSecond]),
+        ).toEqual([
+            [0, 6],
+            [6, 12],
+        ]);
+    });
+
     it("counts planned groups separately from source scenes/fragments and submitted video calls", () => {
         const progress = getRemakeGenerationProgress(generationProject())!;
         expect(progress.plannedCount).toBe(2);
@@ -128,5 +146,25 @@ describe("provider window generation progress", () => {
         const project = generationProject();
         project.renderPlan = { ...project.renderPlan!, groups: undefined };
         expect(getRemakeGenerationProgress(project)).toBeNull();
+    });
+    it("binds retained KIE diagnostics to the failed group without leaking them into another clip", () => {
+        const project = generationProject();
+        const failure = {
+            groupId: "group-a",
+            stage: "blocked" as const,
+            videoSubmitted: true,
+            errorCode: "KIE_TASK_FAILED",
+            providerError: { providerCode: "500", providerMessage: "Internal Error" },
+            providerTaskId: "task-a",
+        };
+        project.generationProgress!.groups = [
+            { groupId: "group-b", stage: "queued", videoSubmitted: false },
+            failure,
+        ];
+        const groups = getRemakeGenerationProgress(project)!.groups;
+        expect(groups[0].providerError).toEqual(failure.providerError);
+        expect(groups[0].providerTaskId).toBe("task-a");
+        expect(groups[1].providerError).toBeUndefined();
+        expect(groups[1].providerTaskId).toBeUndefined();
     });
 });

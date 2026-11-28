@@ -1,3 +1,5 @@
+import type { SmartRemakeRepairAffectedVersion } from "@/shared/api/smart-remake";
+
 export type RemakeDraftScope = { accountId: string; workspaceId: string; draftId: string };
 export type RemakeDraftSectionName = "intake" | "requirements" | "storyboard" | "repair" | "view";
 export type RemakeDraftSection = { baseline: string | null; value: unknown };
@@ -55,6 +57,9 @@ export type RemakeSubmissionMarker = {
     disposition: "viewed" | "skipped" | null;
     errorCode?: string | null;
     normalizationReason?: string | null;
+    repairScope?: "provider_group";
+    renderGroupId?: string;
+    affectedVersions?: SmartRemakeRepairAffectedVersion[];
     createdAt: number;
     updatedAt: number;
 };
@@ -72,6 +77,9 @@ export type RemakeSubmissionMarkerInput = Pick<
             | "disposition"
             | "errorCode"
             | "normalizationReason"
+            | "repairScope"
+            | "renderGroupId"
+            | "affectedVersions"
         >
     >;
 export type RemakeSubmissionMarkerPatch = Partial<
@@ -84,6 +92,9 @@ export type RemakeSubmissionMarkerPatch = Partial<
         | "disposition"
         | "errorCode"
         | "normalizationReason"
+        | "repairScope"
+        | "renderGroupId"
+        | "affectedVersions"
     >
 >;
 export type RemakeDraftErrorCode =

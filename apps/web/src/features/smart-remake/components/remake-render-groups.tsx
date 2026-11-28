@@ -1,7 +1,7 @@
 import { Check, Clapperboard, Image, Layers3 } from "lucide-react";
 import type { SmartRemakeRenderPlan } from "@/shared/api/smart-remake";
 import { Button } from "@/shared/ui/button";
-import { getRenderGroups, previewRenderGroups } from "../lib/remake-groups";
+import { getRenderGroups, getRenderWindowFrames, previewRenderGroups } from "../lib/remake-groups";
 
 const seconds = (frames: number) => Number((frames / 24).toFixed(3)).toLocaleString("vi-VN");
 
@@ -23,12 +23,18 @@ export function RemakeRenderGroups({
     onRecompile?(): void;
 }) {
     const fixedProviderWindows = plan.groupingPolicy === "fixed_provider_windows";
+    const windowSeconds = seconds(getRenderWindowFrames(plan));
     const groups =
         !fixedProviderWindows && dirty && !cutsDirty
             ? previewRenderGroups(plan, breaks)
             : getRenderGroups(plan);
     const logicalIds = [...new Set(plan.units.map((unit) => unit.sourceSceneId))];
     const fragmented = logicalIds.length !== plan.units.length;
+    const videoResolution =
+        plan.videoResolution ??
+        (plan.videoModel === "wan/3-0-video" || plan.videoModel === "veo3_lite"
+            ? "720P"
+            : undefined);
     const imageModelLabel =
         plan.imageModel === "gpt-image-2.6-sunburst"
             ? "GPT Image Sunburst · OpenAI"
@@ -72,8 +78,8 @@ export function RemakeRenderGroups({
                         )}{" "}
                         giây.{" "}
                         {fixedProviderWindows
-                            ? `KIE tạo ${groups.length} clip 8 giây; toàn bộ cảnh được phân bổ vào các clip này.`
-                            : "Các cảnh liền nhau được tạo chung khi vừa một clip 8 giây; nhịp từng cảnh vẫn giữ riêng."}
+                            ? `KIE tạo ${groups.length} clip ${windowSeconds} giây; toàn bộ cảnh được phân bổ vào các clip này.`
+                            : `Các cảnh liền nhau được tạo chung khi vừa một clip ${windowSeconds} giây; nhịp từng cảnh vẫn giữ riêng.`}
                     </p>
                 </div>
                 {dirty && (
@@ -90,10 +96,16 @@ export function RemakeRenderGroups({
                     />
                     <div className="min-w-0">
                         <p className="text-sm font-medium">
-                            {plan.videoModel === "veo3_lite" ? "Veo 3.1 Lite · KIE" : "Veo · KIE"}
+                            {plan.videoModel === "wan/3-0-video"
+                                ? "Wan 3.0 · KIE"
+                                : plan.videoModel === "veo3_lite"
+                                  ? "Veo 3.1 Lite · KIE"
+                                  : "KIE"}
                         </p>
                         <p className="mt-1 text-xs text-text-secondary">
-                            Clip dọc 9:16 · 8 giây mỗi lượt
+                            Clip dọc 9:16{videoResolution ? ` · ${videoResolution}` : ""} ·{" "}
+                            {windowSeconds} giây mỗi lượt
+                            {plan.audioRequired === true ? " · Có âm thanh" : ""}
                         </p>
                     </div>
                 </div>

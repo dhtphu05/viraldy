@@ -2,7 +2,11 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SmartRemakeProject, SmartRemakeSceneVersion } from "@/shared/api/smart-remake";
+import type {
+    SmartRemakeAssembly,
+    SmartRemakeProject,
+    SmartRemakeSceneVersion,
+} from "@/shared/api/smart-remake";
 import { RemakeOutput } from "./remake-output";
 
 const active: SmartRemakeSceneVersion = {
@@ -55,9 +59,105 @@ const props = {
     onAccept: vi.fn().mockResolvedValue(false),
     onRefresh: vi.fn(),
 };
+function previewAssembly(
+    timeline: SmartRemakeAssembly["timeline"],
+    id = "preview",
+): SmartRemakeAssembly {
+    return {
+        id,
+        projectId: project.id,
+        schemaVersion: 2,
+        parentAssemblyId: null,
+        mediaHash: id,
+        manifestHash: "manifest",
+        constraintsHash: "constraints",
+        contextHash: "context",
+        revision: 1,
+        createdAt: "",
+        reviewMode: "whole_video",
+        technicalCheck: { status: "passed", mediaHash: id },
+        timeline,
+    };
+}
 afterEach(cleanup);
 
 describe("guided result focus", () => {
+    it("opens the whole preview without submitting on render or polling and exposes repair only on demand", () => {
+        const timeline = {
+            fps: 24 as const,
+            totalFrames: 192,
+            items: [
+                {
+                    id: "item",
+                    sourceSceneId: "source",
+                    renderUnitId: "scene",
+                    targetStartFrame: 0,
+                    targetDurationFrames: 192,
+                    versionId: "active",
+                    inFrame: 0,
+                    outFrame: 192,
+                    reviewed: false,
+                },
+            ],
+        };
+        const current: SmartRemakeProject = {
+            ...project,
+            finalVideoUrl: "/whole.mp4",
+            draftTimeline: timeline,
+            assemblies: {
+                activeAssemblyId: "preview",
+                records: [previewAssembly(timeline)],
+            },
+        };
+        const onPublish = vi.fn();
+        const onRepair = vi.fn();
+        const onTimelineSave = vi.fn();
+        const options = {
+            ...props,
+            project: current,
+            guided: true,
+            onPublish,
+            onRepair,
+            onTimelineSave,
+        };
+        const view = render(createElement(RemakeOutput, options));
+        expect(view.container.querySelectorAll("video")).toHaveLength(1);
+        expect(view.container.querySelector('video[src="/whole.mp4"]')).toBeTruthy();
+        expect(view.queryByRole("button", { name: "Dùng đoạn này" })).toBeNull();
+        view.rerender(
+            createElement(RemakeOutput, { ...options, project: { ...current, revision: 2 } }),
+        );
+        expect(onPublish).not.toHaveBeenCalled();
+        expect(onRepair).not.toHaveBeenCalled();
+        expect(onTimelineSave).not.toHaveBeenCalled();
+        fireEvent.click(view.getByRole("button", { name: "Nâng cao · Cảnh nguồn và đoạn cắt" }));
+        expect(view.getByRole("button", { name: "Sửa cảnh" })).toBeTruthy();
+        expect(view.container.querySelector('video[src="/active.mp4"]')).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: "Về bản xem trước" }));
+        expect(view.queryByRole("button", { name: "Sửa cảnh" })).toBeNull();
+        expect(document.activeElement).toBe(
+            view.getByRole("button", { name: "Nâng cao · Cảnh nguồn và đoạn cắt" }),
+        );
+    });
+
+    it("does not show a stale final URL as the current preview after a range changes", () => {
+        const timeline = { fps: 24 as const, totalFrames: 192, items: [] };
+        const current: SmartRemakeProject = {
+            ...project,
+            finalVideoUrl: "/old-whole.mp4",
+            draftTimeline: { ...timeline, totalFrames: 144 },
+            assemblies: {
+                activeAssemblyId: "old",
+                records: [previewAssembly(timeline, "old")],
+            },
+        };
+        const view = render(
+            createElement(RemakeOutput, { ...props, project: current, guided: true }),
+        );
+        expect(view.container.querySelector('video[src="/old-whole.mp4"]')).toBeNull();
+        expect(view.getByText(/Bản xem trước sẽ xuất hiện/)).toBeTruthy();
+    });
+
     it("does not repeat output metadata or empty tools below an existing generation recovery", () => {
         const empty = {
             ...project,
@@ -98,11 +198,13 @@ describe("guided result focus", () => {
         expect(view.queryByLabelText("Thông tin video")).toBeNull();
     });
 
-    it("keeps player and scene tools visible while video metadata stays collapsed", () => {
+    it("keeps scene tools available in Advanced while video metadata stays collapsed", () => {
         const refresh = vi.fn();
         const view = render(
             createElement(RemakeOutput, { ...props, guided: true, onRefresh: refresh }),
         );
+        expect(view.queryByRole("button", { name: "Sửa cảnh" })).toBeNull();
+        fireEvent.click(view.getByRole("button", { name: "Nâng cao · Cảnh nguồn và đoạn cắt" }));
         const details = view.getByText("1 cảnh nguồn").closest("details");
         expect(details).not.toBeNull();
         expect(details?.open).toBe(false);
@@ -115,6 +217,7 @@ describe("guided result focus", () => {
 
     it("uses one repair entry point in guided watch mode and keeps its form reachable", () => {
         const view = render(createElement(RemakeOutput, { ...props, guided: true }));
+        fireEvent.click(view.getByRole("button", { name: "Nâng cao · Cảnh nguồn và đoạn cắt" }));
         expect(view.queryByText("Cảnh này đã đạt chưa?")).toBeNull();
         expect(view.queryByRole("button", { name: "Sửa và tạo lại cảnh" })).toBeNull();
         fireEvent.click(view.getByRole("button", { name: "Sửa cảnh" }));
@@ -151,6 +254,7 @@ describe("guided result focus", () => {
                 onTimelineSave: vi.fn(),
             }),
         );
+        fireEvent.click(view.getByRole("button", { name: "Nâng cao · Cảnh nguồn và đoạn cắt" }));
         const selectedScene = view.getByRole("button", { name: /Cảnh 1.*Đã chọn/ });
         expect(selectedScene.getAttribute("title")).toContain("Đã chọn");
         expect(selectedScene.textContent).not.toMatch(/Đã duyệt|Chưa duyệt/);

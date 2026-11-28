@@ -67,6 +67,7 @@ def _new_version(
     *,
     source: str,
     audio_required: bool,
+    expected_duration: int = 8,
 ) -> dict[str, Any]:
     return {
         "id": str(uuid4()),
@@ -85,7 +86,9 @@ def _new_version(
             for field in ("generationExpectations", "expectationsHash")
             if field in metadata
         },
-        "technicalCheck": technical_check(data, expected_duration=8, audio_required=audio_required),
+        "technicalCheck": technical_check(
+            data, expected_duration=expected_duration, audio_required=audio_required,
+        ),
     }
 
 
@@ -231,6 +234,11 @@ class RepairService:
 
             state.pop("downloadUrl", None)
             state.update(project_policy_fields(row.context_json))
+            from .project_preview import public_project_preview
+
+            preview = public_project_preview(row)
+            if preview is not None:
+                state["preview"] = preview
             if getattr(self.repository, "session", None) is not None:
                 from .budget_ledger import budget_summary
 
@@ -250,6 +258,11 @@ class RepairService:
 
             return cast(dict[str, Any], stopped(without_storage_keys(state)))
         state["productImageUrl"] = await self.media.url(row.context_json["productKey"])
+        additional = (row.context_json.get("p0") or {}).get("additionalProductReferences") or []
+        if additional:
+            state["additionalProductImageUrls"] = [
+                await self.media.url(asset["storageKey"]) for asset in additional
+            ]
         if row.context_json.get("characterKey"):
             state["characterImageUrl"] = await self.media.url(row.context_json["characterKey"])
         if state.get("schemaVersion") == 2:
@@ -283,6 +296,8 @@ class RepairService:
         return state
 
     async def get(self, project_id: UUID) -> dict[str, Any]:
+        from .provider_errors import public_provider_error_fields
+
         row = await self.repository.project(self.workspace_id, project_id)
         operation = await self.repository.running(project_id)
         p0 = getattr(row, "context_json", {}).get("p0") or {}
@@ -321,6 +336,7 @@ class RepairService:
                 "status": "running",
                 "needsReconciliation": bool(operation.result_json.get("needsReconciliation")),
                 "errorCode": operation.result_json.get("errorCode"),
+                **public_provider_error_fields(operation.result_json),
             }
         elif row.state_json.get("provider") == "kie" or row.context_json.get("p0") is not None:
             latest = await self.repository.latest_operation(project_id)
@@ -331,6 +347,7 @@ class RepairService:
                     "status": latest.status,
                     "errorCode": latest.result_json.get("errorCode"),
                     "needsReconciliation": bool(latest.result_json.get("needsReconciliation")),
+                    **public_provider_error_fields(latest.result_json),
                 }
         if not stopped and not operation and latest and (
             latest.status == "failed" and latest.result_json.get("kind") == "render"
@@ -592,10 +609,20 @@ class RepairService:
     async def _operation_result(
         self, project_id: UUID, operation: SmartRemakeOperationModel
     ) -> dict[str, Any]:
+        from .provider_errors import public_provider_error_fields
+        from .provider_group_repair import group_repair_public_fields
+
+        project = await self.get(project_id)
+        group_fields = {}
+        if operation.result_json.get("repairGroup"):
+            row = await self.repository.project(self.workspace_id, project_id)
+            group_fields = group_repair_public_fields(row.state_json, operation)
+
         return {
-            "project": await self.get(project_id),
+            "project": project,
             "operationId": str(operation.id),
             "status": operation.status,
+            **public_provider_error_fields(operation.result_json),
             **{
                 key: value
                 for key, value in operation.result_json.items()
@@ -606,6 +633,7 @@ class RepairService:
                     "needsReconciliation",
                 }
             },
+            **group_fields,
         }
 
     async def repair(
@@ -912,6 +940,10 @@ class RepairService:
             _request_hash("accept", request.sceneId, payload),
         )
         if not created:
+            if operation.result_json.get("repairScope") == "provider_group":
+                from .project_preview import queue_automatic_preview
+
+                await queue_automatic_preview(self, row, operation)
             return await self._operation_result(project_id, operation)
         try:
             _revision(row.state_json, request.expectedRevision)

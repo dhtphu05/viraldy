@@ -81,7 +81,7 @@ export function useRemakeStudio(
     startNewProject = false,
 ) {
     const [step, setStep] = useState<RemakeStep>("prepare");
-    const [duration, setDuration] = useState<8 | 16>(16);
+    const [duration, setDuration] = useState<8 | 12 | 16>(12);
     const [timelineStartFrame, setTimelineStartFrame] = useState(0);
     const [sourceDuration, setSourceDuration] = useState<number | null>(null);
     const [sourceCutFrames, setSourceCutFrames] = useState<number[] | undefined>();
@@ -91,7 +91,9 @@ export function useRemakeStudio(
     const [description, setDescription] = useState("");
     const [video, setVideo] = useState<File | null>(null);
     const [images, setImages] = useState<File[]>([]);
+    const [productUploadError, setProductUploadError] = useState<string | null>(null);
     const [primaryIndex, setPrimaryIndex] = useState(0);
+    const additionalProducts = images.filter((_, index) => index !== primaryIndex);
     const [link, setLink] = useState("");
     const [linkedProduct, setLinkedProduct] = useState<LinkedProduct | null>(null);
     const [isSample, setIsSample] = useState(false);
@@ -206,6 +208,8 @@ export function useRemakeStudio(
             setProject(null);
             setVideo(null);
             setImages([]);
+            setPrimaryIndex(0);
+            setProductUploadError(null);
             setLinkedProduct(null);
             setCompiled(null);
             setResult(null);
@@ -457,7 +461,7 @@ export function useRemakeStudio(
         : uploadedUrls.length
           ? uploadedUrls
           : !video && project?.productImageUrl
-            ? [project.productImageUrl]
+            ? [project.productImageUrl, ...(project.additionalProductImageUrls ?? [])]
             : [];
     const measuredSourceDuration =
         sourceDuration ??
@@ -716,6 +720,13 @@ export function useRemakeStudio(
                 !images.some((other) => sameFile(file, other)),
         );
         if (!additions.length) return;
+        if (images.length + additions.length > 14) {
+            const message = "Tối đa 14 ảnh sản phẩm. Xóa bớt ảnh rồi thử lại nhé.";
+            setProductUploadError(message);
+            setError(message);
+            return;
+        }
+        setProductUploadError(null);
         invalidate();
         policy.invalidateMediaRights();
         setLinkedProduct(null);
@@ -726,6 +737,13 @@ export function useRemakeStudio(
 
     function onRemoveImage(index: number) {
         if (lock.current) return;
+        if (!images.length && project?.productImageUrl) {
+            setProductUploadError(
+                "Thêm lại video mẫu và bộ ảnh để thay đổi tư liệu đã lưu. Bộ ảnh hiện tại vẫn được giữ.",
+            );
+            return;
+        }
+        setProductUploadError(null);
         invalidate();
         policy.invalidateMediaRights();
         if (linkedProduct) {
@@ -873,6 +891,7 @@ export function useRemakeStudio(
                 .prepareProject({
                     video,
                     product: images[primaryIndex],
+                    additionalProducts,
                     productUrl: linkedProduct?.sourceUrl,
                     productImageUrl: linkedProduct?.imageUrls[0],
                     duration,
@@ -1104,6 +1123,7 @@ export function useRemakeStudio(
         sceneId: string,
         draft: SmartRemakePromptDraft | RepairIntent,
         snapshot?: RemakeActionSnapshot,
+        repairScope?: "provider_group",
     ) {
         if (!project) return null;
         repairAccepted.current = false;
@@ -1124,6 +1144,7 @@ export function useRemakeStudio(
                     ...("schemaVersion" in draft ? { repairIntent: draft } : draft),
                     baseVersionId: scene.activeVersionId,
                     expectedRevision: owned.revision,
+                    ...(repairScope ? { repairScope } : {}),
                 };
                 const payload = { projectId: project.id, sceneId, ...input };
                 const key = operationKey(payload);
@@ -1133,6 +1154,7 @@ export function useRemakeStudio(
                     projectId: project.id,
                     sceneId,
                     baseVersionId: scene.activeVersionId,
+                    ...(repairScope ? { repairScope } : {}),
                 });
                 let next: SmartRemakeOperationResult;
                 try {
@@ -1167,6 +1189,13 @@ export function useRemakeStudio(
                         needsReconciliation: Boolean(
                             next.project.pendingOperation?.needsReconciliation,
                         ),
+                        ...(next.repairScope === "provider_group"
+                            ? {
+                                  repairScope: next.repairScope,
+                                  renderGroupId: next.renderGroupId,
+                                  affectedVersions: next.affectedVersions,
+                              }
+                            : {}),
                     });
                 } catch {
                     setNotice(
@@ -1209,7 +1238,7 @@ export function useRemakeStudio(
                 setNotice(
                     next.status === "completed"
                         ? next.project.schemaVersion === 2
-                            ? "Đã đưa phiên bản vào bản nháp. Chọn và duyệt đoạn sẽ dùng trước khi ghép."
+                            ? "Đã đưa phiên bản vào bản nháp. Xem lại bản ghép sau khi cập nhật."
                             : "Đã ghép cảnh vào video. Các cảnh còn lại giữ nguyên."
                         : "Video đang được ghép. Bản đang dùng vẫn được giữ.",
                 );
@@ -1239,15 +1268,18 @@ export function useRemakeStudio(
         if (!saved) throw new Error("Chưa lưu được đoạn cắt. Kiểm tra thông báo và thử lại nhé.");
     }
 
-    async function publish(): Promise<void> {
+    async function publish(options?: { reviewMode: "whole_video" }): Promise<void> {
         if (!project) return;
-        const readinessError = getTimelinePublishError(project);
+        const readinessError = getTimelinePublishError(project, options?.reviewMode);
         if (readinessError) {
             setError(readinessError);
             return;
         }
         await run("compose", async () => {
-            const input = { expectedRevision: project.revision };
+            const input = {
+                expectedRevision: project.revision,
+                ...(options?.reviewMode ? { reviewMode: options.reviewMode } : {}),
+            };
             const next = await performOperation(
                 { kind: "publish", projectId: project.id, ...input },
                 (key) =>
@@ -1260,9 +1292,13 @@ export function useRemakeStudio(
             if (next.status === "failed")
                 throw new Error("Chưa ghép được video. Bản nháp và video đã xuất vẫn được giữ.");
             setNotice(
-                next.status === "running"
-                    ? "Đang ghép các đoạn đã duyệt. Video đã xuất trước đó vẫn được giữ."
-                    : "Đã ghép xong video từ các đoạn bạn duyệt.",
+                options?.reviewMode === "whole_video"
+                    ? next.status === "running"
+                        ? "Đang ghép bản xem trước. Bạn sẽ duyệt nội dung sau khi xem toàn video."
+                        : "Đã ghép bản xem trước. Bản này chưa được duyệt xuất."
+                    : next.status === "running"
+                      ? "Đang ghép các đoạn đã duyệt. Video đã xuất trước đó vẫn được giữ."
+                      : "Đã ghép xong video từ các đoạn bạn duyệt.",
             );
         });
     }
@@ -1359,6 +1395,7 @@ export function useRemakeStudio(
                         images[primaryIndex],
                         linkedProduct?.sourceUrl,
                         duration,
+                        additionalProducts,
                     )))
         )
             return "Tư liệu đã thay đổi. Cập nhật kịch bản trước khi tạo lại cảnh.";
@@ -1404,6 +1441,7 @@ export function useRemakeStudio(
                 images[primaryIndex],
                 linkedProduct?.sourceUrl,
                 duration,
+                additionalProducts,
             ) &&
             (intent.action === "analyze" || intent.action === "reanalyze")
                 ? {}
@@ -1426,6 +1464,7 @@ export function useRemakeStudio(
                       sceneId: intent.sceneId,
                       baseVersionId: intent.baseVersionId,
                       ...(intent.repairIntent ? { repairIntent: intent.repairIntent } : {}),
+                      ...(intent.repairScope ? { repairScope: intent.repairScope } : {}),
                   }
                 : {}),
             ...(intent.action === "inspect" ? { subject: intent.subject } : {}),
@@ -1440,7 +1479,12 @@ export function useRemakeStudio(
             if (intent.action === "render") return Boolean(await generate(false, snapshot));
             if (intent.action === "inspect") return policy.inspect(intent.subject, snapshot);
             if (intent.action === "repair") {
-                await repair(intent.sceneId, intent.repairIntent ?? intent.draft!, snapshot);
+                await repair(
+                    intent.sceneId,
+                    intent.repairIntent ?? intent.draft!,
+                    snapshot,
+                    intent.repairScope,
+                );
                 // A queued repair has a receipt even when its candidate is not available yet.
                 return repairAccepted.current;
             }
@@ -1469,6 +1513,7 @@ export function useRemakeStudio(
                 fingerprint: actionFingerprint,
                 sceneId: scene.id,
                 baseVersionId: scene.activeVersionId,
+                ...(args.repairScope ? { repairScope: args.repairScope } : {}),
                 ...(args.repairIntent
                     ? { repairIntent: structuredClone(args.repairIntent) }
                     : { draft: { ...args.draft! } }),
@@ -1491,6 +1536,7 @@ export function useRemakeStudio(
                     images[primaryIndex],
                     linkedProduct?.sourceUrl,
                     duration,
+                    additionalProducts,
                 )
                     ? { startsNewProject: true }
                     : {}),
@@ -1505,7 +1551,12 @@ export function useRemakeStudio(
             snapshot.rights,
             Boolean(characterFile || project?.characterImageUrl),
         );
-        return actionGate.openAction(intent, needsRights ? undefined : snapshot);
+        const confirmClipScope =
+            intent.action === "repair" && intent.repairScope === "provider_group";
+        return actionGate.openAction(
+            intent,
+            needsRights || confirmClipScope ? undefined : snapshot,
+        );
     }
 
     const visibleActionError = !actionGate.pendingAction ? actionGate.actionError : null;
@@ -1552,6 +1603,7 @@ export function useRemakeStudio(
                     images[primaryIndex],
                     linkedProduct?.sourceUrl,
                     duration,
+                    additionalProducts,
                 ),
             ),
         repairDrafts,
@@ -1624,11 +1676,13 @@ export function useRemakeStudio(
         video,
         sourceUrl,
         productUrls,
+        productUploadError,
         primaryIndex,
         link,
         linkedProduct,
         isSample,
         compiled: draftCompile,
+        sceneDrafts,
         result,
         project,
         busy,
@@ -1682,7 +1736,7 @@ export function useRemakeStudio(
         repair,
         accept,
         refreshProject,
-        onDuration: (value: 8 | 16) => {
+        onDuration: (value: 8 | 12 | 16) => {
             invalidate();
             setDuration(value);
             if (measuredSourceDuration !== null)
@@ -1707,6 +1761,13 @@ export function useRemakeStudio(
         },
         onPrimaryChange: (value: number) => {
             if (lock.current) return;
+            if (!images.length && project?.productImageUrl) {
+                if (value !== primaryIndex)
+                    setProductUploadError(
+                        "Thêm lại video mẫu và bộ ảnh để thay đổi tư liệu đã lưu. Bộ ảnh hiện tại vẫn được giữ.",
+                    );
+                return;
+            }
             if (value !== primaryIndex) policy.invalidateMediaRights();
             invalidate();
             setPrimaryIndex(value);

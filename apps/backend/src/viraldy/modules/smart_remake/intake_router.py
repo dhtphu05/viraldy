@@ -96,12 +96,19 @@ async def create_project(
     reference_video: Annotated[UploadFile, File(alias="referenceVideo")],
     product_image: Annotated[UploadFile, File(alias="productImage")],
     character_image: Annotated[UploadFile | None, File(alias="characterImage")] = None,
+    additional_product_images: Annotated[
+        list[UploadFile] | None, File(alias="additionalProductImages", max_length=13)
+    ] = None,
     request_id: str = Depends(get_request_id),
 ) -> Envelope:
     await authorize(workspace_id, current_user, db, settings)
     payload = _parse_metadata(metadata)
     source = await _read_upload(reference_video, get_max_reference_video_bytes(), "video/mp4")
     product = await _read_upload(product_image, get_max_product_image_bytes(), "image/png")
+    additional = [
+        await _read_upload(upload, get_max_product_image_bytes(), "image/png")
+        for upload in additional_product_images or []
+    ]
     character = (
         await _read_upload(character_image, get_max_product_image_bytes(), "image/png")
         if character_image is not None
@@ -118,6 +125,7 @@ async def create_project(
             source,
             product,
             character,
+            **({"additional_products": additional} if additional else {}),
         )
         # Reload under lock so a replay cannot overwrite a cap amended after intake.
         row = await repair.repository.project(workspace_id, row.id, lock=True)

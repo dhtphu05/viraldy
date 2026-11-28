@@ -31,7 +31,9 @@ class StoragePort(Protocol):
     def check_health(self) -> bool:
         raise NotImplementedError
 
-    def create_presigned_upload(self, key: str, content_type: str) -> PresignedUpload:
+    def create_presigned_upload(
+        self, key: str, content_type: str, *, content_length: int | None = None
+    ) -> PresignedUpload:
         raise NotImplementedError
 
     def create_presigned_download(self, key: str, *, filename: str | None = None) -> str:
@@ -44,6 +46,10 @@ class StoragePort(Protocol):
         raise NotImplementedError
 
     def download_object(self, key: str, destination_path: str) -> None:
+        raise NotImplementedError
+
+    def read_object_bytes(self, key: str, maximum_bytes: int) -> bytes:
+        """Read at most maximum_bytes + 1 so upload callers can reject overflow."""
         raise NotImplementedError
 
     def upload_file(self, source_path: str, key: str, content_type: str) -> None:

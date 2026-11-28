@@ -189,6 +189,92 @@ afterEach(() => {
 });
 
 describe("policy state and owned intake", () => {
+    it("binds all angles and creates a new intake when a supplemental photo changes", async () => {
+        const hook = harness(null);
+        fill(hook);
+        const input = {
+            ...files(),
+            additionalProducts: [new File(["back"], "back.png", { type: "image/png" })],
+        };
+        await act(async () => {
+            await hook.result.current.prepareProject(input);
+        });
+        expect(api.create.mock.calls[0][1].additionalProductImages).toEqual(
+            input.additionalProducts,
+        );
+        hook.rerender({ project: savedProject() });
+        expect(
+            hook.result.current.hasCurrentIntake(
+                input.video,
+                input.product,
+                undefined,
+                8,
+                input.additionalProducts,
+            ),
+        ).toBe(true);
+        await act(async () => {
+            await hook.result.current.prepareProject({
+                ...input,
+                additionalProducts: [...input.additionalProducts],
+            });
+        });
+        expect(api.create).toHaveBeenCalledTimes(1);
+        const changed = [new File(["other"], "back.png", { type: "image/png" })];
+        expect(
+            hook.result.current.hasCurrentIntake(input.video, input.product, undefined, 8, changed),
+        ).toBe(false);
+        await act(async () => {
+            await hook.result.current.prepareProject({ ...input, additionalProducts: changed });
+        });
+        expect(api.create).toHaveBeenCalledTimes(2);
+        expect(api.create.mock.calls[1][1].metadata.idempotencyKey).not.toBe(
+            api.create.mock.calls[0][1].metadata.idempotencyKey,
+        );
+    });
+
+    it("restores all supplemental hashes and rejects missing or reordered angles", async () => {
+        const input = files();
+        const additionalProducts = [
+            new File(["product"], "back.png", { type: "image/png" }),
+            new File(["source"], "side.png", { type: "image/png" }),
+        ];
+        const saved = savedProject({
+            inputMediaHashes: {
+                source: "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+                product: "a8792157cb4f27fb949c035f45518c61e884bb86e6f420204379c2baa8beb66e",
+                additionalProducts: [
+                    "a8792157cb4f27fb949c035f45518c61e884bb86e6f420204379c2baa8beb66e",
+                    "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+                ],
+            },
+        });
+        const hook = harness(saved);
+        expect(
+            await hook.result.current.restoreIntakeBinding(saved, { ...input, character: null }),
+        ).toBe(false);
+        expect(
+            await hook.result.current.restoreIntakeBinding(saved, {
+                ...input,
+                additionalProducts,
+                character: null,
+            }),
+        ).toBe(true);
+        expect(
+            await hook.result.current.restoreIntakeBinding(saved, {
+                ...input,
+                additionalProducts: [...additionalProducts].reverse(),
+                character: null,
+            }),
+        ).toBe(false);
+        expect(
+            await hook.result.current.restoreIntakeBinding(saved, {
+                ...input,
+                additionalProducts: [new File(["changed"], "back.png")],
+                character: null,
+            }),
+        ).toBe(false);
+    });
+
     it("starts with unrestricted usage and no claims of rights, disclosure or character consent", () => {
         const hook = harness(null);
         expect(hook.result.current.budget).toEqual(budget);

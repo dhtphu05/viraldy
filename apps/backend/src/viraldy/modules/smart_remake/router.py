@@ -77,6 +77,9 @@ async def compile_smart_remake_route(
     render_group_breaks: Annotated[str | None, Form(alias="renderGroupBreaks")] = None,
     expected_revision: Annotated[int | None, Form(alias="expectedRevision", ge=1)] = None,
     idempotency_key: Annotated[str | None, Form(alias="idempotencyKey", max_length=200)] = None,
+    additional_product_images: Annotated[
+        list[UploadFile] | None, File(alias="additionalProductImages", max_length=13)
+    ] = None,
 ) -> Envelope:
     await require_workspace_permission(workspace_id, Permission.ANALYSIS_RUN, current_user, db)
     if settings.ai_mode.strip().lower() not in {"fixture", "mock"} and timeline_mode != "reference":
@@ -97,6 +100,8 @@ async def compile_smart_remake_route(
         reference_video=reference_video,
         product_image=product_image,
     )
+    if additional_product_images:
+        values["additional_product_images"] = additional_product_images
     if timeline_mode is not None:
         if timeline_mode != "reference":
             raise AppError("SMART_REMAKE_TIMELINE_INVALID", "Timeline mode is not supported.")
@@ -429,12 +434,18 @@ async def check_smart_remake_scene(
 
 
 # Keep lifecycle declarations under the same workspace authentication boundary.
+from .asset_intake_router import router as asset_intake_router  # noqa: E402
+from .asset_upload_router import router as asset_upload_router  # noqa: E402
+from .generation_prompt_preview_router import router as generation_prompt_preview_router  # noqa: E402
 from .intake_router import router as intake_router  # noqa: E402
 from .lifecycle_router import router as lifecycle_router  # noqa: E402
 from .preflight_router import router as preflight_router  # noqa: E402
 from .project_library import router as project_library_router  # noqa: E402
 from .repair_receipts import router as repair_receipts_router  # noqa: E402
 
+router.include_router(asset_intake_router)
+router.include_router(asset_upload_router)
+router.include_router(generation_prompt_preview_router)
 router.include_router(intake_router)
 router.include_router(lifecycle_router)
 router.include_router(preflight_router)
