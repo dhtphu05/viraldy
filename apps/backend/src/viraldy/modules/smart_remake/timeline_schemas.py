@@ -91,7 +91,8 @@ class RenderPlan(TimelineModel):
     groups: list[RenderGroup] | None = Field(default=None, min_length=1)
     renderGroupBreaks: list[int] | None = None
     groupingPolicy: Literal["fixed_provider_windows"] | None = None
-    videoModel: Literal["veo3_lite"] | None = None
+    videoModel: Literal["veo3_lite", "wan/3-0-video"] | None = None
+    videoResolution: Literal["480P", "720P", "1080P"] | None = None
     imageModel: Literal["gpt-image-2.6-sunburst", "gpt-image-2.6-flare"] | None = None
     imageQuality: Literal["low", "medium", "high", "xhigh", "max"] | None = None
     imageComplexity: Literal["low", "medium", "high"] | None = None

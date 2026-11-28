@@ -30,6 +30,7 @@ export type SmartRemakeHealth = {
     kieConfigured?: boolean;
     openaiImagesConfigured?: boolean;
     kieVideoModel?: string;
+    kieVideoResolution?: "480P" | "720P" | "1080P";
     openaiImageModel?: string;
     limits: { referenceVideoBytes: number; productImageBytes: number };
 };
@@ -68,6 +69,7 @@ export type SmartRemakeRenderPlan = {
     groups?: SmartRemakeRenderGroup[];
     renderGroupBreaks?: number[];
     videoModel?: string;
+    videoResolution?: "480P" | "720P" | "1080P";
     imageModel?: string;
     imageQuality?: "low" | "medium" | "high" | "xhigh" | "max";
     imageComplexity?: "low" | "medium" | "high";

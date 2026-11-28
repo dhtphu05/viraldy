@@ -54,17 +54,22 @@ def _validate_group_plan(plan: dict[str, Any], used_ids: set[str]) -> None:
     if "groups" not in plan:
         if plan.get("groupingPolicy") == "fixed_provider_windows" or any(
             plan.get(key)
-            for key in ("videoModel", "imageModel", "imageQuality", "imageComplexity", "imageSize")
+            for key in (
+                "videoModel", "videoResolution", "imageModel", "imageQuality",
+                "imageComplexity", "imageSize",
+            )
         ):
             raise ValueError("Provider configuration requires saved render groups.")
         return
     if (
-        plan.get("videoModel") != "veo3_lite"
+        plan.get("videoModel") not in {"veo3_lite", "wan/3-0-video"}
         or plan.get("imageModel") not in {"gpt-image-2.6-sunburst", "gpt-image-2.6-flare"}
         or plan.get("imageQuality") not in {"low", "medium", "high", "xhigh", "max"}
         or plan.get("imageSize") != "720x1280"
     ):
         raise ValueError("The grouped provider configuration is incomplete.")
+    if plan["videoModel"] == "veo3_lite" and (plan.get("videoResolution") or "720P") != "720P":
+        raise ValueError("The saved Veo contract requires 720P resolution.")
     if (plan["imageModel"] == "gpt-image-2.6-sunburst" or "imageComplexity" in plan) and plan.get(
         "imageComplexity"
     ) not in {"low", "medium", "high"}:

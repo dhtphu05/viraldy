@@ -24,13 +24,14 @@ from viraldy.shared.errors.base import AppError, ConflictError
 
 from .engine.config import get_kie_poll_interval_seconds, get_kie_poll_timeout_seconds
 from .engine.errors import SmartRemakeError
-from .engine.kie_adapter import validate_kie_video_input
 from .engine.kie_client import KieClient
 from .engine.prompt_sanitizer import (
     validate_generation_payload,
     validate_sanitized_compiler_prompts,
 )
 from .engine.schemas import RenderSmartRemakeInput, UploadedMedia
+from .engine.video_requests import build_group_request, validate_video_input
+from .engine.wan_video_adapter import WAN_VIDEO_MODEL
 from .generation_budget import (
     character_reference,
     generation_execution_receipt,
@@ -392,6 +393,14 @@ class KieWorkflow:
             )
         character = await character_reference(self.repair, row)
         plan = operation.result_json.get("renderPlan") or row.context_json.get("renderPlan") or {}
+        current_plan = row.context_json.get("renderPlan") or {}
+        if (plan.get("videoModel"), plan.get("videoResolution") or "720P") != (
+            current_plan.get("videoModel"), current_plan.get("videoResolution") or "720P",
+        ):
+            raise ConflictError(
+                "SMART_REMAKE_RENDER_PLAN_CHANGED",
+                "Reconcile submitted tasks before changing the video model or resolution.",
+            )
         if not plan.get("imageModel"):
             raise AppError(
                 "SMART_REMAKE_CONDITIONING_REQUIRED",
@@ -421,8 +430,6 @@ class KieWorkflow:
         from .engine.video_directions import video_requirements
 
         requirements_prompt = video_requirements(prompt_context)
-        from .engine.kie_adapter import build_kie_group_request
-
         segments = (
             group["segments"]
             if group is not None
@@ -437,7 +444,10 @@ class KieWorkflow:
         # Validate the combined prompt before paid image edits. These public
         # literal placeholders are never fetched, uploaded or sent to KIE.
         request = await asyncio.to_thread(
-            build_kie_group_request,
+            build_group_request,
+            model=plan.get("videoModel", "veo3_lite"),
+            resolution=plan.get("videoResolution") or "720P",
+            audio=bool(row.context_json.get("audioRequired")),
             scenes=scenes,
             segments=segments,
             reference_image_urls=["https://1.1.1.1/opening.png", "https://1.1.1.1/ending.png"],
@@ -446,7 +456,7 @@ class KieWorkflow:
             reference_analysis=snapshot.get("sourceContext", {}),
         )
         request["input"]["prompt"] += requirements_prompt
-        await asyncio.to_thread(validate_kie_video_input, request["input"])
+        await asyncio.to_thread(validate_video_input, request["model"], request["input"])
         validate_generation_payload(
             request["input"]["prompt"], row.context_json.get("referenceAnalysis", {}),
             snapshot["productLock"],
@@ -502,7 +512,11 @@ class KieWorkflow:
         for media in upload_media:
             await require_generation_policy(self.repair, row)
             urls.append(await self.client.upload_file(media))
-        request = {**request, "input": {**request["input"], "image_urls": urls}}
+        image_fields = (
+            {"first_frame_url": urls[0], "last_frame_url": urls[1]}
+            if request["model"] == WAN_VIDEO_MODEL else {"image_urls": urls}
+        )
+        request = {**request, "input": {**request["input"], **image_fields}}
         return request, references
 
     async def _task(
@@ -549,7 +563,7 @@ class KieWorkflow:
             request_hash = _fingerprint({
                 "model": request["model"],
                 "input": {name: value for name, value in request["input"].items()
-                          if name != "image_urls"},
+                          if name not in {"image_urls", "first_frame_url", "last_frame_url"}},
                 "productHash": row.context_json.get("productMediaHash"),
                 "characterHash": row.context_json.get("characterMediaHash"),
                 "imageHashes": [reference["mediaHash"] for reference in references],
@@ -559,9 +573,11 @@ class KieWorkflow:
             attempt, created = await reserve_generation_attempt(
                 self.repair, row, operation, slot=f"video:{key}", request_hash=request_hash,
                 stage="video", provider="kie", model=request["model"],
-                profile={name: request["input"][name] for name in (
-                    "model", "duration", "aspect_ratio", "resolution"
-                ) if name in request["input"]} | wire_binding,
+                profile={"model": request["input"].get("model", request["model"]), **{
+                    name: request["input"][name] for name in (
+                        "duration", "aspect_ratio", "resolution"
+                    ) if name in request["input"]
+                }} | wire_binding,
             )
             if not created and not attempt.provider_task_id:
                 raise AppError(
@@ -698,7 +714,10 @@ class KieWorkflow:
         while True:
             self.ensure_active()
             try:
-                status = await self.client.get_task(task["taskId"])
+                if task.get("requestModel") == WAN_VIDEO_MODEL:
+                    status = await self.client.get_task(task["taskId"], model=WAN_VIDEO_MODEL)
+                else:
+                    status = await self.client.get_task(task["taskId"])
             except SmartRemakeError as exc:
                 provider_error = sanitize_provider_error(
                     exc.details, secrets=(getattr(self.client, "api_key", ""),),
@@ -714,8 +733,17 @@ class KieWorkflow:
             # Remote JSON and injected fake clients cannot supply execution proof.
             receipt = {
                 name: value for name, value in status.get("receipt", {}).items()
-                if name != "executionEvidence"
+                if name not in {"executionEvidence", "terminalExecutionEvidence"}
             }
+            if status["status"] in {"completed", "failed"}:
+                terminal_proof = generation_execution_receipt(
+                    self.client, attempt_id=task.get("attemptId"),
+                    request_hash=str(task.get("requestHash") or ""), provider="kie",
+                    model=task.get("requestModel") or "veo-3-1",
+                    operation="kie.tasks.get", task_id=task["taskId"],
+                ).get("executionEvidence")
+                if terminal_proof is not None:
+                    receipt["terminalExecutionEvidence"] = terminal_proof
             if status["status"] == "failed":
                 provider_error = sanitize_provider_error(
                     status.get("providerError", {

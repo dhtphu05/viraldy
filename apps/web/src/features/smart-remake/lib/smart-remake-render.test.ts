@@ -62,6 +62,28 @@ const apiResult: SmartRemakeRenderResult = {
 };
 
 describe("renderSmartRemakeVideo", () => {
+    it("keeps provider setup instructions valid for a saved Wan plan", async () => {
+        const message =
+            "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
+        expect(
+            getRemakeErrorMessage(
+                new ApiError("SMART_REMAKE_TIMELINE_PROVIDER_REQUIRED", "internal", 503),
+            ),
+        ).toBe(message);
+        await expect(
+            renderSmartRemakeVideo("workspace", {
+                compileResult: {
+                    ...compileResult,
+                    schemaVersion: 2,
+                    projectId: "saved",
+                    revision: 1,
+                    renderPlan: { ...compileResult.renderPlan!, videoModel: "wan/3-0-video" },
+                },
+                health,
+            }),
+        ).rejects.toThrow(message);
+        expect(renderSmartRemake).not.toHaveBeenCalled();
+    });
     it.each(["source_rhythm", "fit_target"] as const)(
         "requires an explicit update before submitting an old %s plan with extra video calls",
         async (timingMode) => {

@@ -29,6 +29,41 @@ function plan(): SmartRemakeRenderPlan {
 }
 
 describe("desktop render group plan", () => {
+    it.each([
+        ["wan/3-0-video", "480P", "480P"],
+        ["wan/3-0-video", undefined, "720P"],
+        ["veo3_lite", undefined, "720P"],
+    ] as const)(
+        "keeps %s video resolution %s distinct from its image reference size",
+        (videoModel, videoResolution, label) => {
+            const html = renderToStaticMarkup(
+                createElement(RemakeRenderGroups, {
+                    plan: { ...plan(), videoModel, videoResolution },
+                    breaks: [],
+                    disabled: false,
+                }),
+            );
+            expect(html).toContain(`Clip dọc 9:16 · ${label} · 8 giây mỗi lượt`);
+            expect(html).toContain("720 × 1280");
+            expect(html).toContain("4 cảnh · 2 lượt tạo video");
+        },
+    );
+    it.each([
+        ["wan/3-0-video", "Wan 3.0 · KIE"],
+        ["another-model", "KIE"],
+    ])("shows the saved %s model without relabeling it as Veo", (videoModel, label) => {
+        const html = renderToStaticMarkup(
+            createElement(RemakeRenderGroups, {
+                plan: { ...plan(), videoModel },
+                breaks: [],
+                disabled: false,
+            }),
+        );
+        expect(html).toContain(`>${label}</p>`);
+        expect(html).not.toContain("Veo");
+        expect(html).toContain("4 cảnh · 2 lượt tạo video");
+        expect(html).toContain("Video hoàn chỉnh 16 giây");
+    });
     it("does not count provider fragments as extra analyzed scenes", () => {
         const base = plan();
         const fragmented = {

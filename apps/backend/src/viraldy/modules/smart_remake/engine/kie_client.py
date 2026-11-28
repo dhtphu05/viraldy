@@ -26,8 +26,10 @@ from viraldy.shared.errors.base import AppError
 
 from .config import get_kie_api_key
 from .errors import SmartRemakeError, SmartRemakeValidationError
-from .kie_adapter import KIE_MODEL, public_media_url, validate_kie_video_input
+from .kie_adapter import KIE_MODEL, public_media_url
 from .schemas import UploadedMedia
+from .video_requests import canonical_video_model, validate_video_input
+from .wan_video_adapter import WAN_VIDEO_MODEL
 
 API_ORIGIN = "https://api.kie.ai"
 UPLOAD_ORIGIN = "https://kieai.redpandaai.co"
@@ -119,15 +121,15 @@ class KieClient:
     ) -> dict[str, Any]:
         self.last_execution_evidence: ProviderExecutionEvidence | None = None
         self.last_request_id: str | None = None
-        if model != KIE_MODEL:
-            raise SmartRemakeValidationError("KIE model must be veo-3-1.", "KIE_VALIDATION_FAILED")
-        await asyncio.to_thread(validate_kie_video_input, input_data)
+        model = canonical_video_model(model)
+        await asyncio.to_thread(validate_video_input, model, input_data)
         try:
             data = await self._json(
                 "POST",
                 "/api/v1/jobs/createTask",
                 body={"model": model, "input": input_data},
                 code="KIE_TASK_CREATE_FAILED",
+                model=model,
             )
         except SmartRemakeError as exc:
             if exc.code in {"KIE_UNAVAILABLE", "KIE_INVALID_RESPONSE", "KIE_SERVER_ERROR"}:
@@ -142,25 +144,28 @@ class KieClient:
             })
         return {"task_id": task_id.strip(), "status": "queued"}
 
-    async def get_task(self, task_id: str) -> dict[str, Any]:
+    async def get_task(self, task_id: str, *, model: str = KIE_MODEL) -> dict[str, Any]:
         self.last_execution_evidence = None
         self.last_request_id = None
+        model = canonical_video_model(model)
         if not isinstance(task_id, str) or not task_id.strip() or len(task_id) > 256:
             raise SmartRemakeValidationError(
                 "A valid KIE task ID is required.", "KIE_VALIDATION_FAILED"
             )
-        data = await self._task_data(task_id)
+        data = await self._task_data(task_id, model=model)
         state = data.get("state")
         if (
             data.get("taskId") != task_id
             or not isinstance(state, str)
             or state not in _STATES
-            or data.get("model", KIE_MODEL) != KIE_MODEL
+            or data.get("model", KIE_MODEL if model == KIE_MODEL else None) != model
         ):
             raise SmartRemakeError("KIE returned an unknown task response.", "KIE_INVALID_RESPONSE")
         result: dict[str, Any] = {"task_id": task_id, "status": _STATES[state]}
         receipt = {
-            name: value for name in ("credits", "consumeCredits", "costCredits", "billedUsd")
+            name: value for name in (
+                "credits", "consumeCredits", "creditsConsumed", "costCredits", "billedUsd",
+            )
             if (value := data.get(name)) is not None and _numeric_receipt(value)
         }
         if receipt:
@@ -180,7 +185,12 @@ class KieClient:
             result["error_message"] = error.get("providerMessage", "KIE generation failed.")
         return result
 
-    async def _task_data(self, task_id: str) -> dict[str, Any]:
+    async def _task_data(self, task_id: str, *, model: str = KIE_MODEL) -> dict[str, Any]:
+        if model == WAN_VIDEO_MODEL:
+            return await self._json(
+                "GET", "/api/v1/jobs/recordInfo", params={"taskId": task_id},
+                code="KIE_TASK_STATUS_FAILED", model=model,
+            )
         try:
             data = await self._json(
                 "GET", "/api/v1/veo/record-info", params={"taskId": task_id},
@@ -218,6 +228,7 @@ class KieClient:
         code: str,
         body: dict[str, Any] | None = None,
         params: dict[str, str] | None = None,
+        model: str = KIE_MODEL,
     ) -> dict[str, Any]:
         async with self._client() as client:
             try:
@@ -234,7 +245,7 @@ class KieClient:
             self.last_execution_evidence = observe_response(
                 response,
                 provider="kie",
-                model=KIE_MODEL,
+                model=model,
                 operation="kie.tasks.create" if method == "POST" else "kie.tasks.get",
                 owned_transport=self.http_client is None,
             )

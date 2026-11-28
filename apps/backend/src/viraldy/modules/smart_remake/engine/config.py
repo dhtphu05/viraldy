@@ -4,6 +4,7 @@ from typing import Literal, cast
 DEFAULT_MAX_REFERENCE_VIDEO_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024
 DEFAULT_SMART_REMAKE_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_KIE_VIDEO_MODEL = "wan/3-0-video"
 DEFAULT_FLOWKIT_URL = "http://127.0.0.1:8100"
 DEFAULT_UNIFICALLY_API_BASE_URL = "https://api.unifically.com"
 DEFAULT_UNIFICALLY_FILES_BASE_URL = "https://files.storagecdn.online"
@@ -90,6 +91,35 @@ def get_unifically_api_key() -> str:
 
 def get_kie_api_key() -> str:
     return os.getenv("KIE_API_KEY", "").strip()
+
+
+def get_kie_video_model() -> Literal["veo3_lite", "wan/3-0-video"]:
+    value = os.getenv("SMART_REMAKE_KIE_VIDEO_MODEL", DEFAULT_KIE_VIDEO_MODEL).strip()
+    if value not in {"veo3_lite", "wan/3-0-video"}:
+        from .errors import SmartRemakeValidationError
+
+        raise SmartRemakeValidationError(
+            "SMART_REMAKE_KIE_VIDEO_MODEL must be veo3_lite or wan/3-0-video.",
+            "SMART_REMAKE_VIDEO_MODEL_INVALID",
+        )
+    return cast(Literal["veo3_lite", "wan/3-0-video"], value)
+
+
+def get_kie_video_resolution(
+    video_model: Literal["veo3_lite", "wan/3-0-video"] | None = None,
+) -> Literal["480P", "720P", "1080P"]:
+    model = video_model or get_kie_video_model()
+    value = os.getenv("SMART_REMAKE_KIE_VIDEO_RESOLUTION", "").strip().upper() or (
+        "480P" if model == "wan/3-0-video" else "720P"
+    )
+    if value not in {"480P", "720P", "1080P"} or (model == "veo3_lite" and value != "720P"):
+        from .errors import SmartRemakeValidationError
+
+        raise SmartRemakeValidationError(
+            "Choose 480P, 720P or 1080P for Wan, or 720P for the saved Veo contract.",
+            "SMART_REMAKE_VIDEO_RESOLUTION_INVALID",
+        )
+    return cast(Literal["480P", "720P", "1080P"], value)
 
 
 def get_openai_image_quality() -> Literal["low", "medium", "high", "xhigh", "max"]:

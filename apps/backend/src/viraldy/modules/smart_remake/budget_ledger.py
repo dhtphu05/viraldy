@@ -23,6 +23,7 @@ from .generation_recovery import (
     is_completed_analysis_response,
     is_known_image_rejection,
     is_known_video_rejection,
+    is_terminal_failed_video_response,
 )
 from .models import SmartRemakeOperationModel, SmartRemakeProjectModel
 
@@ -361,6 +362,7 @@ async def reserve_attempt(
         and row.status != "completed"
         and not is_known_image_rejection(row)
         and not is_known_video_rejection(row)
+        and not is_terminal_failed_video_response(row)
         and not is_completed_analysis_response(row)
         )
     ]
