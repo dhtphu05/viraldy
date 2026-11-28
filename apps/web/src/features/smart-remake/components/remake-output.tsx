@@ -23,6 +23,7 @@ import { getRemakeGenerationProgress } from "../lib/remake-generation-progress";
 import { getTimelinePublishError } from "../lib/remake-timeline";
 import { getTimelinePreviewScope } from "../lib/remake-preview";
 import { getRemakeSceneLabel } from "../lib/remake-scene-label";
+import { getRenderWindowFrames } from "../lib/remake-groups";
 import type { RemakeRepairCandidate } from "../lib/remake-action";
 import "./remake-output.css";
 export { RemakeVersionReview } from "./remake-version-review";
@@ -273,8 +274,9 @@ function OutputSession(props: RemakeOutputProps) {
                 </div>
                 {hasRenderFragments && (
                     <p className="text-xs leading-relaxed text-text-secondary">
-                        Một cảnh nguồn có thể được chia thành hai đoạn khi đi qua mốc 8 giây; số
-                        cảnh nguồn không đổi.
+                        Một cảnh nguồn có thể được chia thành hai đoạn khi đi qua mốc{" "}
+                        {getRenderWindowFrames(project.renderPlan) / 24} giây; số cảnh nguồn không
+                        đổi.
                     </p>
                 )}
                 <Button
@@ -524,7 +526,7 @@ function OutputSession(props: RemakeOutputProps) {
                                         }
                                         versionLabel={
                                             timelineMode
-                                                ? `Clip AI · 8 giây · ${sceneLabel}`
+                                                ? `Clip AI · ${seconds((active.frameCount ?? active.technicalCheck.frameCount ?? active.rawDurationFrames ?? getRenderWindowFrames(project?.renderPlan)) / 24)} giây · ${sceneLabel}`
                                                 : "Cảnh đang dùng"
                                         }
                                         onMetadata={

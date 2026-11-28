@@ -29,6 +29,44 @@ function plan(): SmartRemakeRenderPlan {
 }
 
 describe("desktop render group plan", () => {
+    it("shows two six-second Wan clips with audio for a twelve-second plan", () => {
+        const base = plan();
+        const units = base.units.map((unit) => ({
+            ...unit,
+            rawDurationFrames: 144,
+            targetDurationFrames: 72,
+        }));
+        const groups = [0, 2].map((start, index) => ({
+            id: `group-${index}`,
+            renderUnitIds: units.slice(start, start + 2).map((unit) => unit.id),
+            rawDurationFrames: 144,
+            targetDurationFrames: 144,
+            segments: units.slice(start, start + 2).map((unit, offset) => ({
+                renderUnitId: unit.id,
+                inFrame: offset * 72,
+                outFrame: (offset + 1) * 72,
+            })),
+        }));
+        const html = renderToStaticMarkup(
+            createElement(RemakeRenderGroups, {
+                plan: {
+                    ...base,
+                    groupingPolicy: "fixed_provider_windows",
+                    videoModel: "wan/3-0-video",
+                    videoResolution: "480P",
+                    audioRequired: true,
+                    units,
+                    groups,
+                },
+                breaks: [],
+                disabled: false,
+            }),
+        );
+        expect(html).toContain("Video hoàn chỉnh 12 giây");
+        expect(html).toContain("KIE tạo 2 clip 6 giây");
+        expect(html).toContain("6 giây mỗi lượt · Có âm thanh");
+        expect(html).not.toContain("8 giây mỗi lượt");
+    });
     it.each([
         ["wan/3-0-video", "480P", "480P"],
         ["wan/3-0-video", undefined, "720P"],

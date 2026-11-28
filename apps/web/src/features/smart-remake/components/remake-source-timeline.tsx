@@ -20,7 +20,7 @@ export function RemakeExcerptControls({
     disabled,
 }: {
     durationSeconds: number | null;
-    targetSeconds: 8 | 16;
+    targetSeconds: 8 | 12 | 16;
     startFrame: number;
     currentSeconds: number;
     onChange(frame: number): void;

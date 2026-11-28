@@ -122,10 +122,10 @@ function PromptPreviewSession({
     return (
         <section
             aria-label="Prompt KIE ở bước duyệt kịch bản"
-            className="space-y-3 rounded-2xl bg-surface px-5 py-4"
+            className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-surface px-5 py-4"
         >
             <div className="space-y-1">
-                <h2 className="text-sm font-semibold">Prompt tạo video</h2>
+                <h2 className="text-sm font-semibold">Prompt KIE cho từng clip</h2>
                 <p className="text-xs text-text-secondary">
                     Xem và sao chép hướng dẫn cho từng clip trước khi tạo video.
                 </p>
@@ -136,7 +136,7 @@ function PromptPreviewSession({
                         key={group.id}
                         type="button"
                         variant="ghost"
-                        className="min-h-11 bg-surface-soft"
+                        className="min-h-11 bg-primary-soft text-primary hover:bg-primary-soft/80"
                         disabled={!available || stale}
                         onClick={() => {
                             setSelected(group.id);
@@ -163,7 +163,7 @@ function PromptPreviewSession({
                     if (!open) setSelected(null);
                 }}
             >
-                <DialogContent className="max-w-3xl rounded-3xl border-0 sm:max-w-3xl">
+                <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto rounded-3xl border-0 sm:max-w-3xl">
                     <DialogTitle>Clip {selectedIndex + 1} · Prompt KIE</DialogTitle>
                     <DialogDescription>
                         Hướng dẫn theo kịch bản và các chỉnh sửa hiện tại của bạn.

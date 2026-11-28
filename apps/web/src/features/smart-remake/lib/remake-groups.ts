@@ -1,5 +1,9 @@
 import type { SmartRemakeRenderGroup, SmartRemakeRenderPlan } from "@/shared/api/smart-remake";
 
+export function getRenderWindowFrames(plan: SmartRemakeRenderPlan | undefined): number {
+    return plan?.groups?.[0]?.rawDurationFrames ?? plan?.units[0]?.rawDurationFrames ?? 192;
+}
+
 export function getRenderGroups(plan: SmartRemakeRenderPlan): SmartRemakeRenderGroup[] {
     return (
         plan.groups ??

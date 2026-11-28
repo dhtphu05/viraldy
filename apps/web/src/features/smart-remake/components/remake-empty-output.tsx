@@ -3,6 +3,7 @@ import type { SmartRemakeProject } from "@/shared/api/smart-remake";
 import { Button } from "@/shared/ui/button";
 import { RemakeGenerationProgress } from "./remake-generation-progress";
 import { getRemakeGenerationProgress } from "../lib/remake-generation-progress";
+import { getRenderWindowFrames } from "../lib/remake-groups";
 
 interface Props {
     workspaceId?: string;
@@ -65,8 +66,8 @@ export function RemakeEmptyOutput({
             </header>
             {fragmentCount > sourceCount && (
                 <p className="text-xs leading-relaxed text-text-secondary">
-                    Một cảnh nguồn có thể được chia thành hai đoạn khi đi qua mốc 8 giây; số cảnh
-                    nguồn không đổi.
+                    Một cảnh nguồn có thể được chia thành hai đoạn khi đi qua mốc{" "}
+                    {getRenderWindowFrames(project.renderPlan) / 24} giây; số cảnh nguồn không đổi.
                 </p>
             )}
             {!recoveryPresented && (

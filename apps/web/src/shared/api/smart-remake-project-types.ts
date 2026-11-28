@@ -191,7 +191,7 @@ export type SmartRemakeApproval = {
 export type SmartRemakeIntakeMetadata = {
     idempotencyKey: string;
     projectName: string;
-    targetDuration: 8 | 16;
+    targetDuration: 8 | 12 | 16;
     requirements: SmartRemakeRequirements;
     rights: SmartRemakeRights;
     budget: SmartRemakeBudgetPolicy;
@@ -228,7 +228,7 @@ export type SmartRemakePreflightRequest = {
     action: SmartRemakePreflightAction;
     projectId?: string;
     expectedRevision?: number;
-    targetDuration?: 8 | 16;
+    targetDuration?: 8 | 12 | 16;
     referenceStartFrame?: number;
     analysisScope?: "excerpt" | "full_source";
     sourceDurationSeconds?: number;
@@ -246,7 +246,7 @@ export type SmartRemakePreflight = {
     contextHash: string;
     mode: string;
     scope: {
-        targetDuration: 8 | 16;
+        targetDuration: 8 | 12 | 16;
         sceneCount: number;
         groupCount: number;
         imageCount: number;

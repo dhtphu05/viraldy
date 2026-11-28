@@ -1,7 +1,7 @@
 import { Check, Clapperboard, Image, Layers3 } from "lucide-react";
 import type { SmartRemakeRenderPlan } from "@/shared/api/smart-remake";
 import { Button } from "@/shared/ui/button";
-import { getRenderGroups, previewRenderGroups } from "../lib/remake-groups";
+import { getRenderGroups, getRenderWindowFrames, previewRenderGroups } from "../lib/remake-groups";
 
 const seconds = (frames: number) => Number((frames / 24).toFixed(3)).toLocaleString("vi-VN");
 
@@ -23,6 +23,7 @@ export function RemakeRenderGroups({
     onRecompile?(): void;
 }) {
     const fixedProviderWindows = plan.groupingPolicy === "fixed_provider_windows";
+    const windowSeconds = seconds(getRenderWindowFrames(plan));
     const groups =
         !fixedProviderWindows && dirty && !cutsDirty
             ? previewRenderGroups(plan, breaks)
@@ -77,8 +78,8 @@ export function RemakeRenderGroups({
                         )}{" "}
                         giây.{" "}
                         {fixedProviderWindows
-                            ? `KIE tạo ${groups.length} clip 8 giây; toàn bộ cảnh được phân bổ vào các clip này.`
-                            : "Các cảnh liền nhau được tạo chung khi vừa một clip 8 giây; nhịp từng cảnh vẫn giữ riêng."}
+                            ? `KIE tạo ${groups.length} clip ${windowSeconds} giây; toàn bộ cảnh được phân bổ vào các clip này.`
+                            : `Các cảnh liền nhau được tạo chung khi vừa một clip ${windowSeconds} giây; nhịp từng cảnh vẫn giữ riêng.`}
                     </p>
                 </div>
                 {dirty && (
@@ -102,8 +103,9 @@ export function RemakeRenderGroups({
                                   : "KIE"}
                         </p>
                         <p className="mt-1 text-xs text-text-secondary">
-                            Clip dọc 9:16{videoResolution ? ` · ${videoResolution}` : ""} · 8 giây
-                            mỗi lượt
+                            Clip dọc 9:16{videoResolution ? ` · ${videoResolution}` : ""} ·{" "}
+                            {windowSeconds} giây mỗi lượt
+                            {plan.audioRequired === true ? " · Có âm thanh" : ""}
                         </p>
                     </div>
                 </div>

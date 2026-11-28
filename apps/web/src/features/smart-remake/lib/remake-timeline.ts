@@ -15,7 +15,7 @@ export function secondsToFrames(seconds: number): number {
 export function getSourceExcerptError(
     sourceDuration: number | null,
     startFrame: number,
-    targetSeconds: 8 | 16,
+    targetSeconds: 8 | 12 | 16,
 ): string | null {
     if (sourceDuration === null || !Number.isFinite(sourceDuration) || sourceDuration <= 0)
         return "Đang đọc độ dài video mẫu…";

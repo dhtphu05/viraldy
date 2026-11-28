@@ -26,8 +26,8 @@ export interface RemakeInputsProps {
     onLinkSubmit: () => void;
     isLinkLoading: boolean;
     linkedTitle?: string;
-    duration: 8 | 16;
-    onDuration: (duration: 8 | 16) => void;
+    duration: 8 | 12 | 16;
+    onDuration: (duration: 8 | 12 | 16) => void;
     language: string;
     onLanguage: (value: string) => void;
     description: string;
@@ -510,27 +510,16 @@ export function RemakeInputs(props: RemakeInputsProps) {
                         <legend className="mb-2 text-sm font-medium text-text-primary">
                             Thời lượng video đầu ra
                         </legend>
-                        <div className="flex gap-2">
-                            {([8, 16] as const).map((duration) => (
-                                <Button
-                                    key={duration}
-                                    type="button"
-                                    variant="ghost"
-                                    className={cn(
-                                        quietButton,
-                                        "flex-1",
-                                        props.duration === duration &&
-                                            "bg-primary-soft text-primary hover:bg-primary-soft",
-                                    )}
-                                    aria-pressed={props.duration === duration}
-                                    onClick={() => props.onDuration(duration)}
-                                >
-                                    {duration} giây
-                                </Button>
-                            ))}
+                        <div className="rounded-xl bg-primary-soft px-4 py-3 text-sm font-medium text-primary">
+                            {props.duration} giây
                         </div>
                         <p className="text-xs text-text-secondary">
-                            Video dọc 9:16 · Phân bổ lại thời lượng cho đủ các cảnh
+                            {props.duration === 12
+                                ? "2 clip × 6 giây · Có âm thanh · Video dọc 9:16"
+                                : "Thời lượng dự án đã lưu · Video dọc 9:16"}
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                            Phân bổ lại thời lượng cho đủ các cảnh từ video mẫu
                         </p>
                     </fieldset>
                     <div className="space-y-2">

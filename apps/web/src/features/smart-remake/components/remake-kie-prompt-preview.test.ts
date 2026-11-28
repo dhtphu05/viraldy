@@ -55,6 +55,53 @@ it("makes KIE prompts discoverable at script review outside the advanced setting
     expect(screen.getByRole("region", { name: "Prompt KIE ở bước duyệt kịch bản" })).toBeTruthy();
 });
 
+it("keeps both clip prompts above all 24 scene cards for a twelve-second project", async () => {
+    const value = compiled();
+    const units = Array.from({ length: 24 }, (_, index) => ({
+        ...value.renderPlan!.units[0],
+        id: `unit-${index + 1}`,
+        targetDurationFrames: 12,
+    }));
+    const groups = [0, 12].map((start, index) => ({
+        id: `group-${index + 1}`,
+        renderUnitIds: units.slice(start, start + 12).map((unit) => unit.id),
+        targetDurationFrames: 144,
+        rawDurationFrames: 144,
+        segments: [],
+    }));
+    const preview = vi.spyOn(previewApi, "previewSmartRemakeKiePrompts").mockResolvedValue({
+        ...result("unused"),
+        groups: groups.map((group) => ({
+            groupId: group.id,
+            model: "wan/3-0-video",
+            prompt: `Planned ${group.id}`,
+        })),
+    });
+    render(
+        createElement(RemakeStoryboard, {
+            ...props,
+            compileResult: {
+                ...value,
+                inputSummary: { ...value.inputSummary, targetDuration: 12 },
+                renderPlan: { ...value.renderPlan!, units, groups },
+                sceneMap: {
+                    ...value.sceneMap,
+                    scenes: units.map(() => ({ ...value.sceneMap.scenes[0] })),
+                },
+            },
+            onSceneChange: vi.fn(),
+        }),
+    );
+    const trigger = screen.getByRole("button", { name: "Clip 2 · Xem prompt KIE" });
+    const firstScene = screen.getByRole("heading", { name: /^Cảnh 1$/ });
+    expect(
+        trigger.compareDocumentPosition(firstScene) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(trigger);
+    expect(await screen.findByText("Planned group-2")).toBeTruthy();
+    expect(preview.mock.calls[0][2].scenePrompts).toHaveLength(24);
+});
+
 it("opens and copies a planned prompt in review without creating a video", async () => {
     const preview = vi
         .spyOn(previewApi, "previewSmartRemakeKiePrompts")

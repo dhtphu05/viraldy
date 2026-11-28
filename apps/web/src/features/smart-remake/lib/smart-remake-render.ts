@@ -59,7 +59,7 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "SMART_REMAKE_EXPECTATIONS_INVALID":
             return "Cập nhật kịch bản để đồng bộ sản phẩm, tư liệu và yêu cầu cảnh trước khi tạo video nhé.";
         case "SMART_REMAKE_PROVIDER_PLAN_UPDATE_REQUIRED":
-            return "Cập nhật kịch bản để tạo đúng 1 clip cho đầu ra 8 giây hoặc 2 clip cho 16 giây. Các clip và tác vụ đã gửi vẫn được giữ.";
+            return "Cập nhật kịch bản để tạo đúng số clip theo thời lượng đầu ra. Các clip và tác vụ đã gửi vẫn được giữ.";
         case "SMART_REMAKE_ASSEMBLY_EXPECTATIONS_REQUIRED":
             return "Ghép lại bản xem trước để kiểm tra theo yêu cầu hiện tại. Các clip đã có vẫn được giữ.";
         case "SMART_REMAKE_PRODUCT_ANALYSIS_INCOMPLETE":
@@ -77,12 +77,12 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "SMART_REMAKE_SOURCE_FRAME_INVALID":
             return "Chưa đọc được video mẫu. Thử video MP4, MOV hoặc WebM phát được đầy đủ nhé.";
         case "SMART_REMAKE_TIMELINE_SCENE_TOO_LONG":
-            return "Có cảnh dài hơn 8 giây. Thêm mốc cắt ở bên dưới rồi cập nhật kịch bản nhé.";
+            return "Có cảnh vượt thời lượng một clip. Thêm mốc cắt ở bên dưới rồi cập nhật kịch bản nhé.";
         case "SMART_REMAKE_TIMELINE_SCENE_LIMIT":
             return "Kịch bản cũ chưa hỗ trợ đủ cảnh. Cập nhật kịch bản để phân tích toàn bộ video mẫu nhé.";
         case "SMART_REMAKE_TIMELINE_DENSITY_UNSUPPORTED":
         case "SMART_REMAKE_OUTPUT_DENSITY_UNSUPPORTED":
-            return "Không đủ khung hình trong thời lượng đã chọn để giữ đủ các cảnh. Chọn 16 giây hoặc xem lại các mốc cắt nhé.";
+            return "Không đủ khung hình trong thời lượng đầu ra để giữ đủ các cảnh. Xem lại các mốc cắt rồi cập nhật kịch bản nhé.";
         case "SMART_REMAKE_PROVIDER_PROMPT_TOO_LARGE":
             return "Chưa đóng gói được đầy đủ hướng dẫn cho KIE. Rút gọn yêu cầu bổ sung rồi cập nhật kịch bản nhé.";
         case "SMART_REMAKE_TIMELINE_CUTS_INVALID":
@@ -90,7 +90,7 @@ export function getRemakeErrorMessage(cause: unknown): string {
         case "SMART_REMAKE_TIMELINE_PROVIDER_REQUIRED":
             return "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";
         case "SMART_REMAKE_RENDER_GROUPS_INVALID":
-            return "Nhóm cảnh chưa hợp lệ. Mỗi nhóm cần gồm các cảnh liền nhau và tối đa 8 giây; cập nhật lại kịch bản nhé.";
+            return "Nhóm cảnh chưa hợp lệ. Mỗi nhóm cần gồm các cảnh liền nhau và vừa thời lượng clip của provider; cập nhật lại kịch bản nhé.";
         case "OPENAI_IMAGE_NOT_CONFIGURED":
         case "OPENAI_IMAGES_NOT_CONFIGURED":
         case "OPENAI_IMAGE_AUTH_FAILED":

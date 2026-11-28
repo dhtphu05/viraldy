@@ -62,6 +62,15 @@ const apiResult: SmartRemakeRenderResult = {
 };
 
 describe("renderSmartRemakeVideo", () => {
+    it.each([
+        "SMART_REMAKE_PROVIDER_PLAN_UPDATE_REQUIRED",
+        "SMART_REMAKE_TIMELINE_SCENE_TOO_LONG",
+        "SMART_REMAKE_OUTPUT_DENSITY_UNSUPPORTED",
+        "SMART_REMAKE_RENDER_GROUPS_INVALID",
+    ])("keeps %s instructions applicable to six-second clip plans", (code) => {
+        const message = getRemakeErrorMessage(new ApiError(code, "internal", 409));
+        expect(message).not.toMatch(/8 giây|16 giây/);
+    });
     it("keeps provider setup instructions valid for a saved Wan plan", async () => {
         const message =
             "Timeline cần kết nối KIE để tạo các clip theo nhóm cảnh. Nhờ quản trị viên kiểm tra nhé.";

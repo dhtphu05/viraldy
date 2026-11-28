@@ -71,6 +71,7 @@ export type SmartRemakeRenderPlan = {
     renderGroupBreaks?: number[];
     videoModel?: string;
     videoResolution?: "480P" | "720P" | "1080P";
+    audioRequired?: boolean;
     imageModel?: string;
     imageQuality?: "low" | "medium" | "high" | "xhigh" | "max";
     imageComplexity?: "low" | "medium" | "high";
@@ -127,12 +128,12 @@ export type SmartRemakeCompileResult = {
     draftTimeline?: SmartRemakeTimeline;
     mode: "smart_remake" | "montage";
     renderSubmitted: false;
-    inputSummary: { targetDuration: 8 | 16; aspectRatio: "9:16"; language: string | null };
+    inputSummary: { targetDuration: 8 | 12 | 16; aspectRatio: "9:16"; language: string | null };
     referenceAnalysis: Record<string, unknown>;
     analyzeOutput: Record<string, unknown>;
     productLock: Record<string, unknown>;
     sceneMap: {
-        targetDuration: 8 | 16;
+        targetDuration: 8 | 12 | 16;
         sceneCount: number;
         scenes: Array<Record<string, unknown>>;
     };
@@ -148,7 +149,7 @@ export type SmartRemakeRenderResult = {
     mode: "smart_remake";
     provider: string;
     finalVideoUrl: string;
-    targetDuration: 8 | 16;
+    targetDuration: 8 | 12 | 16;
     sceneCount: number;
     renderSubmitted: boolean;
     status: "completed" | "submitted" | "running";
@@ -268,7 +269,7 @@ export type SmartRemakeProject = {
     downloadUrl?: string;
     productImageUrl?: string;
     additionalProductImageUrls?: string[];
-    targetDuration: 8 | 16;
+    targetDuration: 8 | 12 | 16;
     provider: "unifically" | "flowkit" | "kie";
     analysisProgress?: SmartRemakeAnalysisProgress;
     generationRecovery?: SmartRemakeGenerationRecovery;
@@ -327,7 +328,7 @@ export function getSmartRemakeHealth(workspaceId: string) {
 export function compileSmartRemake(
     workspaceId: string,
     input: {
-        targetDuration: 8 | 16;
+        targetDuration: 8 | 12 | 16;
         language: string;
         prompt: string;
         description: string;
@@ -398,7 +399,7 @@ export function renderSmartRemake(
     if (input.projectId) body.set("projectId", input.projectId);
     if (input.expectedRevision !== undefined)
         body.set("expectedRevision", String(input.expectedRevision));
-    body.set("audioRequired", "false");
+    body.set("audioRequired", String(input.compileResult.renderPlan?.audioRequired ?? false));
     return apiPostForm<SmartRemakeRenderResult>(
         `/workspaces/${workspaceId}/smart-remake/render`,
         body,

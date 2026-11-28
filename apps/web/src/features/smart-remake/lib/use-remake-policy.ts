@@ -138,7 +138,7 @@ export function useRemakePolicy({
         product?: File;
         productUrl?: string;
         productImageUrl?: string;
-        duration: 8 | 16;
+        duration: 8 | 12 | 16;
         snapshot?: RemakeActionSnapshot;
     }): Promise<SmartRemakeProject> {
         if (!video && project && project.targetDuration !== duration)
@@ -482,7 +482,7 @@ export function useRemakePolicy({
             video: File | null,
             product: File | undefined,
             productUrl: string | undefined,
-            duration: 8 | 16,
+            duration: 8 | 12 | 16,
         ) =>
             !video ||
             Boolean(

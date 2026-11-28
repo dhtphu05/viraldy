@@ -81,7 +81,7 @@ export function useRemakeStudio(
     startNewProject = false,
 ) {
     const [step, setStep] = useState<RemakeStep>("prepare");
-    const [duration, setDuration] = useState<8 | 16>(16);
+    const [duration, setDuration] = useState<8 | 12 | 16>(12);
     const [timelineStartFrame, setTimelineStartFrame] = useState(0);
     const [sourceDuration, setSourceDuration] = useState<number | null>(null);
     const [sourceCutFrames, setSourceCutFrames] = useState<number[] | undefined>();
@@ -1683,7 +1683,7 @@ export function useRemakeStudio(
         repair,
         accept,
         refreshProject,
-        onDuration: (value: 8 | 16) => {
+        onDuration: (value: 8 | 12 | 16) => {
             invalidate();
             setDuration(value);
             if (measuredSourceDuration !== null)

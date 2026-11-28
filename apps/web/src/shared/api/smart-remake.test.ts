@@ -9,6 +9,20 @@ function response(data: unknown) {
 }
 
 describe("Smart Remake controlled repair API", () => {
+    it.each([true, false, undefined])(
+        "preserves planned audioRequired=%s in the render request",
+        async (audioRequired) => {
+            const fetch = vi.fn().mockResolvedValue(response({ status: "submitted" }));
+            vi.stubGlobal("fetch", fetch);
+            await api.renderSmartRemake("workspace", {
+                compileResult: { renderPlan: { audioRequired } } as api.SmartRemakeCompileResult,
+                provider: "kie",
+                projectName: "Smart Remake",
+            });
+            const body = fetch.mock.calls[0][1].body as FormData;
+            expect(body.get("audioRequired")).toBe(String(audioRequired ?? false));
+        },
+    );
     it("sends KIE's stable render identity and preserves the queued project", async () => {
         const pending = {
             provider: "kie",

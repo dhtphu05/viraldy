@@ -126,6 +126,12 @@ const project = (phase: "intake" | "compiled" = "intake") =>
     }) as SmartRemakeProject;
 
 describe("explicit server project entry", () => {
+    it("starts a new project with the twelve-second output", () => {
+        const hook = renderHook(() => useRemakeStudio("workspace", "account", undefined, true), {
+            wrapper,
+        });
+        expect(hook.result.current.duration).toBe(12);
+    });
     it("retires the previous project's analysis and follows the selected project's own compile", async () => {
         const pending = (id: string, revision: number) =>
             ({

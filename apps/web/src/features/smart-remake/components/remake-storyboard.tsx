@@ -139,6 +139,26 @@ export function RemakeStoryboard({
                 </p>
                 <span>Chưa tạo video</span>
             </div>
+            {compileResult.renderPlan && (
+                <RemakePlannedKiePrompts
+                    workspaceId={workspaceId}
+                    projectRevision={projectRevision}
+                    compileResult={compileResult}
+                    sceneDrafts={sceneDrafts}
+                    requirements={requirements}
+                    stale={Boolean(
+                        promptPreviewStale ||
+                        isRecompiling ||
+                        sourceCutsDirty ||
+                        sourceCutsError ||
+                        (!requirements && sourcePlanDirty) ||
+                        (renderGroupBreaks &&
+                            compileResult.renderPlan.groupingPolicy !== "fixed_provider_windows" &&
+                            JSON.stringify(renderGroupBreaks) !==
+                                JSON.stringify(getRenderGroupBreaks(compileResult.renderPlan))),
+                    )}
+                />
+            )}
             <RemakeSourceAudio value={compileResult.referenceAnalysis?.sourceAudio} />
             <div className={sourceMap ? "remake-storyboard-workspace" : "space-y-5"}>
                 <aside id={`${id}-reference`} className="remake-storyboard-reference">
@@ -475,26 +495,6 @@ export function RemakeStoryboard({
                     {sourceMap && productReference}
                 </div>
             </div>
-            {compileResult.renderPlan && (
-                <RemakePlannedKiePrompts
-                    workspaceId={workspaceId}
-                    projectRevision={projectRevision}
-                    compileResult={compileResult}
-                    sceneDrafts={sceneDrafts}
-                    requirements={requirements}
-                    stale={Boolean(
-                        promptPreviewStale ||
-                        isRecompiling ||
-                        sourceCutsDirty ||
-                        sourceCutsError ||
-                        (!requirements && sourcePlanDirty) ||
-                        (renderGroupBreaks &&
-                            compileResult.renderPlan.groupingPolicy !== "fixed_provider_windows" &&
-                            JSON.stringify(renderGroupBreaks) !==
-                                JSON.stringify(getRenderGroupBreaks(compileResult.renderPlan))),
-                    )}
-                />
-            )}
             {sourceMap && (
                 <details id={`${id}-generation`} className="remake-storyboard-generation">
                     <summary>Kế hoạch tạo video và cấu hình nâng cao</summary>

@@ -85,6 +85,26 @@ describe("RemakeOutput", () => {
             ],
         },
     };
+    it("labels a six-second generated clip using its actual stored frame count", () => {
+        const html = renderToStaticMarkup(
+            createElement(RemakeOutput, {
+                ...props,
+                project: {
+                    ...timelineProject,
+                    targetDuration: 12,
+                    scenes: timelineProject.scenes.map((scene) => ({
+                        ...scene,
+                        versions: scene.versions.map((item) => ({
+                            ...item,
+                            rawDurationFrames: 144,
+                        })),
+                    })),
+                },
+            }),
+        );
+        expect(html).toContain("Clip AI · 6 giây");
+        expect(html).not.toContain("Clip AI · 8 giây");
+    });
     it("keeps original generated images and prompt tools accessible on completed output", () => {
         const completed = {
             ...timelineProject,

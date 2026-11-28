@@ -76,13 +76,22 @@ asset revisions. These rows do not retain the removed media bytes.
 
 ## Generated images and KIE prompts
 
-At **Duyệt kịch bản**, each clip has **Xem prompt KIE**. This displays **Prompt sẽ
-gửi KIE** from the current script text and product requirements. The read-only POST
+At **Duyệt kịch bản**, **Prompt KIE cho từng clip** appears below the duration
+summary, above the video and scene cards. Each clip has **Xem prompt KIE**. This
+displays **Prompt sẽ gửi KIE** from the current script text and product requirements.
+The read-only POST
 `/projects/{projectId}/generation/prompt-preview` checks workspace read permission
 and the saved revision, then uses the same prompt builder as KIE submission. It
 does not save edits, create jobs, generate images, upload media or reserve credits.
 Changing scene text invalidates the open preview; changing timing requires an
 updated saved clip plan before previewing again.
+
+New owned `fit_target` Wan plans use 12 seconds, split into two six-second clips
+with audio enabled. Set `SMART_REMAKE_KIE_VIDEO_MODEL=wan/3-0-video` on both the
+API and worker. Existing eight- and sixteen-second projects retain their saved
+clip timing. The preview includes the selected clip's position in the whole video;
+it does not represent a previously submitted task. Twelve seconds is unavailable
+for Veo and the legacy compile flow.
 
 Generated opening and ending images remain available in generation progress and
 the completed clip's **Ảnh & prompt** dialog. Each download requests a fresh signed
